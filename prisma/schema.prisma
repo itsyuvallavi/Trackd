@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum JobSource {
+  MANUAL
+  LINKEDIN
+  INDEED
+  COMPANY_SITE
+  REFERRAL
+  RECRUITER
+  OTHER
+}
+
+enum JobStatus {
+  SAVED
+  APPLIED
+  INTERVIEW
+  OFFER
+  REJECTED
+  GHOSTED
+}
+
+enum JobPriority {
+  A
+  B
+  C
+}
+
+enum ActivityType {
+  NOTE
+  STATUS_CHANGE
+  EMAIL_UPDATE
+  INTERVIEW
+  REJECTION
+  OFFER
+}
+
+model Job {
+  id          String      @id @default(cuid())
+  userId      String      @default("temp-user")
+
+  // Core fields
+  title       String
+  company     String
+  location    String?
+  source      JobSource   @default(MANUAL)
+  url         String?
+
+  // Status tracking
+  status      JobStatus   @default(SAVED)
+  priority    JobPriority @default(B)
+
+  // Dates
+  savedAt     DateTime    @default(now())
+  appliedAt   DateTime?
+  interviewAt DateTime?
+  nextAction  String?
+
+  // Additional info
+  tags        String[]    @default([])
+  notes       String?
+  salary      String?
+  contactName String?
+  contactEmail String?
+
+  // Relations
+  activities  Activity[]
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([userId, status])
+  @@index([userId, savedAt])
+}
+
+model Activity {
+  id          String       @id @default(cuid())
+  jobId       String
+  userId      String       @default("temp-user")
+
+  type        ActivityType
+  fromStatus  JobStatus?
+  toStatus    JobStatus?
+  description String?
+
+  createdAt   DateTime     @default(now())
+
+  // Relations
+  job         Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, createdAt])
+  @@index([userId, createdAt])
+}
+
+enum EmailProvider {
+  IMAP
+  GMAIL_OAUTH
+  MICROSOFT_OAUTH
+}
+
+model EmailIntegration {
+  id          String        @id @default(cuid())
+  userId      String        @unique @default("temp-user")
+
+  provider    EmailProvider @default(IMAP)
+  email       String
+
+  // IMAP credentials (encrypted)
+  imapHost    String?
+  imapPort    Int?
+  imapUsername String?
+  imapPassword String?
+
+  // OAuth tokens (for future Gmail/Microsoft integration)
+  accessToken  String?
+  refreshToken String?
+  tokenExpiry  DateTime?
+
+  // Sync status
+  isActive     Boolean      @default(true)
+  lastSyncedAt DateTime?
+  lastError    String?
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([userId])
+}
