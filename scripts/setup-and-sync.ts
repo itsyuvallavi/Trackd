@@ -1,7 +1,7 @@
 // Setup email integration and sync emails
-import { prisma } from './src/lib/prisma'
-import { createEmailService } from './src/lib/email-service'
-import { EmailClassifier, EmailType } from './src/lib/email-classifier'
+import { prisma } from '../src/lib/prisma'
+import { createEmailService } from '../src/lib/email-service'
+import { EmailClassifier, EmailType } from '../src/lib/email-classifier'
 
 async function setupAndSync() {
   console.log('🔧 Setting up email integration...\n')

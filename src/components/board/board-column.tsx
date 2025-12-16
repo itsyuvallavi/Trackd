@@ -1,5 +1,5 @@
 import { Job, Activity, JobStatus } from '@prisma/client'
-import { BoardCard } from '@/components/board-card'
+import { BoardCard } from '@/components/board/board-card'
 
 interface BoardColumnProps {
   status: JobStatus

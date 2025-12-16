@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/prisma'
 import { TEMP_USER_ID } from '@/lib/constants'
-import { JobRow } from '@/components/job-row'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 
@@ -79,7 +78,13 @@ export default async function TodayPage() {
                 <table className="w-full">
                   <tbody>
                     {categorizedJobs.dueToday.map((job) => (
-                      <JobRow key={job.id} job={job} />
+                      <tr key={job.id} className="border-b last:border-0">
+                        <td className="p-4">
+                          <Link href={`/jobs/${job.id}`} className="font-medium hover:underline">{job.company}</Link>
+                        </td>
+                        <td className="p-4">{job.title}</td>
+                        <td className="p-4">{job.status}</td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>
@@ -97,7 +102,13 @@ export default async function TodayPage() {
                 <table className="w-full">
                   <tbody>
                     {categorizedJobs.overdue.map((job) => (
-                      <JobRow key={job.id} job={job} />
+                      <tr key={job.id} className="border-b last:border-0">
+                        <td className="p-4">
+                          <Link href={`/jobs/${job.id}`} className="font-medium hover:underline">{job.company}</Link>
+                        </td>
+                        <td className="p-4">{job.title}</td>
+                        <td className="p-4">{job.status}</td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>
@@ -115,7 +126,13 @@ export default async function TodayPage() {
                 <table className="w-full">
                   <tbody>
                     {categorizedJobs.dueSoon.map((job) => (
-                      <JobRow key={job.id} job={job} />
+                      <tr key={job.id} className="border-b last:border-0">
+                        <td className="p-4">
+                          <Link href={`/jobs/${job.id}`} className="font-medium hover:underline">{job.company}</Link>
+                        </td>
+                        <td className="p-4">{job.title}</td>
+                        <td className="p-4">{job.status}</td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>
@@ -133,7 +150,13 @@ export default async function TodayPage() {
                 <table className="w-full">
                   <tbody>
                     {categorizedJobs.recentlyApplied.map((job) => (
-                      <JobRow key={job.id} job={job} />
+                      <tr key={job.id} className="border-b last:border-0">
+                        <td className="p-4">
+                          <Link href={`/jobs/${job.id}`} className="font-medium hover:underline">{job.company}</Link>
+                        </td>
+                        <td className="p-4">{job.title}</td>
+                        <td className="p-4">{job.status}</td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>

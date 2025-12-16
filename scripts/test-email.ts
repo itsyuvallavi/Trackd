@@ -1,6 +1,6 @@
 // Test script to verify email connection and fetching
-import { createEmailService } from './src/lib/email-service'
-import { EmailClassifier } from './src/lib/email-classifier'
+import { createEmailService } from '../src/lib/email-service'
+import { EmailClassifier } from '../src/lib/email-classifier'
 
 async function testEmailSync() {
   console.log('Testing email connection...')

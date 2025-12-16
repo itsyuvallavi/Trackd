@@ -1,8 +1,8 @@
 // Sync most recent emails (to catch today's emails)
-import { prisma } from './src/lib/prisma'
+import { prisma } from '../src/lib/prisma'
 import Imap from 'imap'
 import { simpleParser } from 'mailparser'
-import { EmailClassifier, EmailType } from './src/lib/email-classifier'
+import { EmailClassifier, EmailType } from '../src/lib/email-classifier'
 
 async function syncRecent() {
   console.log('🔄 Fetching most recent emails...\n')

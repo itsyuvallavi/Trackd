@@ -1,7 +1,7 @@
 // Sync emails from TODAY only
-import { prisma } from './src/lib/prisma'
-import { createEmailService } from './src/lib/email-service'
-import { EmailClassifier, EmailType } from './src/lib/email-classifier'
+import { prisma } from '../src/lib/prisma'
+import { createEmailService } from '../src/lib/email-service'
+import { EmailClassifier, EmailType } from '../src/lib/email-classifier'
 
 async function syncToday() {
   console.log('🔄 Fetching emails from TODAY (Dec 15, 2025)...\n')

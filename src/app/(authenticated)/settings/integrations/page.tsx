@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
-import { EmailIntegrationForm } from '@/components/email-integration-form'
-import { SyncEmailsButton } from '@/components/sync-emails-button'
+import { EmailIntegrationForm } from '@/components/email/email-integration-form'
+import { SyncEmailsButton } from '@/components/email/sync-emails-button'
 
 export default async function IntegrationsPage() {
   const userId = 'temp-user' // TODO: Replace with actual user ID from auth

@@ -1,7 +1,7 @@
 'use client'
 
 import { Job, Activity } from '@prisma/client'
-import { StatusDropdown } from '@/components/status-dropdown'
+import { StatusDropdown } from '@/components/jobs/status-dropdown'
 import { formatRelativeTime } from '@/lib/utils'
 import Link from 'next/link'
 

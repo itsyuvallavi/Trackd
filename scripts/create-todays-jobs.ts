@@ -1,5 +1,5 @@
 // Create jobs from today's rejection emails
-import { prisma } from './src/lib/prisma'
+import { prisma } from '../src/lib/prisma'
 
 async function createTodaysJobs() {
   const userId = 'temp-user'

@@ -1,7 +1,7 @@
 // One-time script to sync emails and update jobs
-import { prisma } from './src/lib/prisma'
-import { createEmailService } from './src/lib/email-service'
-import { EmailClassifier, EmailType } from './src/lib/email-classifier'
+import { prisma } from '../src/lib/prisma'
+import { createEmailService } from '../src/lib/email-service'
+import { EmailClassifier, EmailType } from '../src/lib/email-classifier'
 import { ActivityType, JobStatus } from '@prisma/client'
 
 async function syncEmailsNow() {

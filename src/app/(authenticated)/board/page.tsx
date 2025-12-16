@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { TEMP_USER_ID } from '@/lib/constants'
-import { BoardColumn } from '@/components/board-column'
+import { BoardColumn } from '@/components/board/board-column'
 import { JobStatus } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'

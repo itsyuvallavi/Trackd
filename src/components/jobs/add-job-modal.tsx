@@ -3,11 +3,14 @@
 import { useState, useTransition } from 'react'
 import { createJob } from '@/app/(authenticated)/jobs/actions'
 import { Button } from '@/components/ui/button'
-import { JobSource, JobStatus, JobPriority } from '@prisma/client'
 import { SOURCE_LABELS, STATUS_LABELS, PRIORITY_LABELS } from '@/lib/constants'
 
-export function AddJobModal() {
-  const [isOpen, setIsOpen] = useState(false)
+interface AddJobModalProps {
+  isOpen: boolean
+  onClose: () => void
+}
+
+export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
@@ -20,7 +23,7 @@ export function AddJobModal() {
     startTransition(async () => {
       try {
         await createJob(formData)
-        setIsOpen(false)
+        onClose()
         e.currentTarget.reset()
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to create job')
@@ -28,17 +31,15 @@ export function AddJobModal() {
     })
   }
 
-  return (
-    <>
-      <Button onClick={() => setIsOpen(true)}>Add Job</Button>
+  if (!isOpen) return null
 
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-2xl rounded-lg bg-background border border-foreground/20 p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+  return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-2xl rounded-lg bg-card border border-border p-6 shadow-2xl max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom-4 duration-300">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-bold">Add New Job</h2>
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={onClose}
                 className="text-foreground/60 hover:text-foreground"
               >
                 <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -231,7 +232,7 @@ export function AddJobModal() {
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={() => setIsOpen(false)}
+                  onClick={onClose}
                   disabled={isPending}
                 >
                   Cancel
@@ -243,7 +244,5 @@ export function AddJobModal() {
             </form>
           </div>
         </div>
-      )}
-    </>
   )
 }
