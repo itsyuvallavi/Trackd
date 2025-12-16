@@ -153,13 +153,19 @@ export class EmailService {
    * Convert parsed mail to our EmailMessage format
    */
   private parsedMailToEmailMessage(parsed: ParsedMail): EmailMessage {
-    const from = Array.isArray(parsed.from?.value)
-      ? parsed.from.value[0]?.address || ''
-      : parsed.from?.text || ''
+    // Handle from field - AddressObject has .text and .value array
+    let from = ''
+    if (parsed.from) {
+      const fromObj = Array.isArray(parsed.from) ? parsed.from[0] : parsed.from
+      from = fromObj?.value?.[0]?.address || fromObj?.text || ''
+    }
 
-    const to = Array.isArray(parsed.to?.value)
-      ? parsed.to.value[0]?.address || ''
-      : parsed.to?.text || ''
+    // Handle to field - can be AddressObject or AddressObject[]
+    let to = ''
+    if (parsed.to) {
+      const toObj = Array.isArray(parsed.to) ? parsed.to[0] : parsed.to
+      to = toObj?.value?.[0]?.address || toObj?.text || ''
+    }
 
     return {
       id: parsed.messageId || `${Date.now()}-${Math.random()}`,

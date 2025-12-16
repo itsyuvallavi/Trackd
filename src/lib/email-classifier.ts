@@ -11,8 +11,6 @@ export interface ClassifiedEmail {
   }
   suggestedStatus?: JobStatus
   metadata: {
-    isATS: boolean
-    atsProvider?: string
     keywords: string[]
   }
 }
@@ -24,20 +22,6 @@ export enum EmailType {
   OFFER = 'OFFER',
   FOLLOW_UP = 'FOLLOW_UP',
   OTHER = 'OTHER',
-}
-
-// Known ATS (Applicant Tracking System) providers
-const ATS_DOMAINS: Record<string, string> = {
-  'greenhouse.io': 'Greenhouse',
-  'lever.co': 'Lever',
-  'myworkdayjobs.com': 'Workday',
-  'icims.com': 'iCIMS',
-  'jobvite.com': 'Jobvite',
-  'smartrecruiters.com': 'SmartRecruiters',
-  'workable.com': 'Workable',
-  'bamboohr.com': 'BambooHR',
-  'breezy.hr': 'Breezy HR',
-  'ashbyhq.com': 'Ashby',
 }
 
 // Keywords for different email types
@@ -191,10 +175,6 @@ export class EmailClassifier {
    * Classify an email and extract job-related information
    */
   classify(email: EmailMessage): ClassifiedEmail {
-    const fromDomain = this.extractDomain(email.from)
-    const isATS = this.isATSEmail(fromDomain)
-    const atsProvider = isATS ? ATS_DOMAINS[fromDomain] : undefined
-
     const combinedText = `${email.subject} ${email.textBody}`.toLowerCase()
     const detectedKeywords: string[] = []
 
@@ -239,7 +219,7 @@ export class EmailClassifier {
     }
 
     // Extract job information
-    const jobInfo = this.extractJobInfo(email, isATS)
+    const jobInfo = this.extractJobInfo(email)
 
     return {
       type,
@@ -247,20 +227,9 @@ export class EmailClassifier {
       jobInfo,
       suggestedStatus,
       metadata: {
-        isATS,
-        atsProvider,
         keywords: detectedKeywords,
       },
     }
-  }
-
-  /**
-   * Check if email is from a known ATS provider
-   */
-  private isATSEmail(domain: string): boolean {
-    return Object.keys(ATS_DOMAINS).some((atsDomain) =>
-      domain.includes(atsDomain)
-    )
   }
 
   /**
@@ -274,10 +243,7 @@ export class EmailClassifier {
   /**
    * Extract job information from email content
    */
-  private extractJobInfo(
-    email: EmailMessage,
-    isATS: boolean
-  ): ClassifiedEmail['jobInfo'] {
+  private extractJobInfo(email: EmailMessage): ClassifiedEmail['jobInfo'] {
     const jobInfo: ClassifiedEmail['jobInfo'] = {}
     const subject = email.subject
     const body = email.textBody
@@ -337,8 +303,8 @@ export class EmailClassifier {
       }
     }
 
-    // 3. Fallback: Extract company from email domain if not from ATS
-    if (!jobInfo.company && !isATS) {
+    // 3. Fallback: Extract company from email domain
+    if (!jobInfo.company) {
       const domain = this.extractDomain(email.from)
       const companyFromDomain = domain.split('.')[0]
       if (companyFromDomain && companyFromDomain.length > 2) {
