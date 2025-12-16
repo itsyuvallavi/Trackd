@@ -6,7 +6,7 @@ import { StatusDropdown } from '@/components/status-dropdown'
 import { EditJobModal } from '@/components/edit-job-modal'
 import { SOURCE_LABELS, ACTIVITY_TYPE_LABELS } from '@/lib/constants'
 import { formatRelativeTime } from '@/lib/utils'
-import { deleteJob } from '@/app/jobs/actions'
+import { deleteJob } from '@/app/(authenticated)/jobs/actions'
 
 interface JobRowProps {
   job: Job & {

@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { JobStatus } from '@prisma/client'
 import { STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
-import { updateJobStatus } from '@/app/jobs/actions'
+import { updateJobStatus } from '@/app/(authenticated)/jobs/actions'
 import { cn } from '@/lib/utils'
 
 interface StatusDropdownProps {

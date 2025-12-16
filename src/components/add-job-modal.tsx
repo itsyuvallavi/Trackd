@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { createJob } from '@/app/jobs/actions'
+import { createJob } from '@/app/(authenticated)/jobs/actions'
 import { Button } from '@/components/ui/button'
 import { JobSource, JobStatus, JobPriority } from '@prisma/client'
 import { SOURCE_LABELS, STATUS_LABELS, PRIORITY_LABELS } from '@/lib/constants'

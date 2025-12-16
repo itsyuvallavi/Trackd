@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Job } from '@prisma/client'
-import { updateJob, deleteJob } from '@/app/jobs/actions'
+import { updateJob, deleteJob } from '@/app/(authenticated)/jobs/actions'
 import { Button } from '@/components/ui/button'
 import { JobSource, JobStatus, JobPriority } from '@prisma/client'
 import { SOURCE_LABELS, STATUS_LABELS, PRIORITY_LABELS } from '@/lib/constants'

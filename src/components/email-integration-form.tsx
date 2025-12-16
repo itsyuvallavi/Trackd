@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { EmailIntegration } from '@prisma/client'
-import { saveEmailIntegration, syncEmails, testEmailConnection } from '@/app/settings/email-actions'
+import { saveEmailIntegration, syncEmails, testEmailConnection } from '@/app/(authenticated)/settings/email-actions'
 import { Button } from '@/components/ui/button'
 
 interface EmailIntegrationFormProps {
