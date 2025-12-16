@@ -27,7 +27,7 @@ export enum EmailType {
 }
 
 // Known ATS (Applicant Tracking System) providers
-const ATS_DOMAINS = {
+const ATS_DOMAINS: Record<string, string> = {
   'greenhouse.io': 'Greenhouse',
   'lever.co': 'Lever',
   'myworkdayjobs.com': 'Workday',
