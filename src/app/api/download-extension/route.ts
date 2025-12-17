@@ -33,7 +33,7 @@ export async function GET() {
     const zipBuffer = zip.toBuffer()
 
     // Return the zip file
-    return new NextResponse(zipBuffer, {
+    return new NextResponse(new Uint8Array(zipBuffer), {
       headers: {
         'Content-Type': 'application/zip',
         'Content-Disposition': 'attachment; filename="trackd-extension.zip"',

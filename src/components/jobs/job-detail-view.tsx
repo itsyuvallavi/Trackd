@@ -182,16 +182,15 @@ export function JobDetailView({ job }: JobDetailViewProps) {
               <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
               <div className="space-y-2">
                 {job.url && (
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    asChild
-                  >
-                    <a href={job.url} target="_blank" rel="noopener noreferrer">
+                  <a href={job.url} target="_blank" rel="noopener noreferrer">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start"
+                    >
                       <ExternalLink className="size-4 mr-2" />
                       View Job Posting
-                    </a>
-                  </Button>
+                    </Button>
+                  </a>
                 )}
                 <Button
                   variant="outline"

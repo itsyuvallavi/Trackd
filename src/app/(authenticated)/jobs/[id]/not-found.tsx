@@ -10,12 +10,12 @@ export default function NotFound() {
         <p className="text-muted-foreground mb-6">
           The job you're looking for doesn't exist or may have been deleted.
         </p>
-        <Button asChild>
-          <Link href="/jobs">
+        <Link href="/jobs">
+          <Button>
             <ArrowLeft className="size-4 mr-2" />
             Back to Jobs
-          </Link>
-        </Button>
+          </Button>
+        </Link>
       </div>
     </div>
   )

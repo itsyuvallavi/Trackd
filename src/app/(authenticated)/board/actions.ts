@@ -9,7 +9,7 @@ export async function updateJobStatusOnBoard(jobId: string, newStatus: JobStatus
   const job = await prisma.job.findUnique({ where: { id: jobId } })
   if (!job) throw new Error('Job not found')
 
-  const previousStatus = job.status
+  const previousStatus = job.status as JobStatus
 
   // Update dates based on status changes
   let appliedAt = job.appliedAt
@@ -27,7 +27,9 @@ export async function updateJobStatusOnBoard(jobId: string, newStatus: JobStatus
     if (!interviewAt) {
       interviewAt = new Date()
     }
-  } else if (previousStatus === 'INTERVIEW' && newStatus !== 'INTERVIEW') {
+  }
+
+  if (previousStatus === 'INTERVIEW' && newStatus !== 'INTERVIEW') {
     // Clear interviewAt when moving away from INTERVIEW status
     interviewAt = null
   }

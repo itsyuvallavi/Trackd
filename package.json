@@ -33,6 +33,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/adm-zip": "^0.5.7",
     "@types/imap": "^0.8.43",
     "@types/mailparser": "^3.4.6",
     "@types/node": "^20",
