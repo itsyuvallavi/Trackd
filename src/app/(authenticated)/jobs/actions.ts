@@ -49,6 +49,7 @@ export async function createJob(formData: FormData) {
   })
 
   revalidatePath('/jobs')
+  revalidatePath(`/jobs/${job.id}`)
   return { success: true, jobId: job.id }
 }
 
@@ -84,6 +85,7 @@ export async function updateJob(id: string, formData: FormData) {
   })
 
   revalidatePath('/jobs')
+  revalidatePath(`/jobs/${id}`)
   return { success: true, job }
 }
 
@@ -93,12 +95,36 @@ export async function updateJobStatus(id: string, status: JobStatus) {
 
   const previousStatus = job.status
 
+  // Update dates based on status changes
+  let appliedAt = job.appliedAt
+  let interviewAt = job.interviewAt
+
+  if (status === 'APPLIED') {
+    // Set appliedAt if not already set
+    if (!appliedAt) {
+      appliedAt = new Date()
+    }
+  }
+  // Note: We keep appliedAt date even when status changes away from APPLIED for history
+
+  if (status === 'INTERVIEW') {
+    // Set interviewAt if not already set
+    if (!interviewAt) {
+      interviewAt = new Date()
+    }
+  } else {
+    // Clear interviewAt when moving away from INTERVIEW status
+    if (previousStatus === 'INTERVIEW') {
+      interviewAt = null
+    }
+  }
+
   const updatedJob = await prisma.job.update({
     where: { id },
     data: {
       status,
-      appliedAt: status === 'APPLIED' && !job.appliedAt ? new Date() : job.appliedAt,
-      interviewAt: status === 'INTERVIEW' && !job.interviewAt ? new Date() : job.interviewAt,
+      appliedAt,
+      interviewAt,
     },
   })
 
@@ -119,12 +145,14 @@ export async function updateJobStatus(id: string, status: JobStatus) {
   })
 
   revalidatePath('/jobs')
+  revalidatePath(`/jobs/${id}`)
   return { success: true, job: updatedJob }
 }
 
 export async function deleteJob(id: string) {
   await prisma.job.delete({ where: { id } })
   revalidatePath('/jobs')
+  revalidatePath(`/jobs/${id}`)
   return { success: true }
 }
 
@@ -139,5 +167,6 @@ export async function addActivity(jobId: string, description: string, type: Acti
   })
 
   revalidatePath('/jobs')
+  revalidatePath(`/jobs/${jobId}`)
   return { success: true, activity }
 }

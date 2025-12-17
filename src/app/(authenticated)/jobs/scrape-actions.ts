@@ -187,8 +187,23 @@ function scrapeLinkedIn($: cheerio.CheerioAPI, url: string): { success: boolean;
     description = description.replace(/ {2,}/g, ' ').trim() // Collapse multiple spaces (not newlines)
     description = description.replace(/\n{3,}/g, '\n\n').trim() // Collapse multiple newlines to max 2
 
-    const salary = $('.salary-main-rail__salary-info').text().trim() ||
-                   $('div.mt4 span').filter((_, el) => $(el).text().includes('$')).text().trim()
+    // Try multiple salary selectors for LinkedIn
+    let salary = $('.salary-main-rail__salary-info').text().trim() ||
+                 $('.compensation__salary').text().trim() ||
+                 $('[data-testid="salary-info"]').text().trim() ||
+                 $('.topcard__flavor--metadata-list-item').filter((_, el) => {
+                   const text = $(el).text().toLowerCase()
+                   return text.includes('$') || text.includes('salary') || text.includes('compensation')
+                 }).text().trim() ||
+                 $('div.mt4 span').filter((_, el) => {
+                   const text = $(el).text()
+                   return text.includes('$') || /^\$[\d,]+/.test(text)
+                 }).first().text().trim()
+    
+    // Clean up salary text - remove "Salary:" prefix and extra whitespace
+    if (salary) {
+      salary = salary.replace(/^Salary:\s*/i, '').replace(/^Compensation:\s*/i, '').trim()
+    }
 
     if (!title || !company) {
       return {
@@ -227,9 +242,21 @@ function scrapeIndeed($: cheerio.CheerioAPI, url: string): { success: boolean; d
 
     const description = $('#jobDescriptionText').text().trim()
 
-    const salary = $('.jobsearch-JobMetadataHeader-item').filter((_, el) =>
-      $(el).text().toLowerCase().includes('$')
-    ).text().trim()
+    // Try multiple approaches for Indeed salary
+    let salary = $('.jobsearch-JobMetadataHeader-item').filter((_, el) => {
+      const text = $(el).text().toLowerCase()
+      return text.includes('$') || text.includes('salary') || text.includes('hour') || text.includes('year')
+    }).first().text().trim() ||
+    $('[data-testid="job-salary"]').text().trim() ||
+    $('.jobsearch-JobMetadataHeader-iconLabel').filter((_, el) => {
+      const text = $(el).text()
+      return text.includes('$') || /^\$[\d,]+/.test(text)
+    }).first().text().trim()
+    
+    // Clean up salary text
+    if (salary) {
+      salary = salary.replace(/^Salary:\s*/i, '').replace(/^Pay:\s*/i, '').trim()
+    }
 
     if (!title || !company) {
       return { success: false, error: 'Could not extract job title or company from Indeed' }
@@ -300,6 +327,19 @@ function scrapeGoogle($: cheerio.CheerioAPI, url: string): { success: boolean; d
     const description = $('div[role="region"]').text().trim() ||
                        $('p').filter((_, el) => $(el).text().length > 100).first().text().trim()
 
+    // Try to find salary for Google Careers
+    let salary = $('[class*="salary" i]').first().text().trim() ||
+                 $('[class*="compensation" i]').first().text().trim() ||
+                 $('div, span, p').filter((_, el) => {
+                   const text = $(el).text().trim()
+                   return /^\$[\d,]+/.test(text) || (text.includes('$') && (text.includes('k') || text.includes('hour') || text.includes('year') || text.includes('range')))
+                 }).first().text().trim()
+    
+    // Clean up salary text
+    if (salary) {
+      salary = salary.replace(/^Salary:\s*/i, '').replace(/^Compensation:\s*/i, '').trim()
+    }
+
     if (!title || title.length < 5) {
       return {
         success: false,
@@ -314,6 +354,7 @@ function scrapeGoogle($: cheerio.CheerioAPI, url: string): { success: boolean; d
         company,
         location: location || undefined,
         description: description ? description.substring(0, 500) : undefined,
+        salary: salary || undefined,
         source: 'COMPANY_SITE',
         url,
       },
@@ -370,6 +411,27 @@ function scrapeGeneric($: cheerio.CheerioAPI, url: string, source: JobSource): {
                        $('[class*="content" i]').first().text().trim() ||
                        $('meta[name="description"]').attr('content')
 
+    // Try to find salary for generic sites
+    let salary = $('[class*="salary" i]').first().text().trim() ||
+                 $('[class*="compensation" i]').first().text().trim() ||
+                 $('[itemprop="baseSalary"]').text().trim() ||
+                 $('meta[property="og:salary:amount"]').attr('content') ||
+                 // Look for text containing $ signs
+                 $('div, span, p').filter((_, el) => {
+                   const text = $(el).text().trim()
+                   return /^\$[\d,]+/.test(text) || (text.includes('$') && (text.includes('k') || text.includes('hour') || text.includes('year')))
+                 }).first().text().trim()
+    
+    // Clean up salary text
+    if (salary) {
+      salary = salary.replace(/^Salary:\s*/i, '').replace(/^Compensation:\s*/i, '').replace(/^Pay:\s*/i, '').trim()
+      // If salary contains multiple lines, take the first meaningful line
+      const lines = salary.split('\n').filter(line => line.trim().includes('$'))
+      if (lines.length > 0) {
+        salary = lines[0].trim()
+      }
+    }
+
     if (!title || title.length < 3) {
       return {
         success: false,
@@ -384,6 +446,7 @@ function scrapeGeneric($: cheerio.CheerioAPI, url: string, source: JobSource): {
         company,
         location: location || undefined,
         description: description ? description.substring(0, 500) : undefined,
+        salary: salary || undefined,
         source,
         url,
       },

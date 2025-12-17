@@ -4,13 +4,13 @@ import { useState } from 'react'
 import { Plus, Link as LinkIcon, Edit3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/tooltip'
-import Link from 'next/link'
 
 interface AddJobDropdownProps {
   onManualAdd: () => void
+  onUrlAdd: () => void
 }
 
-export function AddJobDropdown({ onManualAdd }: AddJobDropdownProps) {
+export function AddJobDropdown({ onManualAdd, onUrlAdd }: AddJobDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
 
   return (
@@ -36,17 +36,19 @@ export function AddJobDropdown({ onManualAdd }: AddJobDropdownProps) {
 
           {/* Dropdown Menu */}
           <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-lg shadow-xl z-20 py-1 animate-in slide-in-from-top-2 fade-in duration-150">
-            <Link
-              href="/jobs/new-url"
-              className="flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-accent transition-colors"
-              onClick={() => setIsOpen(false)}
+            <button
+              onClick={() => {
+                setIsOpen(false)
+                onUrlAdd()
+              }}
+              className="flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-accent transition-colors w-full text-left"
             >
               <LinkIcon className="size-4" />
               <div>
                 <div className="font-medium">From URL</div>
                 <div className="text-xs text-muted-foreground">Paste job link</div>
               </div>
-            </Link>
+            </button>
 
             <button
               onClick={() => {

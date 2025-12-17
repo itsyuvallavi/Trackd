@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Job } from '@prisma/client'
 import { updateJob, deleteJob } from '@/app/(authenticated)/jobs/actions'
 import { Button } from '@/components/ui/button'
@@ -14,6 +15,7 @@ interface EditJobModalProps {
 }
 
 export function EditJobModal({ job, isOpen, onClose }: EditJobModalProps) {
+  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
@@ -43,7 +45,7 @@ export function EditJobModal({ job, isOpen, onClose }: EditJobModalProps) {
     startTransition(async () => {
       try {
         await deleteJob(job.id)
-        onClose()
+        router.push('/jobs')
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to delete job')
       }

@@ -16,11 +16,17 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
   const [showIMAPForm, setShowIMAPForm] = useState(!!integration)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const handleOAuthConnect = (provider: 'google' | 'microsoft') => {
-    setMessage({
-      type: 'error',
-      text: `${provider === 'google' ? 'Google' : 'Microsoft'} OAuth coming soon! For now, please use the IMAP option below.`
-    })
+  const handleOAuthConnect = async (provider: 'google' | 'microsoft') => {
+    try {
+      const redirectTo = window.location.pathname
+      const oauthUrl = `/api/auth/email/oauth?provider=${provider}&redirect_to=${encodeURIComponent(redirectTo)}`
+      window.location.href = oauthUrl
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: `Failed to initiate ${provider === 'google' ? 'Google' : 'Microsoft'} OAuth connection. Please try again.`
+      })
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

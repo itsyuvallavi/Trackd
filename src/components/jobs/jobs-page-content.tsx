@@ -12,10 +12,12 @@ import {
 } from '@/components/ui/table'
 import { useState, useMemo, useCallback } from 'react'
 import { AddJobModal } from '@/components/jobs/add-job-modal'
+import { AddJobFromUrlModal } from '@/components/jobs/add-job-from-url-modal'
 import { AddJobDropdown } from '@/components/jobs/add-job-dropdown'
 import { JobActionsMenu } from '@/components/jobs/job-actions-menu'
 import { ApplicationsHeader } from '@/components/jobs/applications-header'
 import { EmptyState } from '@/components/jobs/empty-state'
+import { ExtensionPopup } from '@/components/jobs/extension-popup'
 import { UserProfileMenu } from '@/components/layout/user-profile-menu'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -65,6 +67,7 @@ interface DateRange {
 export function JobsPageContent({ jobs }: JobsPageContentProps) {
   const sidebarWidth = '4rem' // Fixed sidebar width (64px = w-16)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [isAddUrlModalOpen, setIsAddUrlModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeStatus, setActiveStatus] = useState('all')
   const [dateRange, setDateRange] = useState<DateRange>({ from: null, to: null })
@@ -155,6 +158,8 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
   return (
     <>
       <AddJobModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
+      <AddJobFromUrlModal isOpen={isAddUrlModalOpen} onClose={() => setIsAddUrlModalOpen(false)} />
+      {jobs.length === 0 && <ExtensionPopup />}
 
     <div className="flex-1 flex flex-col bg-muted/10" style={{ marginLeft: sidebarWidth }}>
       {/* Fixed Header */}
@@ -184,7 +189,10 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
               </span>
 
               <div className="flex items-center gap-2">
-                <AddJobDropdown onManualAdd={() => setIsAddModalOpen(true)} />
+                <AddJobDropdown 
+                  onManualAdd={() => setIsAddModalOpen(true)}
+                  onUrlAdd={() => setIsAddUrlModalOpen(true)}
+                />
                 <Tooltip content="Export jobs">
                   <Button
                     variant="ghost"
@@ -236,7 +244,7 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
           {jobs.length === 0 ? (
             <EmptyState
               onManualAdd={() => setIsAddModalOpen(true)}
-              onUrlAdd={() => window.location.href = '/jobs/new-url'}
+              onUrlAdd={() => setIsAddUrlModalOpen(true)}
             />
           ) : filteredJobs.length === 0 ? (
             <div className="text-center py-16 border border-border rounded-lg bg-card">

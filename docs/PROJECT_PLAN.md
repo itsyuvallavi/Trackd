@@ -16,17 +16,17 @@
    - Already created
    - Should redirect to onboarding after first signup
 
-2. **Onboarding Flow** (NEW - `/onboarding`)
-   - Email sync setup (Gmail OAuth)
-   - Chrome extension recommendation
-   - Initial setup walkthrough
+2. **Onboarding Flow** (✅ COMPLETED - `/onboarding`)
+   - ✅ Email sync setup (Gmail/Outlook OAuth + IMAP)
+   - ✅ Simplified 3-step flow: Welcome → Email Sync → Complete
+   - ✅ Chrome extension recommendation (moved to jobs page popup)
 
-3. **Main Application Pages**
-   - `/today` - Today's tasks and priorities
-   - `/jobs` - Table view (currently implemented)
-   - `/board` - Kanban board view
-   - `/jobs/:id` - Individual job detail page
-   - `/jobs/new-url` - Add job from URL
+3. **Main Application Pages** - ✅ ALL COMPLETED
+   - ✅ `/today` - Today's tasks and priorities
+   - ✅ `/jobs` - Table view (fully implemented with search, filters, status tabs)
+   - ✅ `/board` - Kanban board view with drag & drop
+   - ✅ `/jobs/:id` - Individual job detail page with timeline
+   - ✅ `/jobs/new-url` - Add job from URL with scraping
 
 4. **Settings & Profile**
    - `/settings/integrations` - Email sync, extension connection
@@ -38,12 +38,12 @@
 ## Phase 1: Core Functionality & Data Consistency
 
 ### 1.1 Database & State Management
-**Priority: CRITICAL**
+**Priority: CRITICAL** - ✅ COMPLETED
 
-- [ ] Ensure all three views (Today, Jobs, Board) use the same data source
-- [ ] Implement real-time updates or optimistic UI updates
-- [ ] Add proper error handling for CRUD operations
-- [ ] Create revalidation strategy for data consistency
+- [x] Ensure all three views (Today, Jobs, Board) use the same data source
+- [x] Implement real-time updates or optimistic UI updates
+- [x] Add proper error handling for CRUD operations
+- [x] Create revalidation strategy for data consistency
 
 **Files to modify:**
 - `/src/app/(authenticated)/today/page.tsx`
@@ -52,24 +52,24 @@
 - `/src/app/(authenticated)/jobs/actions.ts` (server actions)
 
 ### 1.2 Search Functionality
-**Priority: HIGH**
+**Priority: HIGH** - ✅ COMPLETED
 
-- [ ] Implement search functionality in jobs table
-- [ ] Add search by: company name, role title, location
-- [ ] Add debounced search input
-- [ ] Show search results count
+- [x] Implement search functionality in jobs table
+- [x] Add search by: company name, role title, location
+- [x] Add debounced search input
+- [x] Show search results count
 
 **Files to create/modify:**
 - `/src/components/jobs-search.tsx` (client component)
 - Update `/src/components/jobs-page-content.tsx`
 
 ### 1.3 Status Counter Widget
-**Priority: MEDIUM**
+**Priority: MEDIUM** - ✅ COMPLETED
 
-- [ ] Create status counter component
-- [ ] Show count for each status: SAVED, APPLIED, INTERVIEW, OFFER, REJECTED, GHOSTED
-- [ ] Display on dashboard/today page
-- [ ] Add visual indicators (colors matching status badges)
+- [x] Create status counter component
+- [x] Show count for each status: SAVED, APPLIED, INTERVIEW, OFFER, REJECTED, GHOSTED
+- [x] Display on dashboard/today page
+- [x] Add visual indicators (colors matching status badges)
 
 **Files to create:**
 - `/src/components/status-counter.tsx`
@@ -80,16 +80,16 @@
 ## Phase 2: View Pages Implementation
 
 ### 2.1 Today Page (`/today`)
-**Priority: HIGH**
+**Priority: HIGH** - ✅ COMPLETED
 
 **Features:**
-- [ ] Show jobs that need attention today
-- [ ] Overdue tasks (past due date)
-- [ ] Due today
-- [ ] Due in next 7 days
-- [ ] Recent status changes
-- [ ] Next actions due
-- [ ] Status counter widget
+- [x] Show jobs that need attention today
+- [x] Overdue tasks (past due date)
+- [x] Due today
+- [x] Due in next 7 days
+- [x] Recent status changes
+- [x] Next actions due
+- [x] Status counter widget
 
 **Files to create:**
 - `/src/app/(authenticated)/today/page.tsx`
@@ -97,16 +97,16 @@
 - `/src/components/upcoming-deadlines.tsx`
 
 ### 2.2 Board/Kanban View (`/board`)
-**Priority: HIGH**
+**Priority: HIGH** - ✅ COMPLETED
 
 **Features:**
-- [ ] Column-based layout for each status
-- [ ] Columns: SAVED → APPLIED → INTERVIEW → OFFER → REJECTED → GHOSTED
-- [ ] Fixed header with column titles
-- [ ] Scrollable columns (columns scroll independently, max height 100vh)
-- [ ] Drag and drop between columns (changes status)
-- [ ] Minimal card design showing: company, role, date, priority
-- [ ] Add Sidebar to this page
+- [x] Column-based layout for each status
+- [x] Columns: SAVED → APPLIED → INTERVIEW → OFFER → REJECTED → GHOSTED
+- [x] Fixed header with column titles
+- [x] Scrollable columns (columns scroll independently, max height 100vh)
+- [x] Drag and drop between columns (changes status)
+- [x] Minimal card design showing: company, role, date, priority
+- [x] Add Sidebar to this page
 
 **Libraries needed:**
 - `@dnd-kit/core` and `@dnd-kit/sortable` for drag and drop
@@ -119,17 +119,17 @@
 - `/src/app/(authenticated)/board/actions.ts` (update status on drop)
 
 ### 2.3 Job Detail Page (`/jobs/:id`)
-**Priority: MEDIUM**
+**Priority: MEDIUM** - ✅ COMPLETED
 
 **Features:**
-- [ ] Full job information display
-- [ ] Activity timeline
-- [ ] Edit mode for all fields
-- [ ] Notes section
-- [ ] Contact information
-- [ ] Next action tracking
-- [ ] Link to original job posting
-- [ ] Add Sidebar to this page
+- [x] Full job information display
+- [x] Activity timeline
+- [x] Edit mode for all fields
+- [x] Notes section
+- [x] Contact information
+- [x] Next action tracking
+- [x] Link to original job posting
+- [x] Add Sidebar to this page
 
 **Files to create:**
 - `/src/app/(authenticated)/jobs/[id]/page.tsx`
@@ -138,34 +138,39 @@
 - `/src/components/job-edit-form.tsx`
 
 ### 2.4 Add Job from URL (`/jobs/new-url`)
-**Priority: MEDIUM**
+**Priority: MEDIUM** - ✅ COMPLETED (NOW MODAL-BASED)
 
 **Features:**
-- [ ] URL input field
-- [ ] Scrape job details from URL
-- [ ] Preview scraped data
-- [ ] Edit before saving
-- [ ] Loading states
-- [ ] Add Sidebar to this page
+- [x] URL input field
+- [x] Scrape job details from URL (LinkedIn, Indeed, generic + improved salary extraction)
+- [x] Preview scraped data in a modal (no page navigation)
+- [x] Edit before saving
+- [x] Loading states
+- [x] Accessible overlay modal experience (same pattern as manual Add Job)
 
-**Files to create:**
-- `/src/app/(authenticated)/jobs/new-url/page.tsx`
+**Files created/updated:**
+- `/src/components/jobs/add-job-from-url-modal.tsx` (URL add modal)
+- `/src/components/jobs/add-job-modal.tsx` (manual add modal)
+- `/src/components/jobs/add-job-dropdown.tsx` (opens both modals)
+- `/src/components/jobs/jobs-page-content.tsx` (wires modals + empty state actions)
+- `/src/components/jobs/empty-state.tsx` (uses modals instead of navigation)
 - `/src/app/api/scrape-job/route.ts` (API endpoint)
-- `/src/lib/job-scraper.ts` (scraping logic)
+- `/src/app/(authenticated)/jobs/scrape-actions.ts` (scraping logic with enhanced salary detection)
 
 ---
 
 ## Phase 3: Email Integration
 
 ### 3.1 Email Sync Setup
-**Priority: HIGH**
+**Priority: HIGH** - ✅ COMPLETED
 
 **Features:**
-- [ ] Gmail OAuth implementation
-- [ ] Store access/refresh tokens securely
-- [ ] Email sync status indicator
-- [ ] Manual sync trigger
-- [ ] Last synced timestamp
+- [x] Gmail OAuth implementation
+- [x] Microsoft/Outlook OAuth implementation
+- [x] Store access/refresh tokens securely
+- [x] Email sync status indicator
+- [x] Manual sync trigger
+- [x] Last synced timestamp
 
 **Files to create:**
 - `/src/app/api/auth/gmail/route.ts`
@@ -173,15 +178,16 @@
 - `/src/lib/gmail-client.ts`
 
 ### 3.2 Email Ingestion & Processing
-**Priority: HIGH**
+**Priority: HIGH** - ⚠️ PARTIALLY COMPLETED
 
 **Features:**
-- [ ] Background cron job for email sync
-- [ ] Parse emails from job boards (LinkedIn, Indeed, Greenhouse, Lever, etc.)
-- [ ] Extract application status updates
-- [ ] Create Activity entries automatically
-- [ ] Update job status based on email content
-- [ ] Rule-based classification system
+- [x] Background cron job for email sync
+- [x] Parse emails from job boards (LinkedIn, Indeed, Greenhouse, Lever, etc.)
+- [x] Extract application status updates
+- [x] Create Activity entries automatically
+- [x] Update job status based on email content
+- [x] Rule-based classification system
+- [ ] OAuth-based email fetching (Gmail API / Microsoft Graph API) - needs implementation
 
 **Files to create:**
 - `/src/app/api/cron/sync-emails/route.ts`
@@ -193,14 +199,18 @@
 ## Phase 4: Chrome Extension
 
 ### 4.1 Extension Architecture
-**Priority: MEDIUM**
+**Priority: MEDIUM** - ⚠️ PARTIALLY COMPLETED
 
 **Features:**
-- [ ] Browser extension with authentication
-- [ ] One-click job save from any job page
-- [ ] Auto-detect job information
-- [ ] Sync with user account
-- [ ] Idempotent job creation (check by URL)
+- [x] Browser extension structure created
+- [x] Extension download functionality
+- [x] Extension popup on jobs page (when empty)
+- [x] Installation guide
+- [ ] Browser extension with authentication - needs implementation
+- [ ] One-click job save from any job page - needs implementation
+- [ ] Auto-detect job information - needs implementation
+- [ ] Sync with user account - needs implementation
+- [x] Idempotent job creation (check by URL) - API endpoint exists
 
 **Files to create:**
 - `/extension/manifest.json`
@@ -210,12 +220,12 @@
 - `/src/app/api/jobs/from-extension/route.ts`
 
 ### 4.2 Extension Connection
-**Priority: MEDIUM**
+**Priority: MEDIUM** - ⚠️ PARTIALLY COMPLETED
 
-- [ ] Extension authentication flow
-- [ ] Token-based auth for extension
-- [ ] Connection status in settings
-- [ ] Install instructions in onboarding
+- [ ] Extension authentication flow - needs implementation
+- [ ] Token-based auth for extension - needs implementation
+- [ ] Connection status in settings - needs implementation
+- [x] Install instructions in onboarding - moved to jobs page popup
 
 ---
 
@@ -264,23 +274,23 @@
 
 ---
 
-## Phase 6: Onboarding Flow
+## Phase 6: Onboarding Flow - ✅ COMPLETED
 
 ### 6.1 Post-Signup Onboarding
-**Priority: HIGH**
+**Priority: HIGH** - ✅ COMPLETED
 
 **Steps:**
-1. Welcome screen
-2. Email sync setup (optional but recommended)
-3. Chrome extension recommendation
-4. Quick tour of features
-5. Add first job (optional)
+1. ✅ Welcome screen
+2. ✅ Email sync setup (optional but recommended) - Gmail/Outlook OAuth + IMAP option
+3. ✅ Chrome extension recommendation - moved to jobs page popup (shows when list is empty)
+4. ❌ Quick tour of features - removed from onboarding flow
+5. ❌ Add first job (optional) - removed from onboarding flow
 
-**Files to create:**
-- `/src/app/(authenticated)/onboarding/page.tsx`
-- `/src/components/onboarding-steps.tsx`
-- `/src/components/onboarding-email-setup.tsx`
-- `/src/components/onboarding-extension-prompt.tsx`
+**Files created:**
+- ✅ `/src/app/(authenticated)/onboarding/page.tsx` - 3-step simplified flow
+- ✅ `/src/components/jobs/extension-popup.tsx` - Extension popup for jobs page
+- ✅ `/src/app/api/auth/email/oauth/route.ts` - OAuth initiation
+- ✅ `/src/app/api/auth/email/oauth/callback/route.ts` - OAuth callback handler
 
 ---
 
@@ -615,12 +625,12 @@ my-app/
 │   │   │   │   ├── page.tsx [✅ exists]
 │   │   │   │   ├── actions.ts [✅ exists]
 │   │   │   │   ├── [id]/
-│   │   │   │   │   └── page.tsx [❌ create]
+│   │   │   │   │   └── page.tsx [✅ exists]
 │   │   │   │   └── new-url/
 │   │   │   │       └── page.tsx [✅ exists]
 │   │   │   ├── board/
 │   │   │   │   ├── page.tsx [✅ exists]
-│   │   │   │   └── actions.ts [❌ create]
+│   │   │   │   └── actions.ts [✅ exists]
 │   │   │   ├── profile/
 │   │   │   │   └── page.tsx [❌ create]
 │   │   │   ├── settings/
@@ -631,18 +641,21 @@ my-app/
 │   │   │   │   └── account/
 │   │   │   │       └── page.tsx [❌ create]
 │   │   │   └── onboarding/
-│   │   │       └── page.tsx [❌ create]
+│   │   │       └── page.tsx [✅ exists]
 │   │   ├── api/
 │   │   │   ├── scrape-job/
-│   │   │   │   └── route.ts [❌ create]
+│   │   │   │   └── route.ts [✅ exists]
 │   │   │   ├── jobs/
 │   │   │   │   └── from-extension/
 │   │   │   │       └── route.ts [✅ exists]
 │   │   │   ├── auth/
-│   │   │   │   └── gmail/
-│   │   │   │       ├── route.ts [❌ create]
-│   │   │   │       └── callback/
-│   │   │   │           └── route.ts [❌ create]
+│   │   │   │   └── email/
+│   │   │   │       └── oauth/
+│   │   │   │           ├── route.ts [✅ exists]
+│   │   │   │           └── callback/
+│   │   │   │               └── route.ts [✅ exists]
+│   │   │   ├── download-extension/
+│   │   │   │   └── route.ts [✅ exists]
 │   │   │   └── cron/
 │   │   │       └── sync-emails/
 │   │   │           └── route.ts [✅ exists]
@@ -661,34 +674,28 @@ my-app/
 │   │   │   ├── job-actions-menu.tsx [✅ exists]
 │   │   │   ├── jobs-page-content.tsx [✅ exists]
 │   │   │   ├── status-dropdown.tsx [✅ exists]
-│   │   │   ├── jobs-search.tsx [❌ create]
-│   │   │   ├── job-detail-view.tsx [❌ create]
-│   │   │   ├── job-timeline.tsx [❌ create]
-│   │   │   └── job-edit-form.tsx [❌ create]
+│   │   │   ├── job-detail-view.tsx [✅ exists]
+│   │   │   ├── job-timeline.tsx [✅ exists]
+│   │   │   └── extension-popup.tsx [✅ exists]
 │   │   │
 │   │   ├── board/                  # 📁 Kanban board
 │   │   │   ├── board-card.tsx [✅ exists]
-│   │   │   ├── board-column.tsx [✅ exists]
-│   │   │   └── kanban-board.tsx [❌ create]
+│   │   │   └── kanban-board.tsx [✅ exists]
 │   │   │
 │   │   ├── email/                  # 📁 Email integration
 │   │   │   ├── email-integration-form.tsx [✅ exists]
 │   │   │   └── sync-emails-button.tsx [✅ exists]
 │   │   │
 │   │   ├── dashboard/              # 📁 Dashboard widgets
-│   │   │   ├── status-counter.tsx [❌ create]
-│   │   │   ├── status-stats.tsx [❌ create]
-│   │   │   ├── today-tasks.tsx [❌ create]
-│   │   │   └── upcoming-deadlines.tsx [❌ create]
+│   │   │   ├── status-counter.tsx [✅ exists]
+│   │   │   └── status-stats.tsx [✅ exists]
 │   │   │
 │   │   ├── settings/               # 📁 Settings components
 │   │   │   ├── settings-layout.tsx [❌ create]
 │   │   │   └── profile-form.tsx [❌ create]
 │   │   │
 │   │   ├── onboarding/             # 📁 Onboarding flow
-│   │   │   ├── onboarding-steps.tsx [❌ create]
-│   │   │   ├── onboarding-email-setup.tsx [❌ create]
-│   │   │   └── onboarding-extension-prompt.tsx [❌ create]
+│   │   │   └── (integrated in onboarding page.tsx)
 │   │   │
 │   │   └── ui/                     # Reusable UI primitives
 │   │       ├── badge.tsx [✅ exists]
@@ -714,11 +721,8 @@ my-app/
 │
 ├── public/
 │
-├── extension/                      # 📁 Chrome extension
-│   ├── manifest.json [❌ create]
-│   ├── popup.html [❌ create]
-│   ├── background.js [❌ create]
-│   └── content-script.js [❌ create]
+├── browser-extension/              # 📁 Chrome extension
+│   └── manifest.json [✅ exists]
 │
 ├── .env [✅ exists]
 ├── .env.local

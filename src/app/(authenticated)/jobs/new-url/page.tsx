@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { Sidebar } from '@/components/layout/Sidebar'
 import { scrapeJobUrl, ScrapedJobData } from '../scrape-actions'
 import { createJob } from '../actions'
 import { Button } from '@/components/ui/button'
@@ -86,8 +87,10 @@ export default function NewUrlPage() {
   }
 
   return (
-    <div className="min-h-screen p-8">
-      <div className="max-w-3xl mx-auto">
+    <div className="size-full flex dark">
+      <Sidebar />
+      <div className="flex-1 ml-16 min-h-screen p-8">
+        <div className="max-w-3xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Add Job from URL</h1>
           <p className="text-foreground/60">
@@ -316,6 +319,7 @@ export default function NewUrlPage() {
             </form>
           </div>
         )}
+        </div>
       </div>
     </div>
   )

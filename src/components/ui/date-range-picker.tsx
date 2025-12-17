@@ -99,12 +99,17 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
           key={day}
           onClick={() => handleDateClick(date)}
           className={cn(
-            'h-9 w-9 rounded-md text-sm transition-colors',
+            // Base sizing & layout
+            'w-9 h-9 rounded-full text-xs sm:text-sm font-medium',
+            'flex items-center justify-center transition-colors',
+            // Hover
             'hover:bg-accent hover:text-accent-foreground',
-            isSelected && 'bg-primary text-primary-foreground hover:bg-primary/90',
-            isInRange && 'bg-primary/20',
-            isToday && !isSelected && 'border border-primary',
-            'font-normal'
+            // Selected start / end dates
+            isSelected && 'bg-primary text-primary-foreground hover:bg-primary/90 font-semibold',
+            // In-between range (only when not a selected endpoint)
+            !isSelected && isInRange && 'bg-primary/15',
+            // Today indicator when not selected
+            isToday && !isSelected && 'border border-primary/70'
           )}
         >
           {day}
@@ -135,13 +140,13 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
           />
 
           {/* Calendar Dropdown */}
-          <div className="absolute right-0 mt-2 p-4 bg-card border border-border rounded-lg shadow-xl z-30 animate-in slide-in-from-top-2 fade-in duration-150">
+          <div className="absolute right-0 mt-2 p-4 bg-card border border-border rounded-lg shadow-2xl z-30 animate-in slide-in-from-top-2 fade-in duration-150 w-[320px]">
             {/* Month/Year Header */}
             <div className="mb-4 text-center">
-              <h3 className="font-semibold text-foreground">
+              <h3 className="text-base font-bold text-foreground">
                 {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
               </h3>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground mt-1.5">
                 {selectingFrom ? 'Select start date' : 'Select end date'}
               </p>
             </div>
@@ -149,7 +154,10 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
             {/* Day Labels */}
             <div className="grid grid-cols-7 gap-1 mb-2">
               {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
-                <div key={day} className="h-9 flex items-center justify-center text-xs text-muted-foreground font-medium">
+                <div
+                  key={day}
+                  className="w-9 h-7 flex items-center justify-center text-[11px] text-muted-foreground font-semibold"
+                >
                   {day}
                 </div>
               ))}
@@ -161,12 +169,12 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center justify-between pt-3 border-t border-border">
+            <div className="flex items-center justify-between pt-4 border-t border-border">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleClear}
-                className="text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground hover:text-foreground h-10 px-4"
               >
                 Clear
               </Button>
@@ -174,6 +182,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
                 size="sm"
                 onClick={handleApply}
                 disabled={!tempRange.from || !tempRange.to}
+                className="h-10 px-6"
               >
                 Apply
               </Button>
