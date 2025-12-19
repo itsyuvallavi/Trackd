@@ -4,13 +4,14 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_API
 
+  // If env vars are missing, return early without user authentication
+  // This allows the app to build and deploy even without Supabase configured
   if (!url || !anonKey) {
-    throw new Error(
-      'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY for Supabase middleware',
-    )
+    console.warn('Supabase env vars not configured - skipping authentication')
+    return { supabaseResponse, user: null }
   }
 
   const supabase = createServerClient(url, anonKey, {

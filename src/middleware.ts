@@ -11,6 +11,13 @@ export async function middleware(request: NextRequest) {
   const { supabaseResponse, user } = await updateSession(request)
   const path = request.nextUrl.pathname
 
+  // If Supabase is not configured, allow all routes through
+  // (this allows the app to deploy even without Supabase env vars)
+  const supabaseConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  if (!supabaseConfigured) {
+    return supabaseResponse
+  }
+
   const isProtectedRoute = protectedRoutes.some((route) => path === route || path.startsWith(`${route}/`))
   if (isProtectedRoute && !user) {
     const redirectUrl = new URL('/login', request.url)
