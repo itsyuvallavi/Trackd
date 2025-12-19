@@ -3,6 +3,8 @@
 import { useEffect } from 'react'
 import { SignUpForm } from '@/components/auth/signup-form'
 
+export const dynamic = 'force-dynamic'
+
 export default function SignUpPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {

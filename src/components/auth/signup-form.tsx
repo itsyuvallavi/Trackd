@@ -15,9 +15,12 @@ export function SignUpForm() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
+  
+  // Only create client on client side
+  const supabase = typeof window !== 'undefined' ? createClient() : null
 
   async function handleGoogleSignUp() {
+    if (!supabase) return
     setIsLoading(true)
     setError(null)
 
@@ -35,6 +38,7 @@ export function SignUpForm() {
   }
 
   async function handleEmailSignUp(e: React.FormEvent) {
+    if (!supabase) return
     e.preventDefault()
     setIsLoading(true)
     setError(null)
