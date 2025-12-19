@@ -18,12 +18,9 @@ export function LoginForm({ next }: LoginFormProps) {
   const [error, setError] = useState<string | null>(null)
 
   const router = useRouter()
-  
-  // Only create client on client side
-  const supabase = typeof window !== 'undefined' ? createClient() : null
+  const supabase = createClient()
 
   async function handleGoogleSignIn() {
-    if (!supabase) return
     setIsLoading(true)
     setError(null)
 
@@ -43,7 +40,6 @@ export function LoginForm({ next }: LoginFormProps) {
   }
 
   async function handleEmailSignIn(e: React.FormEvent) {
-    if (!supabase) return
     e.preventDefault()
     setIsLoading(true)
     setError(null)
