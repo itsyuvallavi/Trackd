@@ -1,122 +1,74 @@
 import { prisma } from '@/lib/prisma'
 import { EmailIntegrationForm } from '@/components/email/email-integration-form'
-import { SyncEmailsButton } from '@/components/email/sync-emails-button'
+import { ExtensionKeySection } from '@/components/email/extension-key-section'
+import { Sidebar } from '@/components/layout/Sidebar'
+import { SimpleTopBar } from '@/components/layout/simple-top-bar'
+import { requireAuth } from '@/lib/auth'
 
 export default async function IntegrationsPage() {
-  const userId = 'temp-user' // TODO: Replace with actual user ID from auth
+  const user = await requireAuth()
 
   const integration = await prisma.emailIntegration.findUnique({
-    where: { userId },
+    where: { userId: user.id },
+  })
+
+  const extensionKey = await prisma.extensionKey.findUnique({
+    where: { userId: user.id },
+    select: {
+      keyPrefix: true,
+      lastUsedAt: true,
+    }
   })
 
   return (
-    <div className="min-h-screen p-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
+    <div className="size-full flex dark">
+      <Sidebar />
+      <SimpleTopBar showEmailNotification={!integration} />
+      <div
+        className="flex-1 flex flex-col bg-muted/10"
+        style={{ marginLeft: '4rem' }}
+      >
+        <div className="flex-1 overflow-auto pt-[88px]">
+          <div className="max-w-4xl mx-auto px-8 py-6">
+        <div className="mb-8">
+          <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold">Email Integration</h1>
-            <p className="text-foreground/60 mt-1">
-              Connect your email to automatically track job application updates
-            </p>
+            {integration && integration.isActive && (
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                <span className="text-sm text-foreground/60">Connected</span>
+              </div>
+            )}
           </div>
           {integration && integration.isActive && (
-            <SyncEmailsButton />
+            <p className="text-sm text-foreground/60 mt-1 ml-5">
+              {integration.email}
+            </p>
+          )}
+          {integration?.lastError && (
+            <p className="text-sm text-red-600 dark:text-red-400 mt-2">
+              Error: {integration.lastError}
+            </p>
           )}
         </div>
 
         <div className="space-y-6">
-          {/* Status Card */}
-          {integration && (
-            <div
-              className={`border rounded-lg p-6 ${
-                integration.isActive
-                  ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                  : 'border-foreground/20 bg-foreground/5'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold">
-                    {integration.isActive ? '✓ Connected' : '⚠ Disconnected'}
-                  </h3>
-                  <p className="text-sm text-foreground/60 mt-1">
-                    {integration.email}
-                  </p>
-                  {integration.lastSyncedAt && (
-                    <p className="text-sm text-foreground/60 mt-1">
-                      Last synced:{' '}
-                      {new Date(integration.lastSyncedAt).toLocaleString()}
-                    </p>
-                  )}
-                  {integration.lastError && (
-                    <p className="text-sm text-red-600 dark:text-red-400 mt-1">
-                      Error: {integration.lastError}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Configuration Card */}
+          {/* Email Integration Section */}
           <div className="border border-foreground/20 rounded-lg p-6">
-            <h2 className="text-xl font-semibold mb-4">
-              {integration ? 'Update Configuration' : 'Setup Email Integration'}
-            </h2>
-            <p className="text-sm text-foreground/60 mb-6">
-              We'll use IMAP to securely check your email for job-related messages.
-              Your credentials are stored encrypted.
-            </p>
-
             <EmailIntegrationForm integration={integration} />
           </div>
 
-          {/* How it Works Card */}
-          <div className="border border-foreground/20 rounded-lg p-6">
-            <h2 className="text-xl font-semibold mb-4">How It Works</h2>
-            <div className="space-y-3 text-sm text-foreground/80">
-              <div className="flex gap-3">
-                <span className="text-blue-600 dark:text-blue-400 font-bold">1.</span>
-                <p>
-                  We periodically check your email for job-related messages from companies
-                  and ATS systems (Greenhouse, Lever, etc.)
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <span className="text-blue-600 dark:text-blue-400 font-bold">2.</span>
-                <p>
-                  Emails are classified by type: application confirmations, interview
-                  invites, rejections, or offers
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <span className="text-blue-600 dark:text-blue-400 font-bold">3.</span>
-                <p>
-                  We match emails to your existing jobs by company name and job title
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <span className="text-blue-600 dark:text-blue-400 font-bold">4.</span>
-                <p>
-                  Job statuses are automatically updated and activity is logged in the
-                  timeline
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Privacy Card */}
-          <div className="border border-foreground/20 rounded-lg p-6 bg-foreground/5">
-            <h3 className="font-semibold mb-2">🔒 Privacy & Security</h3>
-            <div className="text-sm text-foreground/70 space-y-2">
-              <p>• Your email credentials are encrypted and never shared</p>
-              <p>• We only read emails, never send or delete them</p>
-              <p>• Email content is processed locally and not stored</p>
-              <p>• You can disconnect at any time</p>
-            </div>
-          </div>
+          {/* Chrome Extension Section */}
+          <ExtensionKeySection
+            initialData={extensionKey ? {
+              keyPrefix: extensionKey.keyPrefix,
+              lastUsedAt: extensionKey.lastUsedAt?.toISOString() || null
+            } : null}
+          />
+        </div>
         </div>
       </div>
+    </div>
     </div>
   )
 }

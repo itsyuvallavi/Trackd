@@ -13,6 +13,8 @@ enum JobSource {
   COMPANY_SITE
   REFERRAL
   RECRUITER
+  EU_REMOTE_JOBS
+  WORKABLE
   OTHER
 }
 
@@ -40,9 +42,18 @@ enum ActivityType {
   OFFER
 }
 
+model Profile {
+  id        String   @id           // Matches Supabase auth.users.id
+  email     String   @unique
+  name      String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Job {
   id          String      @id @default(cuid())
-  userId      String      @default("temp-user")
+  userId      String
 
   // Core fields
   title       String
@@ -71,6 +82,9 @@ model Job {
   // Relations
   activities  Activity[]
 
+  // Optional: link to Profile when we start using it
+  // (no foreign key yet to avoid breaking existing data)
+
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -81,7 +95,7 @@ model Job {
 model Activity {
   id          String       @id @default(cuid())
   jobId       String
-  userId      String       @default("temp-user")
+  userId      String
 
   type        ActivityType
   fromStatus  JobStatus?
@@ -105,7 +119,7 @@ enum EmailProvider {
 
 model EmailIntegration {
   id          String        @id @default(cuid())
-  userId      String        @unique @default("temp-user")
+  userId      String        @unique
 
   provider    EmailProvider @default(IMAP)
   email       String
@@ -129,5 +143,17 @@ model EmailIntegration {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
+  @@index([userId])
+}
+
+model ExtensionKey {
+  id          String    @id @default(cuid())
+  userId      String    @unique  // One active key per user (matches Profile.id / Supabase auth.users.id)
+  keyHash     String    @unique  // SHA-256 hash for lookup (never store plain key)
+  keyPrefix   String    // "tk_a1b2c3" - visible in UI for identification
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+
+  @@index([keyHash])
   @@index([userId])
 }

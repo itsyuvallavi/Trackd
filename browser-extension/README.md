@@ -1,85 +1,168 @@
-# Job Tracker Browser Extension
+# Trackd Chrome Extension
 
-Save job postings to your Job Tracker with one click!
+Save job postings to Trackd with one click!
 
 ## Installation
 
-### Chrome/Edge/Brave
+### For Development
 
-1. Open your browser and go to `chrome://extensions/`
+1. Open Chrome and go to `chrome://extensions/`
 2. Enable "Developer mode" (toggle in top right)
 3. Click "Load unpacked"
-4. Select the `browser-extension` folder from this project
+4. Select the `browser-extension` folder
 5. The extension is now installed!
 
-### Firefox
+### For Production
 
-1. Open Firefox and go to `about:debugging#/runtime/this-firefox`
-2. Click "Load Temporary Add-on"
-3. Navigate to the `browser-extension` folder and select `manifest.json`
-4. The extension is now installed temporarily (until you close Firefox)
+1. Download the extension from Chrome Web Store (when published)
+2. Click "Add to Chrome"
 
-## Usage
+## First-Time Setup (~30 seconds)
 
-1. **Navigate to any job posting** on LinkedIn, Indeed, Google Careers, or any job site
-2. **Click the extension icon** in your browser toolbar
-3. The extension will **automatically extract** the job title, company, location, and description
-4. **Review and edit** the details if needed
-5. **Click "Save Job"** - done!
+1. Install the extension
+2. Open [Trackd web app → Settings → Integrations](https://trackd.app/settings/integrations)
+3. Click "Generate Extension Key" → Copy the key
+4. Open the extension → Paste key → Click "Connect"
+5. You're all set!
 
-The job will appear in your Job Tracker immediately.
+## Daily Use (~5 seconds per job)
+
+1. Navigate to any job posting (LinkedIn, Indeed, Greenhouse, Lever, etc.)
+2. Click the Trackd extension icon
+3. Review/edit the extracted job data
+4. Click "Save to Trackd"
+5. Done! The job appears in your dashboard immediately
+
+## Extension States
+
+### 🔗 Not Connected
+- First-time users will see a connection screen
+- Paste your extension key from Trackd settings
+- Click "Connect" to authenticate
+
+### ✓ Connected + Job Detected
+- Shows extracted job data (company, position, location, salary)
+- Edit any fields before saving
+- Click "Save to Trackd" to save the job
+
+### 🔍 No Job Detected
+- Appears when not on a recognized job posting page
+- Navigate to a job board (LinkedIn, Indeed, etc.)
+- Then click the extension again
+
+### ✅ Job Saved Successfully
+- Confirmation screen after saving
+- "View in Trackd" - opens the job in Trackd
+- "Save Another" - returns to extraction mode
+
+### ⚠️ Duplicate Detected
+- Shows when you try to save a job you've already saved
+- Displays the date you originally saved it
+- Prevents duplicate entries
+
+## Supported Job Boards
+
+The extension works on:
+- ✅ **LinkedIn** - Full extraction support
+- ✅ **Indeed** - Full extraction support
+- ✅ **Greenhouse** - Company career pages
+- ✅ **Lever** - Company career pages
+- ✅ **Generic sites** - Best-effort extraction using structured data
 
 ## Configuration
 
-### API URL
+### Changing API URL (for development)
 
-By default, the extension connects to `http://localhost:3000` (your local development server).
+Edit `scripts/popup.js` and change the `API_URL` constant:
 
-To change this:
-1. Click the extension icon
-2. Click "Settings" at the bottom
-3. Enter your Job Tracker URL (e.g., `https://your-app.vercel.app`)
-4. Click OK
+```javascript
+const API_URL = 'https://trackd.app' // Your production URL
+// or
+const API_URL = 'http://localhost:3000' // Local development
+```
 
-## Supported Sites
+### Reconnecting
 
-The extension works best on:
-- ✅ LinkedIn job postings
-- ✅ Indeed job listings
-- ✅ Google Careers
-- ✅ Most company career pages
+Click "🔓 Disconnect" in the extension footer, then reconnect with a new key.
 
-It will attempt to extract data from any website, falling back to generic selectors.
+## Security
 
-## Icons
-
-The extension currently uses placeholder icons. To add custom icons:
-
-1. Create 16x16, 48x48, and 128x128 PNG images
-2. Save them as `icon16.png`, `icon48.png`, and `icon128.png` in the `icons/` folder
-3. Reload the extension
-
-## Development
-
-The extension consists of:
-
-- **manifest.json** - Extension configuration
-- **popup.html** - Popup UI when you click the extension icon
-- **scripts/popup.js** - Handles the popup logic and API calls
-- **scripts/content.js** - Runs on job pages to extract data
+- **Extension Key**: Your key is stored locally in Chrome's storage
+- **Key Format**: `tk_` + 32 random characters
+- **Single Key**: Only one active key per user
+- **Regeneration**: Regenerating your key disconnects all extensions using the old key
 
 ## Troubleshooting
 
-**"Could not extract job data"**
-- The site may have unusual HTML structure
-- Fill in the details manually - the form will still work!
+### "Invalid key" or "Session expired"
+- Your key may have been regenerated
+- Go to Trackd Settings → Integrations
+- Generate a new key and reconnect
 
-**"Failed to save job"**
-- Make sure your Job Tracker app is running
-- Check the API URL in Settings
-- Check browser console for errors (F12 → Console)
+### "No job detected"
+- The extension might not recognize the page
+- Try a different job board (LinkedIn, Indeed)
+- Fields can be filled manually
 
-**Extension not appearing**
-- Make sure Developer Mode is enabled
-- Try reloading the extension
-- Check for errors in `chrome://extensions/`
+### "Already saved"
+- You've saved this job in the last 30 days
+- Click "View Existing" to see your saved job
+
+### Extension not working
+1. Check that Developer Mode is enabled (`chrome://extensions/`)
+2. Make sure the extension is enabled
+3. Try reloading the extension
+4. Check for errors in the extension's console
+
+## Development
+
+### File Structure
+
+```
+browser-extension/
+├── manifest.json           # Extension configuration
+├── popup.html             # Extension popup UI
+├── icons/                 # Extension icons (16, 32, 48, 128px)
+└── scripts/
+    ├── popup.js           # Main extension logic
+    └── content.js         # Job data extraction (reference)
+```
+
+### How It Works
+
+1. **Authentication**: Uses API key stored in `chrome.storage.local`
+2. **Extraction**: Injects `extractJobData()` function into the current tab
+3. **API Communication**: Sends extracted data to `/api/extension/save-job`
+4. **Duplicate Detection**: Server checks for duplicates (same company + title in 30 days)
+
+### API Endpoints Used
+
+- `POST /api/extension/validate-key` - Validates extension key
+- `POST /api/extension/save-job` - Saves job with authentication
+
+## Testing Checklist
+
+- [ ] Generate key → copy → paste in extension → connected
+- [ ] Save job from LinkedIn → appears in Trackd
+- [ ] Save duplicate job → shows warning with date
+- [ ] Regenerate key → old extension disconnected
+- [ ] Invalid key → proper error message
+- [ ] Extension remembers connection after browser restart
+- [ ] Test on Indeed, Greenhouse, Lever
+- [ ] No job detected on non-job pages
+
+## Publishing (Future)
+
+To publish to Chrome Web Store:
+
+1. Create promotional images (1280x800, 440x280)
+2. Write store description
+3. Package extension as ZIP
+4. Submit to Chrome Web Store
+5. Update `API_URL` to production URL before packaging
+
+## Support
+
+For issues or feature requests:
+- Open an issue in the main repository
+- Contact support through Trackd web app

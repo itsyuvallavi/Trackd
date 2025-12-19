@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { TEMP_USER_ID } from '@/lib/constants'
 import { createJobSchema } from '@/lib/validations/job'
 
 export async function POST(request: NextRequest) {
@@ -10,11 +9,15 @@ export async function POST(request: NextRequest) {
     // Validate the data
     const validated = createJobSchema.parse(body)
 
+    // For now, associate all extension-created jobs with a static temp user.
+    // Once auth + extension tokens are wired, this will use the real userId.
+    const userId = 'temp-user'
+
     // Create the job
     const job = await prisma.job.create({
       data: {
         ...validated,
-        userId: TEMP_USER_ID,
+        userId,
         url: validated.url || null,
         location: validated.location || null,
         notes: validated.notes || null,
@@ -30,7 +33,7 @@ export async function POST(request: NextRequest) {
     await prisma.activity.create({
       data: {
         jobId: job.id,
-        userId: TEMP_USER_ID,
+        userId,
         type: 'NOTE',
         description: `Job "${job.title}" at ${job.company} saved from browser extension`,
       },

@@ -41,7 +41,12 @@ async function setupAndSync() {
     const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
     console.log(`Fetching emails from ${sevenDaysAgo.toLocaleDateString()} to ${today.toLocaleDateString()}...\n`)
 
-    const emailService = createEmailService()
+    const emailService = createEmailService({
+      host: process.env.IMAP_HOST!,
+      port: parseInt(process.env.IMAP_PORT!),
+      user: process.env.IMAP_USERNAME!,
+      password: process.env.IMAP_PASSWORD!,
+    })
     const emails = await emailService.fetchEmailsSince(sevenDaysAgo)
 
     console.log(`✓ Fetched ${emails.length} emails\n`)

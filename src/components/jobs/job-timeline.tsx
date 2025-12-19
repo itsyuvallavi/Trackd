@@ -65,25 +65,34 @@ export function JobTimeline({ activities }: JobTimelineProps) {
 
   return (
     <div className="relative">
-      {/* Timeline line */}
-      <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-border" />
-
       <div className="space-y-6">
         {activities.map((activity, index) => {
           const iconColorClass = getActivityColor(activity.type)
           const Icon = getActivityIcon(activity.type)
+          const isLast = index === activities.length - 1
 
           return (
             <div key={activity.id} className="relative flex gap-4">
-              {/* Icon */}
+              {/* Timeline line - centered on icon 
+                  Icon is size-12 (48px), center is at 24px
+                  Line is w-0.5 (2px), so to center it: left at 24px - 1px = 23px
+                  But with border-2, the visual circle might be slightly offset, so we use 24px exactly */}
+              {!isLast && (
+                <div 
+                  className="absolute top-12 bottom-0 w-0.5 bg-border z-0"
+                  style={{ left: '24px', transform: 'translateX(-50%)' }}
+                />
+              )}
+
+              {/* Icon - 48px (size-12), center at 24px */}
               <div
-                className={`relative z-10 flex items-center justify-center size-12 rounded-full ${iconColorClass} border-2 border-background`}
+                className={`relative z-10 flex items-center justify-center size-12 rounded-full ${iconColorClass} border-2 border-background shrink-0`}
               >
                 {Icon}
               </div>
 
               {/* Content */}
-              <div className="flex-1 pb-6">
+              <div className="flex-1 pb-6 min-w-0">
                 <div className="flex items-start justify-between mb-1">
                   <div className="flex items-center gap-2">
                     <h3 className="font-semibold text-sm">

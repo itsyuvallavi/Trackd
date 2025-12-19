@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { TEMP_USER_ID } from '@/lib/constants'
 
 /**
  * Initiate OAuth flow for Google or Microsoft email integration
@@ -14,7 +13,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid provider' }, { status: 400 })
   }
 
-  // For now, we'll use Supabase Auth OAuth, but we need to request email scopes
+  // For now, we'll use direct provider OAuth and track a static user id.
   // In production, you'd want to use direct OAuth2 with Gmail/Graph API scopes
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
   const callbackUrl = `${baseUrl}/api/auth/email/oauth/callback`
@@ -38,7 +37,10 @@ export async function GET(request: NextRequest) {
     authUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/gmail.readonly email profile')
     authUrl.searchParams.set('access_type', 'offline')
     authUrl.searchParams.set('prompt', 'consent')
-    authUrl.searchParams.set('state', JSON.stringify({ provider: 'google', redirectTo, userId: TEMP_USER_ID }))
+    authUrl.searchParams.set(
+      'state',
+      JSON.stringify({ provider: 'google', redirectTo, userId: 'temp-user' }),
+    )
 
     return NextResponse.redirect(authUrl.toString())
   }
@@ -60,7 +62,10 @@ export async function GET(request: NextRequest) {
     authUrl.searchParams.set('redirect_uri', callbackUrl)
     authUrl.searchParams.set('response_type', 'code')
     authUrl.searchParams.set('scope', 'https://graph.microsoft.com/Mail.Read offline_access')
-    authUrl.searchParams.set('state', JSON.stringify({ provider: 'microsoft', redirectTo, userId: TEMP_USER_ID }))
+    authUrl.searchParams.set(
+      'state',
+      JSON.stringify({ provider: 'microsoft', redirectTo, userId: 'temp-user' }),
+    )
 
     return NextResponse.redirect(authUrl.toString())
   }

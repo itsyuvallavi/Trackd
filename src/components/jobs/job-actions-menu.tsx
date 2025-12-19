@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { MoreHorizontal, Eye, Edit, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { deleteJob } from '@/app/(authenticated)/jobs/actions'
@@ -11,8 +12,22 @@ interface JobActionsMenuProps {
 }
 
 export function JobActionsMenu({ jobId }: JobActionsMenuProps) {
+  const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [position, setPosition] = useState({ top: 0, right: 0 })
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      setPosition({
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      })
+    }
+  }, [isOpen])
 
   const handleDelete = async () => {
     if (!confirm('Are you sure you want to delete this job?')) return
@@ -20,6 +35,7 @@ export function JobActionsMenu({ jobId }: JobActionsMenuProps) {
     setIsDeleting(true)
     try {
       await deleteJob(jobId)
+      router.refresh()
     } catch (error) {
       console.error('Failed to delete job:', error)
       alert('Failed to delete job')
@@ -32,6 +48,7 @@ export function JobActionsMenu({ jobId }: JobActionsMenuProps) {
   return (
     <div className="relative">
       <Button
+        ref={buttonRef}
         variant="ghost"
         size="sm"
         className="h-8 w-8 p-0 text-foreground hover:text-foreground hover:bg-accent"
@@ -44,12 +61,16 @@ export function JobActionsMenu({ jobId }: JobActionsMenuProps) {
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 z-10 bg-black/10 backdrop-blur-[1px]"
+            className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[1px]"
             onClick={() => setIsOpen(false)}
           />
 
           {/* Menu */}
-          <div className="absolute right-0 mt-1 w-40 bg-card border border-border rounded-lg shadow-xl z-20 py-1 animate-in slide-in-from-top-2 fade-in duration-150">
+          <div 
+            ref={dropdownRef}
+            className="fixed z-50 w-40 bg-card border border-border rounded-lg shadow-xl py-1 animate-in slide-in-from-top-2 fade-in duration-150"
+            style={{ top: `${position.top}px`, right: `${position.right}px` }}
+          >
             <Link
               href={`/jobs/${jobId}`}
               className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"

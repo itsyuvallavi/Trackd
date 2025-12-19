@@ -69,7 +69,8 @@ export function Tooltip({ children, content, side = 'bottom' }: TooltipProps) {
   const tooltipContent = isVisible && mounted ? (
     <div
       className={cn(
-        'fixed z-[99999] px-3 py-1.5 text-xs font-medium text-white bg-gray-900 rounded-md shadow-2xl whitespace-nowrap animate-in fade-in duration-150 pointer-events-none',
+        'fixed z-[99999] px-3 py-1.5 text-xs font-medium text-white bg-gray-900 rounded-md shadow-2xl animate-in fade-in duration-150 pointer-events-none max-w-xs',
+        content.length > 50 ? 'whitespace-normal' : 'whitespace-nowrap',
         getTransformClasses()
       )}
       style={{ top: `${position.top}px`, left: `${position.left}px` }}

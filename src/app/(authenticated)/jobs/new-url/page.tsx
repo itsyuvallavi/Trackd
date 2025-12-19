@@ -94,7 +94,7 @@ export default function NewUrlPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Add Job from URL</h1>
           <p className="text-foreground/60">
-            Paste a job URL and we'll try to extract the details automatically.
+            Paste a job URL and we&apos;ll try to extract the details automatically.
           </p>
         </div>
 

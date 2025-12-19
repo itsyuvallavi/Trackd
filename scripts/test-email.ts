@@ -6,7 +6,12 @@ async function testEmailSync() {
   console.log('Testing email connection...')
 
   try {
-    const emailService = createEmailService()
+    const emailService = createEmailService({
+      host: process.env.IMAP_HOST!,
+      port: parseInt(process.env.IMAP_PORT!),
+      user: process.env.IMAP_USERNAME!,
+      password: process.env.IMAP_PASSWORD!,
+    })
 
     // Test connection
     console.log('Testing connection to IMAP server...')

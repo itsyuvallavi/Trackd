@@ -1,6 +1,6 @@
 'use client'
 
-import { Search, Download, Bell, CheckSquare } from 'lucide-react'
+import { Search, StickyNote } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -13,14 +13,11 @@ import {
 import { useState, useMemo, useCallback } from 'react'
 import { AddJobModal } from '@/components/jobs/add-job-modal'
 import { AddJobFromUrlModal } from '@/components/jobs/add-job-from-url-modal'
-import { AddJobDropdown } from '@/components/jobs/add-job-dropdown'
 import { JobActionsMenu } from '@/components/jobs/job-actions-menu'
+import { StatusDropdown } from '@/components/jobs/status-dropdown'
 import { ApplicationsHeader } from '@/components/jobs/applications-header'
 import { EmptyState } from '@/components/jobs/empty-state'
 import { ExtensionPopup } from '@/components/jobs/extension-popup'
-import { UserProfileMenu } from '@/components/layout/user-profile-menu'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Tooltip } from '@/components/ui/tooltip'
 import { STATUS_LABELS } from '@/lib/constants'
 
@@ -51,6 +48,7 @@ interface Job {
   source: string
   location: string | null
   status: string
+  notes: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -65,7 +63,6 @@ interface DateRange {
 }
 
 export function JobsPageContent({ jobs }: JobsPageContentProps) {
-  const sidebarWidth = '4rem' // Fixed sidebar width (64px = w-16)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isAddUrlModalOpen, setIsAddUrlModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -88,7 +85,8 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
         job.company.toLowerCase().includes(query) ||
         job.title.toLowerCase().includes(query) ||
         job.location?.toLowerCase().includes(query) ||
-        job.source.toLowerCase().includes(query)
+        job.source.toLowerCase().includes(query) ||
+        (job.notes?.toLowerCase().includes(query) ?? false)
       )
     }
 
@@ -157,78 +155,18 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
 
   return (
     <>
-      <AddJobModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
-      <AddJobFromUrlModal isOpen={isAddUrlModalOpen} onClose={() => setIsAddUrlModalOpen(false)} />
+      <AddJobModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+      />
+      <AddJobFromUrlModal
+        isOpen={isAddUrlModalOpen}
+        onClose={() => setIsAddUrlModalOpen(false)}
+      />
       {jobs.length === 0 && <ExtensionPopup />}
 
-    <div className="flex-1 flex flex-col bg-muted/10" style={{ marginLeft: sidebarWidth }}>
-      {/* Fixed Header */}
-      <div className="fixed top-0 right-0 bg-card/95 backdrop-blur-sm border-b border-border shadow-sm z-10" style={{ left: sidebarWidth }}>
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between gap-6">
-            {/* Left: Logo + App Name */}
-            <div className="flex items-center gap-3">
-              <CheckSquare className="size-6 text-foreground" strokeWidth={2.5} />
-              <span className="text-xl font-semibold text-foreground">Trackd</span>
-            </div>
-
-            {/* Center: Search Bar */}
-            <div className="flex-1 max-w-xl relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search by company, role..."
-                className="pl-9 h-10 bg-background border-border shadow-sm text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-
-            {/* Right: Actions + Notification + User Profile */}
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-muted-foreground font-medium">
-                {jobs.length} {jobs.length === 1 ? 'job' : 'jobs'}
-              </span>
-
-              <div className="flex items-center gap-2">
-                <AddJobDropdown 
-                  onManualAdd={() => setIsAddModalOpen(true)}
-                  onUrlAdd={() => setIsAddUrlModalOpen(true)}
-                />
-                <Tooltip content="Export jobs">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="size-9 p-0 text-foreground hover:text-primary hover:bg-primary/10 border border-border/50 transition-all duration-200"
-                  >
-                    <Download className="size-4" />
-                  </Button>
-                </Tooltip>
-              </div>
-
-              <div className="h-8 w-px bg-border" />
-
-              {/* Notification Bell */}
-              <Tooltip content="Notifications">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="size-9 p-0 text-foreground hover:text-primary hover:bg-primary/10 transition-all duration-200"
-                >
-                  <Bell className="size-5" />
-                </Button>
-              </Tooltip>
-
-              {/* User Profile with Dropdown */}
-              <UserProfileMenu />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Scrollable Content */}
-      <div className="flex-1 overflow-auto pt-[88px]">
-        <div className="px-8 py-6">
-          {/* Applications Header with Tabs */}
-          <ApplicationsHeader
+      {/* Applications Header with Tabs */}
+      <ApplicationsHeader
             totalJobs={jobs.length}
             statusCounts={statusCounts}
             onSearchChange={handleSearchChange}
@@ -237,10 +175,12 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
             searchQuery={searchQuery}
             activeStatus={activeStatus}
             dateRange={dateRange}
+            onManualAdd={() => setIsAddModalOpen(true)}
+            onUrlAdd={() => setIsAddUrlModalOpen(true)}
           />
 
-          {/* Table */}
-          <div className="mt-6">
+      {/* Table */}
+      <div>
           {jobs.length === 0 ? (
             <EmptyState
               onManualAdd={() => setIsAddModalOpen(true)}
@@ -276,6 +216,9 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                     <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-4 text-center">
                       Status
                     </TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-4 text-center max-w-xs">
+                      Notes
+                    </TableHead>
                     <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-4 text-center">
                       Actions
                     </TableHead>
@@ -306,30 +249,40 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                       <TableCell className="text-muted-foreground text-center py-4 text-sm">
                         {job.location || '-'}
                       </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex justify-center">
-                          <Badge
-                            className={statusStyles[job.status as keyof typeof statusStyles]}
-                          >
-                            {STATUS_LABELS[job.status as keyof typeof STATUS_LABELS]}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex justify-center">
-                          <JobActionsMenu jobId={job.id} />
-                        </div>
-                      </TableCell>
+                                 <TableCell className="text-center">
+                                   <div className="flex justify-center">
+                                     <StatusDropdown 
+                                       jobId={job.id} 
+                                       currentStatus={job.status as any}
+                                     />
+                                   </div>
+                                 </TableCell>
+                                 <TableCell className="py-4 text-center max-w-xs">
+                                   {job.notes ? (
+                                     <Tooltip content={job.notes}>
+                                       <div className="flex items-center justify-center gap-2 cursor-default">
+                                         <StickyNote className="size-4 text-muted-foreground shrink-0" />
+                                         <p className="text-sm text-muted-foreground line-clamp-2 break-words">
+                                           {job.notes}
+                                         </p>
+                                       </div>
+                                     </Tooltip>
+                                   ) : (
+                                     <span className="text-xs text-muted-foreground italic">No notes</span>
+                                   )}
+                                 </TableCell>
+                                 <TableCell className="text-center">
+                                   <div className="flex justify-center">
+                                     <JobActionsMenu jobId={job.id} />
+                                   </div>
+                                 </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
           )}
-          </div>
-        </div>
       </div>
-    </div>
     </>
   )
 }

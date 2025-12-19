@@ -1,41 +1,58 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { CheckCircle, Mail, ArrowRight, Sparkles } from 'lucide-react'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 
 type OnboardingStep = 'welcome' | 'email' | 'complete'
 
-export default function OnboardingPage() {
+const STEPS: { key: OnboardingStep; title: string; description: string }[] = [
+  { key: 'welcome', title: 'Welcome to Trackd', description: 'Get started in just a few steps' },
+  { key: 'email', title: 'Email Sync', description: 'Automatically track status updates from emails' },
+  { key: 'complete', title: "You're All Set!", description: 'Start tracking your applications' },
+]
+
+function getInitialStep(stepParam: string | null): OnboardingStep {
+  if (stepParam && STEPS.find(s => s.key === stepParam)) {
+    return stepParam as OnboardingStep
+  }
+  return 'welcome'
+}
+
+function OnboardingContent() {
   const router = useRouter()
-  const [currentStep, setCurrentStep] = useState<OnboardingStep>('welcome')
-  const [skippedSteps, setSkippedSteps] = useState<Set<OnboardingStep>>(new Set())
+  const searchParams = useSearchParams()
+  const stepParam = searchParams.get('step')
 
-  const steps: { key: OnboardingStep; title: string; description: string }[] = [
-    { key: 'welcome', title: 'Welcome to Trackd', description: 'Get started in just a few steps' },
-    { key: 'email', title: 'Email Sync', description: 'Automatically track status updates from emails' },
-    { key: 'complete', title: "You're All Set!", description: 'Start tracking your applications' },
-  ]
+  const [currentStep, setCurrentStep] = useState<OnboardingStep>(() => getInitialStep(stepParam))
+  const supabase = createClient()
 
+  const steps = STEPS
   const currentStepIndex = steps.findIndex((s) => s.key === currentStep)
 
-  // Check for step parameter in URL (e.g., after OAuth redirect)
+  // Clean up URL if there's a step parameter (after OAuth redirect)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search)
-      const stepParam = params.get('step') as OnboardingStep | null
-      if (stepParam && steps.find(s => s.key === stepParam)) {
-        setCurrentStep(stepParam)
-        // Clean up URL
-        window.history.replaceState({}, '', '/onboarding')
-      }
+    if (stepParam) {
+      window.history.replaceState({}, '', '/onboarding')
     }
-  }, [steps])
+  }, [stepParam])
 
-  const handleNext = () => {
+  const markOnboardingComplete = async () => {
+    try {
+      await supabase.auth.updateUser({
+        data: { onboarding_completed: true },
+      })
+    } catch {
+      // Non-blocking; user can still continue even if metadata update fails
+    }
+  }
+
+  const handleNext = async () => {
     if (currentStep === 'complete') {
+      await markOnboardingComplete()
       router.push('/jobs')
       return
     }
@@ -46,12 +63,12 @@ export default function OnboardingPage() {
     }
   }
 
-  const handleSkip = () => {
-    setSkippedSteps((prev) => new Set([...prev, currentStep]))
-    handleNext()
+  const handleSkip = async () => {
+    await handleNext()
   }
 
-  const handleSkipAll = () => {
+  const handleSkipAll = async () => {
+    await markOnboardingComplete()
     router.push('/jobs')
   }
 
@@ -170,7 +187,7 @@ export default function OnboardingPage() {
                     <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
                       <li>We scan emails from job boards like LinkedIn, Indeed, Greenhouse</li>
                       <li>Status updates are automatically tracked</li>
-                      <li>You can review and approve changes before they're applied</li>
+                      <li>You can review and approve changes before they&apos;re applied</li>
                     </ul>
                   </div>
 
@@ -277,9 +294,9 @@ export default function OnboardingPage() {
                 <div className="size-20 rounded-full bg-green-500/10 flex items-center justify-center mb-6">
                   <CheckCircle className="size-10 text-green-600 dark:text-green-400" />
                 </div>
-                <h2 className="text-3xl font-bold mb-4">You're All Set!</h2>
+                <h2 className="text-3xl font-bold mb-4">You&apos;re All Set!</h2>
                 <p className="text-lg text-muted-foreground mb-8 max-w-xl">
-                  You're ready to start tracking your job applications. Your email is now connected and will automatically sync status updates.
+                  You&apos;re ready to start tracking your job applications. Your email is now connected and will automatically sync status updates.
                 </p>
                 <div className="flex gap-3 justify-center">
                   <Button onClick={handleNext} size="lg">
@@ -307,6 +324,18 @@ export default function OnboardingPage() {
       </div>
 
     </div>
+  )
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={
+      <div className="size-full flex items-center justify-center bg-background">
+        <div className="animate-pulse">Loading...</div>
+      </div>
+    }>
+      <OnboardingContent />
+    </Suspense>
   )
 }
 

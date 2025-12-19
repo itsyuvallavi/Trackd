@@ -15,7 +15,12 @@ async function syncToday() {
 
     console.log(`Fetching emails since ${today.toLocaleString()}...\n`)
 
-    const emailService = createEmailService()
+    const emailService = createEmailService({
+      host: process.env.IMAP_HOST!,
+      port: parseInt(process.env.IMAP_PORT!),
+      user: process.env.IMAP_USERNAME!,
+      password: process.env.IMAP_PASSWORD!,
+    })
     const emails = await emailService.fetchEmailsSince(today)
 
     console.log(`✓ Fetched ${emails.length} emails from today\n`)

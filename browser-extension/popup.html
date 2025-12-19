@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Job Tracker</title>
+  <title>Trackd Extension</title>
   <style>
     * {
       margin: 0;
@@ -12,214 +12,277 @@
     }
 
     body {
-      width: 400px;
-      padding: 16px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #ffffff;
-      color: #1a1a1a;
+      width: 320px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0a0a;
+      color: #ededed;
     }
 
     .header {
-      margin-bottom: 16px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid #e5e5e5;
+      padding: 12px 16px;
+      border-bottom: 1px solid #262626;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
 
-    h1 {
-      font-size: 18px;
+    .logo {
       font-weight: 600;
-      margin-bottom: 4px;
+      font-size: 14px;
     }
 
-    .subtitle {
-      font-size: 13px;
-      color: #666;
+    .status {
+      font-size: 12px;
+      color: #a3a3a3;
     }
 
-    .form-group {
+    .status.connected {
+      color: #10b981;
+    }
+
+    .content {
+      padding: 16px;
+    }
+
+    .field {
       margin-bottom: 12px;
     }
 
-    label {
+    .field label {
       display: block;
-      font-size: 13px;
-      font-weight: 500;
+      font-size: 12px;
+      color: #a3a3a3;
       margin-bottom: 4px;
-      color: #333;
     }
 
-    input, select, textarea {
+    .field input {
       width: 100%;
-      padding: 8px;
-      border: 1px solid #d1d1d1;
+      padding: 8px 12px;
+      border: 1px solid #262626;
       border-radius: 6px;
+      background: #171717;
+      color: #ededed;
       font-size: 14px;
-      font-family: inherit;
     }
 
-    input:focus, select:focus, textarea:focus {
+    .field input:focus {
       outline: none;
-      border-color: #0066cc;
-      box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+      border-color: #525252;
     }
 
-    textarea {
-      resize: vertical;
-      min-height: 60px;
-    }
-
-    .button-group {
-      display: flex;
-      gap: 8px;
-      margin-top: 16px;
-    }
-
-    button {
-      flex: 1;
-      padding: 10px;
+    .btn {
+      width: 100%;
+      padding: 10px 16px;
       border: none;
       border-radius: 6px;
       font-size: 14px;
       font-weight: 500;
       cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+      transition: background 0.2s;
     }
 
     .btn-primary {
-      background: #0066cc;
-      color: white;
+      background: #ededed;
+      color: #0a0a0a;
     }
 
     .btn-primary:hover:not(:disabled) {
-      background: #0052a3;
+      background: #d4d4d4;
     }
 
-    .btn-secondary {
-      background: #f5f5f5;
-      color: #333;
+    .btn-primary:disabled {
+      background: #525252;
+      color: #a3a3a3;
+      cursor: not-allowed;
     }
 
-    .btn-secondary:hover:not(:disabled) {
-      background: #e5e5e5;
+    .footer {
+      padding: 12px 16px;
+      border-top: 1px solid #262626;
+      display: flex;
+      justify-content: space-between;
     }
 
-    .status {
+    .footer button {
+      background: none;
+      border: none;
+      color: #a3a3a3;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .footer button:hover {
+      color: #ededed;
+    }
+
+    .message {
       padding: 12px;
       border-radius: 6px;
-      font-size: 13px;
-      margin-top: 12px;
-    }
-
-    .status.success {
-      background: #d4edda;
-      color: #155724;
-      border: 1px solid #c3e6cb;
-    }
-
-    .status.error {
-      background: #f8d7da;
-      color: #721c24;
-      border: 1px solid #f5c6cb;
-    }
-
-    .loading {
       text-align: center;
-      padding: 20px;
-      color: #666;
+      margin-bottom: 12px;
     }
 
-    .settings-link {
-      margin-top: 12px;
-      padding-top: 12px;
-      border-top: 1px solid #e5e5e5;
-      text-align: center;
+    .message.success {
+      background: #10b98120;
+      color: #10b981;
     }
 
-    .settings-link a {
-      color: #0066cc;
+    .message.error {
+      background: #ef444420;
+      color: #ef4444;
+    }
+
+    .message.warning {
+      background: #f59e0b20;
+      color: #f59e0b;
+    }
+
+    .source-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      background: #262626;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #a3a3a3;
+    }
+
+    .help-text {
+      font-size: 12px;
+      color: #a3a3a3;
+      margin-top: 8px;
+    }
+
+    .help-text a {
+      color: #60a5fa;
       text-decoration: none;
-      font-size: 13px;
     }
 
-    .settings-link a:hover {
-      text-decoration: underline;
+    .no-job {
+      text-align: center;
+      padding: 24px 16px;
+      color: #a3a3a3;
+    }
+
+    .no-job h3 {
+      color: #ededed;
+      margin-bottom: 8px;
+    }
+
+    .no-job ul {
+      text-align: left;
+      margin: 12px 0;
+      padding-left: 20px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    /* Loading spinner */
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(10, 10, 10, 0.3);
+      border-radius: 50%;
+      border-top-color: #0a0a0a;
+      animation: spin 0.8s linear infinite;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .btn-primary .spinner {
+      border-color: rgba(10, 10, 10, 0.3);
+      border-top-color: #0a0a0a;
     }
   </style>
 </head>
 <body>
   <div class="header">
-    <h1>💼 Job Tracker</h1>
-    <p class="subtitle">Save this job to your tracker</p>
+    <span class="logo">Trackd</span>
+    <span id="connectionStatus" class="status">Not connected</span>
   </div>
 
-  <div id="content">
-    <div id="loading" class="loading" style="display: none;">
-      Extracting job details...
+  <!-- Connect Form -->
+  <div id="connectView" class="content">
+    <h3 style="margin-bottom: 12px;">🔗 Connect to Trackd</h3>
+    <div class="field">
+      <label>Paste your extension key:</label>
+      <input type="text" id="keyInput" placeholder="tk_..." />
     </div>
-
-    <form id="jobForm" style="display: none;">
-      <div class="form-group">
-        <label for="title">Job Title *</label>
-        <input type="text" id="title" required>
-      </div>
-
-      <div class="form-group">
-        <label for="company">Company *</label>
-        <input type="text" id="company" required>
-      </div>
-
-      <div class="form-group">
-        <label for="location">Location</label>
-        <input type="text" id="location">
-      </div>
-
-      <div class="form-group">
-        <label for="salary">Salary</label>
-        <input type="text" id="salary" placeholder="$120k - $150k">
-      </div>
-
-      <div class="form-group">
-        <label for="status">Status</label>
-        <select id="status">
-          <option value="SAVED">Saved</option>
-          <option value="APPLIED">Applied</option>
-          <option value="INTERVIEW">Interview</option>
-          <option value="OFFER">Offer</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label for="priority">Priority</label>
-        <select id="priority">
-          <option value="B" selected>Medium</option>
-          <option value="A">High</option>
-          <option value="C">Low</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label for="notes">Notes</label>
-        <textarea id="notes" rows="6"></textarea>
-      </div>
-
-      <input type="hidden" id="url">
-
-      <div class="button-group">
-        <button type="button" class="btn-secondary" id="cancelBtn">Cancel</button>
-        <button type="submit" class="btn-primary" id="saveBtn">Save Job</button>
-      </div>
-    </form>
-
-    <div id="status" style="display: none;"></div>
+    <button id="connectBtn" class="btn btn-primary">Connect</button>
+    <p class="help-text">
+      Don't have a key? <a id="getKeyLink" href="#" target="_blank">Get one at trackd.app/settings</a>
+    </p>
   </div>
 
-  <div class="settings-link">
-    <a href="#" id="settingsLink">Settings</a>
+  <!-- Job Form -->
+  <div id="jobView" class="content hidden">
+    <div id="messageBox" class="message hidden"></div>
+
+    <div class="field">
+      <label>Company</label>
+      <input type="text" id="companyInput" />
+    </div>
+    <div class="field">
+      <label>Position</label>
+      <input type="text" id="titleInput" />
+    </div>
+    <div class="field">
+      <label>Location</label>
+      <input type="text" id="locationInput" />
+    </div>
+    <div class="field">
+      <label>Salary (if found)</label>
+      <input type="text" id="salaryInput" placeholder="e.g., $120k - $150k" />
+    </div>
+    <div style="margin-bottom: 12px;">
+      <label class="text-sm text-muted-foreground" style="font-size: 12px; color: #a3a3a3; margin-bottom: 4px; display: block;">Source:</label>
+      <span class="source-badge" id="sourceLabel">Unknown</span>
+    </div>
+    <button id="saveBtn" class="btn btn-primary">Save to Trackd</button>
+  </div>
+
+  <!-- No Job Detected -->
+  <div id="noJobView" class="content hidden">
+    <div class="no-job">
+      <h3>🔍 No job detected</h3>
+      <p>Navigate to a job posting on:</p>
+      <ul>
+        <li>LinkedIn</li>
+        <li>Indeed</li>
+        <li>Greenhouse</li>
+        <li>Lever</li>
+        <li>Workable</li>
+        <li>Company career pages</li>
+      </ul>
+      <p style="margin-top: 16px; margin-bottom: 12px;">Or import from URL:</p>
+      <div class="field">
+        <input type="text" id="urlInput" placeholder="Paste job URL here..." />
+      </div>
+      <button id="importUrlBtn" class="btn btn-primary">Import from URL</button>
+    </div>
+  </div>
+
+  <!-- Success View -->
+  <div id="successView" class="content hidden">
+    <div class="message success" style="padding: 24px 12px;">
+      <div style="font-size: 32px; margin-bottom: 12px;">✅</div>
+      <strong style="display: block; font-size: 16px; margin-bottom: 8px;">Job Saved!</strong>
+      <p id="savedJobInfo" style="font-size: 14px;"></p>
+    </div>
+    <button id="viewInTrackdBtn" class="btn btn-primary" style="margin-bottom: 8px;">View in Trackd</button>
+    <button id="saveAnotherBtn" class="btn" style="background: #262626; color: #ededed;">Save Another</button>
+  </div>
+
+  <!-- Footer (shown when connected) -->
+  <div id="footer" class="footer hidden">
+    <button id="settingsBtn">⚙️ Settings</button>
+    <button id="disconnectBtn">🔓 Disconnect</button>
   </div>
 
   <script src="scripts/popup.js"></script>

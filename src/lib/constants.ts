@@ -1,7 +1,5 @@
 import { JobStatus, JobPriority, JobSource, ActivityType } from '@prisma/client'
 
-export const TEMP_USER_ID = 'temp-user'
-
 export const STATUS_LABELS: Record<JobStatus, string> = {
   SAVED: 'Saved',
   APPLIED: 'Applied',

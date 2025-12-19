@@ -2,11 +2,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
-import { TEMP_USER_ID } from '@/lib/constants'
+import { requireAuth } from '@/lib/auth'
 import { JobStatus, ActivityType } from '@prisma/client'
 
 export async function updateJobStatusOnBoard(jobId: string, newStatus: JobStatus) {
-  const job = await prisma.job.findUnique({ where: { id: jobId } })
+  const user = await requireAuth()
+  const job = await prisma.job.findFirst({ where: { id: jobId, userId: user.id } })
   if (!job) throw new Error('Job not found')
 
   const previousStatus = job.status as JobStatus
@@ -53,7 +54,7 @@ export async function updateJobStatusOnBoard(jobId: string, newStatus: JobStatus
     await prisma.activity.create({
       data: {
         jobId,
-        userId: TEMP_USER_ID,
+        userId: user.id,
         type: activityType,
         fromStatus: previousStatus,
         toStatus: newStatus,

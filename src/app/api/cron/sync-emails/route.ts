@@ -35,7 +35,18 @@ export async function GET(request: Request) {
         // Fetch emails from last sync or last hour
         const since = integration.lastSyncedAt || new Date(Date.now() - 60 * 60 * 1000)
 
-        const emailService = createEmailService()
+        // Only process integrations with IMAP config
+        if (!integration.imapHost || !integration.imapPort || !integration.imapUsername || !integration.imapPassword) {
+          console.log(`Skipping integration ${integration.id}: missing IMAP config`)
+          continue
+        }
+
+        const emailService = createEmailService({
+          host: integration.imapHost,
+          port: integration.imapPort,
+          user: integration.imapUsername,
+          password: integration.imapPassword,
+        })
         const emails = await emailService.fetchEmailsSince(since)
 
         console.log(`Fetched ${emails.length} emails for ${integration.userId}`)

@@ -8,6 +8,7 @@ import { JobTimeline } from './job-timeline'
 import { StatusDropdown } from './status-dropdown'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
 import {
   ArrowLeft,
   Edit,
@@ -19,9 +20,12 @@ import {
   User,
   FileText,
   Target,
+  StickyNote,
+  Save,
 } from 'lucide-react'
 import { formatDate, formatRelativeTime } from '@/lib/utils'
 import { STATUS_COLORS, STATUS_LABELS, SOURCE_LABELS, PRIORITY_LABELS } from '@/lib/constants'
+import { updateJobNotes } from '@/app/(authenticated)/jobs/actions'
 
 interface JobDetailViewProps {
   job: Job & { activities: Activity[] }
@@ -31,20 +35,42 @@ export function JobDetailView({ job }: JobDetailViewProps) {
   const router = useRouter()
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [notes, setNotes] = useState(job.notes || '')
+  const [isEditingNotes, setIsEditingNotes] = useState(false)
+  const [isSavingNotes, setIsSavingNotes] = useState(false)
 
   const statusColorClass = STATUS_COLORS[job.status]
+
+  const handleSaveNotes = async () => {
+    setIsSavingNotes(true)
+    try {
+      await updateJobNotes(job.id, notes)
+      setIsEditingNotes(false)
+      router.refresh()
+    } catch (error) {
+      console.error('Failed to save notes:', error)
+      alert('Failed to save notes. Please try again.')
+    } finally {
+      setIsSavingNotes(false)
+    }
+  }
+
+  const handleCancelNotes = () => {
+    setNotes(job.notes || '')
+    setIsEditingNotes(false)
+  }
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+      <div className="border-b border-border bg-card/50 backdrop-blur-sm">
         <div className="max-w-5xl mx-auto px-6 py-6">
           <div className="flex items-start justify-between gap-6">
             <div className="flex items-start gap-4 flex-1 min-w-0">
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => router.back()}
+                onClick={() => router.push('/jobs')}
                 className="hover:bg-accent shrink-0"
               >
                 <ArrowLeft className="size-4 mr-2" />
@@ -143,17 +169,75 @@ export function JobDetailView({ job }: JobDetailViewProps) {
               </div>
             </div>
 
-            {/* Notes */}
-            {job.notes && (
-              <div className="bg-card border border-border rounded-lg p-6">
-                <h2 className="text-lg font-semibold mb-4">Notes</h2>
-                <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <div className="whitespace-pre-wrap text-muted-foreground break-words overflow-hidden" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                    {job.notes}
+            {/* Notes - Always visible and editable */}
+            <div className="bg-card border border-border rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <StickyNote className="size-5" />
+                  Notes
+                </h2>
+                {!isEditingNotes && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsEditingNotes(true)}
+                    className="text-xs"
+                  >
+                    <Edit className="size-3 mr-1" />
+                    {notes ? 'Edit' : 'Add Notes'}
+                  </Button>
+                )}
+              </div>
+              
+              {isEditingNotes ? (
+                <div className="space-y-3">
+                  <Textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Add your notes about this job application..."
+                    className="min-h-[120px] resize-y bg-background border-border text-foreground"
+                    autoFocus
+                  />
+                  <div className="flex items-center gap-2 justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCancelNotes}
+                      disabled={isSavingNotes}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleSaveNotes}
+                      disabled={isSavingNotes}
+                    >
+                      {isSavingNotes ? (
+                        <>
+                          <Save className="size-3 mr-1 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="size-3 mr-1" />
+                          Save
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  {notes ? (
+                    <div className="whitespace-pre-wrap text-foreground break-words overflow-hidden" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                      {notes}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground italic">No notes yet. Click "Add Notes" to add your thoughts about this job application.</p>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Next Action */}
             {job.nextAction && (

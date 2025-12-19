@@ -11,7 +11,7 @@ export interface EmailMessage {
   htmlBody: string
 }
 
-interface ImapConfig {
+export interface ImapConfig {
   host: string
   port: number
   user: string
@@ -46,6 +46,31 @@ export class EmailService {
     return new Promise((resolve, reject) => {
       const messages: EmailMessage[] = []
       const imap = this.createConnection()
+      let isResolved = false
+
+      const safeResolve = (data: EmailMessage[]) => {
+        if (!isResolved) {
+          isResolved = true
+          console.log('Resolving promise with', data.length, 'messages')
+          resolve(data)
+        }
+      }
+
+      const safeReject = (err: any) => {
+        if (!isResolved) {
+          isResolved = true
+          console.error('Rejecting promise with error:', err)
+          reject(err)
+        }
+      }
+
+      // Safety timeout - resolve after 60 seconds max to prevent hanging
+      const safetyTimeout = setTimeout(() => {
+        if (!isResolved) {
+          console.log('Safety timeout reached, resolving with', messages.length, 'messages so far')
+          safeResolve(messages)
+        }
+      }, 60000)
 
       imap.once('ready', () => {
         console.log('IMAP ready, listing boxes...')
@@ -63,7 +88,8 @@ export class EmailService {
         imap.openBox('INBOX', true, (err: any, box: any) => {
           if (err) {
             console.error('Error opening INBOX:', err)
-            reject(err)
+            clearTimeout(safetyTimeout)
+            safeReject(err)
             return
           }
 
@@ -72,16 +98,16 @@ export class EmailService {
           // Search for emails since the given date
           // IMAP SINCE uses format: 'DD-MMM-YYYY' (e.g., '01-Jan-2024')
           const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-          const sinceDate = `${since.getDate()}-${months[since.getMonth()]}-${since.getFullYear()}`
+          const day = since.getDate().toString().padStart(2, '0')
+          const sinceDate = `${day}-${months[since.getMonth()]}-${since.getFullYear()}`
           console.log(`Searching for emails since: ${sinceDate}`)
-
-          // Use UNSEEN or ALL to get recent emails if SINCE doesn't work well
           const searchCriteria = [['SINCE', sinceDate]]
 
           imap.search(searchCriteria, (err: any, results: any) => {
             if (err) {
               console.error('Search error:', err)
-              reject(err)
+              clearTimeout(safetyTimeout)
+              safeReject(err)
               return
             }
 
@@ -89,8 +115,9 @@ export class EmailService {
 
             if (!results || results.length === 0) {
               console.log('No emails found matching criteria')
+              clearTimeout(safetyTimeout)
               imap.end()
-              resolve([])
+              safeResolve([])
               return
             }
 
@@ -98,6 +125,22 @@ export class EmailService {
 
             const fetch = imap.fetch(results, { bodies: '' })
             let pendingMessages = results.length
+            let fetchEnded = false
+
+            const tryResolve = () => {
+              if (fetchEnded && pendingMessages === 0 && !isResolved) {
+                console.log('All emails parsed and fetch ended, resolving immediately...')
+                clearTimeout(safetyTimeout)
+                // Close connection asynchronously (fire and forget)
+                try {
+                  imap.end()
+                } catch (e) {
+                  // Ignore errors when closing
+                }
+                // Resolve immediately - we have all the data we need
+                safeResolve(messages)
+              }
+            }
 
             fetch.on('message', (msg: any) => {
               msg.on('body', (stream: any) => {
@@ -105,6 +148,7 @@ export class EmailService {
                   if (err) {
                     console.error('Error parsing email:', err)
                     pendingMessages--
+                    tryResolve()
                     return
                   }
 
@@ -114,6 +158,7 @@ export class EmailService {
                   // Check if all messages are processed
                   if (pendingMessages === 0) {
                     console.log(`Successfully parsed ${messages.length} emails`)
+                    tryResolve()
                   }
                 })
               })
@@ -121,15 +166,39 @@ export class EmailService {
 
             fetch.once('error', (err: any) => {
               console.error('Fetch error:', err)
-              reject(err)
+              clearTimeout(safetyTimeout)
+              safeReject(err)
             })
 
             fetch.once('end', () => {
-              console.log('Fetch complete, closing connection...')
-              // Wait a bit for async parsing to complete
-              setTimeout(() => {
-                imap.end()
-              }, 1000)
+              console.log('Fetch stream ended, waiting for all parsing to complete...')
+              fetchEnded = true
+              
+              if (pendingMessages === 0) {
+                console.log('All emails already parsed, resolving immediately...')
+                clearTimeout(safetyTimeout)
+                try {
+                  imap.end()
+                } catch (e) {
+                  // Ignore errors when closing
+                }
+                safeResolve(messages)
+              } else {
+                // Wait for all async parsing to complete
+                const checkComplete = setInterval(() => {
+                  if (pendingMessages === 0) {
+                    clearInterval(checkComplete)
+                    console.log('All emails parsed, resolving immediately...')
+                    clearTimeout(safetyTimeout)
+                    try {
+                      imap.end()
+                    } catch (e) {
+                      // Ignore errors when closing
+                    }
+                    safeResolve(messages)
+                  }
+                }, 100)
+              }
             })
           })
         })
@@ -137,12 +206,14 @@ export class EmailService {
 
       imap.once('error', (err: any) => {
         console.error('IMAP error:', err)
-        reject(err)
+        clearTimeout(safetyTimeout)
+        safeReject(err)
       })
 
       imap.once('end', () => {
-        console.log('IMAP connection closed')
-        resolve(messages)
+        console.log('IMAP connection closed event fired, resolving promise with', messages.length, 'messages')
+        clearTimeout(safetyTimeout)
+        safeResolve(messages)
       })
 
       imap.connect()
@@ -202,15 +273,10 @@ export class EmailService {
 }
 
 /**
- * Create email service from environment variables
+ * Create an email service from explicit configuration.
+ * Callers (like email actions) are responsible for passing the
+ * per-user IMAP settings from the database or form.
  */
-export function createEmailService(): EmailService {
-  const config = {
-    host: process.env.IMAP_HOST!,
-    port: parseInt(process.env.IMAP_PORT!),
-    user: process.env.IMAP_USERNAME!,
-    password: process.env.IMAP_PASSWORD!,
-  }
-
+export function createEmailService(config: ImapConfig): EmailService {
   return new EmailService(config)
 }

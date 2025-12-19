@@ -2,11 +2,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
-import { TEMP_USER_ID } from '@/lib/constants'
+import { requireAuth } from '@/lib/auth'
 import { createJobSchema, updateJobSchema } from '@/lib/validations/job'
 import { JobStatus, ActivityType } from '@prisma/client'
 
 export async function createJob(formData: FormData) {
+  const user = await requireAuth()
   const rawData = {
     title: formData.get('title') as string,
     company: formData.get('company') as string,
@@ -27,7 +28,7 @@ export async function createJob(formData: FormData) {
   const job = await prisma.job.create({
     data: {
       ...validated,
-      userId: TEMP_USER_ID,
+      userId: user.id,
       url: validated.url || null,
       location: validated.location || null,
       notes: validated.notes || null,
@@ -42,7 +43,7 @@ export async function createJob(formData: FormData) {
   await prisma.activity.create({
     data: {
       jobId: job.id,
-      userId: TEMP_USER_ID,
+      userId: user.id,
       type: 'NOTE',
       description: `Job "${job.title}" at ${job.company} created`,
     },
@@ -54,6 +55,7 @@ export async function createJob(formData: FormData) {
 }
 
 export async function updateJob(id: string, formData: FormData) {
+  const user = await requireAuth()
   const rawData = {
     title: formData.get('title') as string,
     company: formData.get('company') as string,
@@ -69,6 +71,12 @@ export async function updateJob(id: string, formData: FormData) {
   }
 
   const validated = updateJobSchema.parse(rawData)
+
+  // Ensure the job belongs to the current user
+  const existing = await prisma.job.findFirst({ where: { id, userId: user.id } })
+  if (!existing) {
+    throw new Error('Job not found')
+  }
 
   const job = await prisma.job.update({
     where: { id },
@@ -90,7 +98,8 @@ export async function updateJob(id: string, formData: FormData) {
 }
 
 export async function updateJobStatus(id: string, status: JobStatus) {
-  const job = await prisma.job.findUnique({ where: { id } })
+  const user = await requireAuth()
+  const job = await prisma.job.findFirst({ where: { id, userId: user.id } })
   if (!job) throw new Error('Job not found')
 
   const previousStatus = job.status
@@ -136,7 +145,7 @@ export async function updateJobStatus(id: string, status: JobStatus) {
   await prisma.activity.create({
     data: {
       jobId: id,
-      userId: TEMP_USER_ID,
+      userId: user.id,
       type: activityType,
       fromStatus: previousStatus,
       toStatus: status,
@@ -150,17 +159,22 @@ export async function updateJobStatus(id: string, status: JobStatus) {
 }
 
 export async function deleteJob(id: string) {
-  await prisma.job.delete({ where: { id } })
+  const user = await requireAuth()
+
+  await prisma.job.deleteMany({
+    where: { id, userId: user.id },
+  })
   revalidatePath('/jobs')
   revalidatePath(`/jobs/${id}`)
   return { success: true }
 }
 
 export async function addActivity(jobId: string, description: string, type: ActivityType = 'NOTE') {
+  const user = await requireAuth()
   const activity = await prisma.activity.create({
     data: {
       jobId,
-      userId: TEMP_USER_ID,
+      userId: user.id,
       type,
       description,
     },
@@ -169,4 +183,25 @@ export async function addActivity(jobId: string, description: string, type: Acti
   revalidatePath('/jobs')
   revalidatePath(`/jobs/${jobId}`)
   return { success: true, activity }
+}
+
+export async function updateJobNotes(jobId: string, notes: string) {
+  const user = await requireAuth()
+  
+  // Ensure the job belongs to the current user
+  const existing = await prisma.job.findFirst({ where: { id: jobId, userId: user.id } })
+  if (!existing) {
+    throw new Error('Job not found')
+  }
+
+  await prisma.job.update({
+    where: { id: jobId },
+    data: {
+      notes: notes.trim() || null,
+    },
+  })
+
+  revalidatePath('/jobs')
+  revalidatePath(`/jobs/${jobId}`)
+  return { success: true }
 }

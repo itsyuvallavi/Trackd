@@ -8,7 +8,7 @@ export default function NotFound() {
       <div className="text-center">
         <h1 className="text-4xl font-bold mb-4">Job Not Found</h1>
         <p className="text-muted-foreground mb-6">
-          The job you're looking for doesn't exist or may have been deleted.
+          The job you&apos;re looking for doesn&apos;t exist or may have been deleted.
         </p>
         <Link href="/jobs">
           <Button>

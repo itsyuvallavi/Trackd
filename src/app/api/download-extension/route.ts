@@ -1,50 +1,53 @@
 import { NextResponse } from 'next/server'
 import AdmZip from 'adm-zip'
-import { readFileSync, readdirSync, statSync } from 'fs'
+import { readdir, readFile } from 'fs/promises'
 import { join } from 'path'
 
 export async function GET() {
   try {
-    const zip = new AdmZip()
     const extensionPath = join(process.cwd(), 'browser-extension')
+    
+    // Create a new zip file
+    const zip = new AdmZip()
 
-    // Helper function to add files recursively
-    const addFilesToZip = (dir: string, zipPath: string = '') => {
-      const files = readdirSync(dir)
+    // Helper function to recursively add files to zip
+    async function addDirectoryToZip(dirPath: string, zipPath: string = '') {
+      const entries = await readdir(dirPath, { withFileTypes: true })
 
-      for (const file of files) {
-        const fullPath = join(dir, file)
-        const stat = statSync(fullPath)
-        const zipFilePath = zipPath ? `${zipPath}/${file}` : file
+      for (const entry of entries) {
+        const fullPath = join(dirPath, entry.name)
+        const zipEntryPath = zipPath ? `${zipPath}/${entry.name}` : entry.name
 
-        if (stat.isDirectory()) {
-          addFilesToZip(fullPath, zipFilePath)
+        if (entry.isDirectory()) {
+          // Recursively add subdirectories
+          await addDirectoryToZip(fullPath, zipEntryPath)
         } else {
-          const fileContent = readFileSync(fullPath)
-          zip.addFile(zipFilePath, fileContent)
+          // Add file to zip
+          const fileContent = await readFile(fullPath)
+          zip.addFile(zipEntryPath, fileContent)
         }
       }
     }
 
-    // Add all files from the extension directory
-    addFilesToZip(extensionPath)
+    // Add all files from the browser-extension directory
+    await addDirectoryToZip(extensionPath)
 
-    // Generate the zip buffer
+    // Generate the zip file buffer
     const zipBuffer = zip.toBuffer()
 
-    // Return the zip file
-    return new NextResponse(new Uint8Array(zipBuffer), {
+    // Return the zip file as a download
+    return new NextResponse(zipBuffer, {
       headers: {
         'Content-Type': 'application/zip',
         'Content-Disposition': 'attachment; filename="trackd-extension.zip"',
+        'Content-Length': zipBuffer.length.toString(),
       },
     })
   } catch (error) {
     console.error('Error creating extension zip:', error)
     return NextResponse.json(
-      { error: 'Failed to create extension zip' },
+      { error: 'Failed to create extension zip file' },
       { status: 500 }
     )
   }
 }
-

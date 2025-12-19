@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
-import { TEMP_USER_ID } from '@/lib/constants'
+import { requireAuth } from '@/lib/auth'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { SimpleTopBar } from '@/components/layout/simple-top-bar'
 import { KanbanBoard } from '@/components/board/kanban-board'
 import { JobStatus } from '@prisma/client'
 
@@ -16,8 +17,10 @@ const COLUMNS: { status: JobStatus; label: string; color: string }[] = [
 ]
 
 export default async function BoardPage() {
+  const user = await requireAuth()
+
   const jobs = await prisma.job.findMany({
-    where: { userId: TEMP_USER_ID },
+    where: { userId: user.id },
     include: {
       activities: {
         orderBy: { createdAt: 'desc' },
@@ -36,19 +39,29 @@ export default async function BoardPage() {
   const totalJobs = jobs.length
   const activeJobs = jobs.filter(j => ['SAVED', 'APPLIED', 'INTERVIEW', 'OFFER'].includes(j.status)).length
 
+  const emailIntegration = await prisma.emailIntegration.findUnique({
+    where: { userId: user.id },
+  })
+
   return (
     <div className="size-full flex dark">
       <Sidebar />
-      <div className="flex-1 ml-16 min-h-screen p-8">
-        <div className="max-w-[1600px] mx-auto">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold">Board</h1>
-            <p className="text-foreground/60 mt-1">
-              {totalJobs} total jobs • {activeJobs} active
-            </p>
-          </div>
+      <SimpleTopBar showEmailNotification={!emailIntegration} />
+      <div
+        className="flex-1 flex flex-col bg-muted/10"
+        style={{ marginLeft: '4rem' }}
+      >
+        <div className="flex-1 overflow-auto pt-[88px]">
+          <div className="max-w-[1600px] mx-auto px-8 py-6">
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold">Board</h1>
+              <p className="text-foreground/60 mt-1">
+                {totalJobs} total jobs • {activeJobs} active
+              </p>
+            </div>
 
-          <KanbanBoard columns={COLUMNS} jobsByStatus={jobsByStatus} />
+            <KanbanBoard columns={COLUMNS} jobsByStatus={jobsByStatus} />
+          </div>
         </div>
       </div>
     </div>

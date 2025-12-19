@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { JobStatus } from '@prisma/client'
 import { STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
 import { updateJobStatus } from '@/app/(authenticated)/jobs/actions'
@@ -14,19 +15,35 @@ interface StatusDropdownProps {
 const statusOptions: JobStatus[] = ['SAVED', 'APPLIED', 'INTERVIEW', 'OFFER', 'REJECTED', 'GHOSTED']
 
 export function StatusDropdown({ jobId, currentStatus }: StatusDropdownProps) {
+  const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [position, setPosition] = useState({ top: 0, left: 0 })
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      setPosition({
+        top: rect.bottom + 4,
+        left: rect.left,
+      })
+    }
+  }, [isOpen])
 
   const handleStatusChange = (status: JobStatus) => {
     startTransition(async () => {
       await updateJobStatus(jobId, status)
       setIsOpen(false)
+      router.refresh() // Refresh to show updated status
     })
   }
 
   return (
     <div className="relative inline-block">
       <button
+        ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
         disabled={isPending}
         className={cn(
@@ -54,10 +71,14 @@ export function StatusDropdown({ jobId, currentStatus }: StatusDropdownProps) {
       {isOpen && (
         <>
           <div
-            className="fixed inset-0 z-10"
+            className="fixed inset-0 z-40"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute left-0 z-20 mt-1 w-40 rounded-md bg-background border border-foreground/20 shadow-lg">
+          <div 
+            ref={dropdownRef}
+            className="fixed z-50 w-40 rounded-md bg-background border border-foreground/20 shadow-lg"
+            style={{ top: `${position.top}px`, left: `${position.left}px` }}
+          >
             <div className="py-1">
               {statusOptions.map((status) => (
                 <button

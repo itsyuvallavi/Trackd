@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { EmailIntegration } from '@prisma/client'
 import { saveEmailIntegration, syncEmails, testEmailConnection } from '@/app/(authenticated)/settings/email-actions'
 import { Button } from '@/components/ui/button'
+import { SyncResultToast } from './sync-result-toast'
 
 interface EmailIntegrationFormProps {
   integration: EmailIntegration | null
@@ -14,7 +15,10 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
   const [isTesting, setIsTesting] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [showIMAPForm, setShowIMAPForm] = useState(!!integration)
+  const [showConfig, setShowConfig] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [syncResult, setSyncResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [showSyncModal, setShowSyncModal] = useState(false)
 
   const handleOAuthConnect = async (provider: 'google' | 'microsoft') => {
     try {
@@ -71,20 +75,51 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
       const result = await syncEmails()
 
       if (result.success && result.stats) {
-        setMessage({
+        // Store full stats for the toast to parse, but we'll simplify the display
+        let message = `Fetched ${result.stats.totalEmails} emails since ${new Date(result.stats.syncSince).toLocaleDateString()}\n`
+        message += `Processed ${result.stats.processedEmails} job-related emails\n`
+        if (result.stats.createdJobs > 0) {
+          message += `Created ${result.stats.createdJobs} new jobs\n`
+        }
+        if (result.stats.updatedJobs > 0) {
+          message += `Updated ${result.stats.updatedJobs} existing jobs\n`
+        }
+        if (result.stats.skippedEmails > 0) {
+          message += `Skipped ${result.stats.skippedEmails} emails\n`
+        }
+        
+        setSyncResult({
           type: 'success',
-          text: `Sync complete! Processed ${result.stats.processedEmails} emails, updated ${result.stats.updatedJobs} jobs.`,
+          message,
         })
+        setShowSyncModal(true)
       } else {
-        setMessage({ type: 'error', text: result.error || 'Sync failed' })
+        setSyncResult({
+          type: 'error',
+          message: result.error || 'Sync failed. Check console for details.',
+        })
+        setShowSyncModal(true)
       }
+    } catch (error) {
+      console.error('Sync error:', error)
+      setSyncResult({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'An unexpected error occurred',
+      })
+      setShowSyncModal(true)
     } finally {
       setIsSyncing(false)
     }
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      <SyncResultToast
+        isOpen={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
+        result={syncResult}
+      />
+      <div className="space-y-6">
       {/* OAuth Options (Primary - Recommended) */}
       {!integration && (
         <div className="space-y-4">
@@ -165,6 +200,35 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
       {/* IMAP Form (Fallback or when already configured) */}
       {(showIMAPForm || integration) && (
         <div>
+          {integration && (
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleSync}
+                  disabled={isSyncing || isPending}
+                >
+                  {isSyncing ? 'Syncing...' : 'Sync Now'}
+                </Button>
+                {integration.lastSyncedAt && (
+                  <span className="text-sm text-foreground/60">
+                    Last synced: {new Date(integration.lastSyncedAt).toLocaleString()}
+                  </span>
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowConfig(!showConfig)}
+                className="border-border hover:bg-accent hover:text-accent-foreground transition-colors"
+              >
+                {showConfig ? 'Hide Configuration' : 'Show Configuration'}
+              </Button>
+            </div>
+          )}
+
           {!integration && (
             <div className="mb-4">
               <h3 className="font-semibold mb-1">IMAP Configuration</h3>
@@ -174,7 +238,7 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className={`space-y-4 ${integration && !showConfig ? 'hidden' : ''}`}>
             <div>
               <label htmlFor="email" className="block text-sm font-medium mb-1">
                 Email Address <span className="text-red-500">*</span>
@@ -255,6 +319,7 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
               </p>
             </div>
 
+            {/* Show message for save/test actions, but sync uses modal */}
             {message && (
               <div
                 className={`rounded-md p-3 text-sm ${
@@ -265,6 +330,13 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
               >
                 {message.text}
               </div>
+            )}
+
+            {!integration && (
+              <p className="text-xs text-foreground/60 mb-4">
+                We&apos;ll use IMAP to securely check your email for job-related messages.
+                Your credentials are stored encrypted.
+              </p>
             )}
 
             <div className="flex gap-2 pt-2">
@@ -279,20 +351,11 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
               >
                 {isTesting ? 'Testing...' : 'Test Connection'}
               </Button>
-              {integration && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={handleSync}
-                  disabled={isSyncing || isPending}
-                >
-                  {isSyncing ? 'Syncing...' : 'Sync Now'}
-                </Button>
-              )}
             </div>
           </form>
         </div>
       )}
-    </div>
+      </div>
+    </>
   )
 }

@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma'
-import { TEMP_USER_ID, STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
+import { requireAuth } from '@/lib/auth'
+import { STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { SimpleTopBar } from '@/components/layout/simple-top-bar'
 import { StatusStats } from '@/components/dashboard/status-stats'
 import { JobStatus } from '@prisma/client'
 import { formatRelativeTime } from '@/lib/utils'
@@ -11,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 export const dynamic = 'force-dynamic'
 
 export default async function TodayPage() {
+  const user = await requireAuth()
   const today = new Date()
   const sevenDaysFromNow = new Date(today)
   sevenDaysFromNow.setDate(today.getDate() + 7)
@@ -18,7 +21,7 @@ export default async function TodayPage() {
   // Get all jobs for status counts
   const allJobs = await prisma.job.findMany({
     where: {
-      userId: TEMP_USER_ID,
+      userId: user.id,
     },
     include: {
       activities: {
@@ -32,7 +35,7 @@ export default async function TodayPage() {
   // Get recent activities for status changes
   const recentActivities = await prisma.activity.findMany({
     where: {
-      userId: TEMP_USER_ID,
+      userId: user.id,
       type: {
         in: ['STATUS_CHANGE', 'INTERVIEW', 'REJECTION', 'OFFER'],
       },
@@ -47,7 +50,7 @@ export default async function TodayPage() {
   // Get recent status changes to APPLIED (to identify truly recently applied jobs)
   const recentAppliedActivities = await prisma.activity.findMany({
     where: {
-      userId: TEMP_USER_ID,
+      userId: user.id,
       toStatus: 'APPLIED',
       type: {
         in: ['STATUS_CHANGE'],
@@ -120,27 +123,38 @@ export default async function TodayPage() {
     categorizedJobs.dueToday.length +
     categorizedJobs.dueSoon.length
 
+  const emailIntegration = await prisma.emailIntegration.findUnique({
+    where: { userId: user.id },
+  })
+
   return (
     <div className="size-full flex dark">
       <Sidebar />
-      <div className="flex-1 ml-16 min-h-screen p-8">
-        <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">Today</h1>
-          <p className="text-foreground/60 mt-1">
-            {totalNeedingAttention === 0
-              ? "You're all caught up!"
-              : `${totalNeedingAttention} ${totalNeedingAttention === 1 ? 'job needs' : 'jobs need'} attention`}
-          </p>
-        </div>
+      <SimpleTopBar showEmailNotification={!emailIntegration} />
+      <div
+        className="flex-1 flex flex-col bg-muted/10"
+        style={{ marginLeft: '4rem' }}
+      >
+        <div className="flex-1 overflow-auto pt-[88px]">
+          <div className="max-w-[1600px] mx-auto px-8 py-6">
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold">Today</h1>
+              <p className="text-foreground/60 mt-1">
+                {totalNeedingAttention === 0
+                  ? "You're all caught up!"
+                  : `${totalNeedingAttention} ${
+                      totalNeedingAttention === 1 ? 'job needs' : 'jobs need'
+                    } attention`}
+              </p>
+            </div>
 
-        {/* Status Counter Widget */}
-        <div className="mb-8">
-          <StatusStats counts={statusCounts} />
-        </div>
+            {/* Status Counter Widget */}
+            <div className="mb-8">
+              <StatusStats counts={statusCounts} />
+            </div>
 
-        <div className="space-y-8">
-          {/* Recent Status Changes */}
+            <div className="space-y-8">
+              {/* Recent Status Changes */}
           {categorizedJobs.recentStatusChanges.length > 0 && (
             <div>
               <h2 className="text-xl font-semibold mb-4">Recent Status Changes</h2>
@@ -317,5 +331,6 @@ export default async function TodayPage() {
         </div>
       </div>
     </div>
-  )
-}
+    </div>
+    )
+  }

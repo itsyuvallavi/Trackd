@@ -191,18 +191,46 @@ function scrapeLinkedIn($: cheerio.CheerioAPI, url: string): { success: boolean;
     let salary = $('.salary-main-rail__salary-info').text().trim() ||
                  $('.compensation__salary').text().trim() ||
                  $('[data-testid="salary-info"]').text().trim() ||
-                 $('.topcard__flavor--metadata-list-item').filter((_, el) => {
-                   const text = $(el).text().toLowerCase()
-                   return text.includes('$') || text.includes('salary') || text.includes('compensation')
-                 }).text().trim() ||
-                 $('div.mt4 span').filter((_, el) => {
-                   const text = $(el).text()
-                   return text.includes('$') || /^\$[\d,]+/.test(text)
-                 }).first().text().trim()
+                 $('.job-details-jobs-unified-top-card__salary-info').text().trim() ||
+                 $('.salary-main-rail__data-body').text().trim() ||
+                 ''
     
-    // Clean up salary text - remove "Salary:" prefix and extra whitespace
+    // Search in job insights for salary patterns
+    if (!salary) {
+      $('.job-details-jobs-unified-top-card__job-insight, .job-details-jobs-unified-top-card__job-insight-text').each((_, el) => {
+        const text = $(el).text().trim()
+        if (text.match(/\$[\d,]+/)) {
+          salary = text
+          return false // break
+        }
+      })
+    }
+    
+    // Try metadata list items
+    if (!salary) {
+      $('.topcard__flavor--metadata-list-item, .job-details-jobs-unified-top-card__job-insight').each((_, el) => {
+        const text = $(el).text().toLowerCase()
+        if (text.includes('$') || text.includes('salary') || text.includes('compensation')) {
+          salary = $(el).text().trim()
+          return false // break
+        }
+      })
+    }
+    
+    // Clean up salary text - remove prefixes and normalize format
     if (salary) {
-      salary = salary.replace(/^Salary:\s*/i, '').replace(/^Compensation:\s*/i, '').trim()
+      salary = salary.replace(/^Salary:\s*/i, '')
+        .replace(/^Compensation:\s*/i, '')
+        .replace(/\s*per\s+(year|month|week|hour|hr|yr|mo|wk)\s*/gi, '/$1 ')
+        .replace(/\s*\/\s*(year|month|week|hour|yr|mo|wk)\s*/gi, '/$1 ')
+        .replace(/\s+/g, ' ')
+        .trim()
+      
+      // Extract just the salary range/amount if there's extra text
+      const salaryMatch = salary.match(/\$[\d,]+\s*(?:-\s*\$[\d,]+)?(?:\/\s*(?:year|month|week|hour|yr|mo|wk|day|d))?/i)
+      if (salaryMatch) {
+        salary = salaryMatch[0]
+      }
     }
 
     if (!title || !company) {
