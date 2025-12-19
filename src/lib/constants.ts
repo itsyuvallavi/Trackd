@@ -31,6 +31,8 @@ export const SOURCE_LABELS: Record<JobSource, string> = {
   COMPANY_SITE: 'Company Site',
   REFERRAL: 'Referral',
   RECRUITER: 'Recruiter',
+  EU_REMOTE_JOBS: 'EU Remote Jobs',
+  WORKABLE: 'Workable',
   OTHER: 'Other',
 }
 

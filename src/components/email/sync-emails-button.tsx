@@ -16,7 +16,7 @@ export function SyncEmailsButton() {
     try {
       const result = await syncEmails()
 
-      if (result.success && result.stats) {
+      if (result.success && 'stats' in result) {
         // Store full stats for the toast to parse, but we'll simplify the display
         let message = `Fetched ${result.stats.totalEmails} emails since ${new Date(result.stats.syncSince).toLocaleDateString()}\n`
         message += `Processed ${result.stats.processedEmails} job-related emails\n`
@@ -38,7 +38,7 @@ export function SyncEmailsButton() {
       } else {
         setSyncResult({
           type: 'error',
-          message: result.error || 'Sync failed. Check console for details.',
+          message: ('error' in result ? result.error : 'Sync failed. Check console for details.') || 'Sync failed. Check console for details.',
         })
         setShowSyncModal(true)
       }
