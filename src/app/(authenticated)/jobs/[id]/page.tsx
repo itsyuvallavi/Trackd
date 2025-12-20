@@ -34,10 +34,10 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
   })
 
   return (
-    <div className="size-full flex dark">
+    <div className="size-full flex">
       <SimpleTopBar showEmailNotification={!emailIntegration} />
       <Sidebar />
-      <div className="flex-1 ml-16 pt-20">
+      <div className="flex-1 ml-16 pt-20 relative z-10">
         <JobDetailView job={job} />
       </div>
     </div>

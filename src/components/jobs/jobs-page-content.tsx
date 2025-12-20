@@ -20,6 +20,7 @@ import { EmptyState } from '@/components/jobs/empty-state'
 import { ExtensionPopup } from '@/components/jobs/extension-popup'
 import { Tooltip } from '@/components/ui/tooltip'
 import { STATUS_LABELS } from '@/lib/constants'
+import Link from 'next/link'
 
 // Status badge styling
 const statusStyles = {
@@ -201,25 +202,25 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent border-b-2 border-border bg-muted/30">
-                    <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-4">
-                      Company
-                    </TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-4">
+                    <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-2">
                       Role
                     </TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-4">
+                    <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-2">
+                      Company
+                    </TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-2">
                       Source
                     </TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-4 text-center">
+                    <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-2 text-center">
                       Location
                     </TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-4 text-center">
+                    <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-2 text-center">
                       Status
                     </TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-4 text-center max-w-xs">
+                    <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-2 text-center max-w-xs">
                       Notes
                     </TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-4 text-center">
+                    <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-2 text-center">
                       Actions
                     </TableHead>
                   </TableRow>
@@ -234,22 +235,38 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                         hover:bg-accent transition-colors duration-200
                       `}
                     >
-                      <TableCell className="text-foreground font-medium py-4">
-                        {job.company}
-                      </TableCell>
-                      <TableCell className="text-foreground py-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-1 h-6 rounded-full ${statusColorIndicators[job.status as keyof typeof statusColorIndicators]}`} />
-                          <span className="font-medium">{job.title}</span>
+                      <TableCell className="text-foreground py-2">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-1 h-5 rounded-full shrink-0 ${statusColorIndicators[job.status as keyof typeof statusColorIndicators]}`} />
+                          {job.title.length > 26 ? (
+                            <Tooltip content={job.title}>
+                              <Link 
+                                href={`/jobs/${job.id}`}
+                                className="font-medium hover:text-primary transition-colors truncate"
+                              >
+                                {job.title.substring(0, 26)}...
+                              </Link>
+                            </Tooltip>
+                          ) : (
+                            <Link 
+                              href={`/jobs/${job.id}`}
+                              className="font-medium hover:text-primary transition-colors"
+                            >
+                              {job.title}
+                            </Link>
+                          )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground py-4 text-sm">
+                      <TableCell className="text-foreground font-medium py-2">
+                        {job.company}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground py-2 text-sm">
                         {job.source}
                       </TableCell>
-                      <TableCell className="text-muted-foreground text-center py-4 text-sm">
+                      <TableCell className="text-muted-foreground text-center py-2 text-sm">
                         {job.location || '-'}
                       </TableCell>
-                                 <TableCell className="text-center">
+                                 <TableCell className="text-center py-2">
                                    <div className="flex justify-center">
                                      <StatusDropdown 
                                        jobId={job.id} 
@@ -257,7 +274,7 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                                      />
                                    </div>
                                  </TableCell>
-                                 <TableCell className="py-4 text-center max-w-xs">
+                                 <TableCell className="py-2 text-center max-w-xs">
                                    {job.notes ? (
                                      <Tooltip content={job.notes}>
                                        <div className="flex items-center justify-center gap-2 cursor-default">
@@ -271,7 +288,7 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                                      <span className="text-xs text-muted-foreground italic">No notes</span>
                                    )}
                                  </TableCell>
-                                 <TableCell className="text-center">
+                                 <TableCell className="text-center py-2">
                                    <div className="flex justify-center">
                                      <JobActionsMenu jobId={job.id} />
                                    </div>

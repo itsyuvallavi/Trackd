@@ -8,12 +8,12 @@ import { JobStatus } from '@prisma/client'
 export const dynamic = 'force-dynamic'
 
 const COLUMNS: { status: JobStatus; label: string; color: string }[] = [
-  { status: 'SAVED', label: 'Saved', color: 'bg-gray-100 dark:bg-gray-800' },
-  { status: 'APPLIED', label: 'Applied', color: 'bg-blue-100 dark:bg-blue-900' },
-  { status: 'INTERVIEW', label: 'Interview', color: 'bg-purple-100 dark:bg-purple-900' },
-  { status: 'OFFER', label: 'Offer', color: 'bg-green-100 dark:bg-green-900' },
-  { status: 'REJECTED', label: 'Rejected', color: 'bg-red-100 dark:bg-red-900' },
-  { status: 'GHOSTED', label: 'Ghosted', color: 'bg-orange-100 dark:bg-orange-900' },
+  { status: 'SAVED', label: 'Saved', color: 'bg-muted' },
+  { status: 'APPLIED', label: 'Applied', color: 'bg-info-bg' },
+  { status: 'INTERVIEW', label: 'Interview', color: 'bg-purple-100 dark:bg-purple-900/30' },
+  { status: 'OFFER', label: 'Offer', color: 'bg-success-bg' },
+  { status: 'REJECTED', label: 'Rejected', color: 'bg-error-bg' },
+  { status: 'GHOSTED', label: 'Ghosted', color: 'bg-warning-bg' },
 ]
 
 export default async function BoardPage() {
@@ -44,11 +44,11 @@ export default async function BoardPage() {
   })
 
   return (
-    <div className="size-full flex dark">
+    <div className="size-full flex">
       <Sidebar />
       <SimpleTopBar showEmailNotification={!emailIntegration} />
       <div
-        className="flex-1 flex flex-col bg-muted/10"
+        className="flex-1 flex flex-col relative z-10"
         style={{ marginLeft: '4rem' }}
       >
         <div className="flex-1 overflow-auto pt-[88px]">

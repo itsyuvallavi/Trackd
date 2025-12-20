@@ -10,12 +10,12 @@ export const STATUS_LABELS: Record<JobStatus, string> = {
 }
 
 export const STATUS_COLORS: Record<JobStatus, string> = {
-  SAVED: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',
-  APPLIED: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  INTERVIEW: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  OFFER: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-  REJECTED: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-  GHOSTED: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+  SAVED: 'bg-muted text-muted-foreground border border-border',
+  APPLIED: 'bg-info-bg text-info-text border border-info/20',
+  INTERVIEW: 'bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-900/30 dark:text-purple-300',
+  OFFER: 'bg-success-bg text-success-text border border-success/20',
+  REJECTED: 'bg-error-bg text-error-text border border-error/20',
+  GHOSTED: 'bg-warning-bg text-warning-text border border-warning/20',
 }
 
 export const PRIORITY_LABELS: Record<JobPriority, string> = {

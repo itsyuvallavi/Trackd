@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { UserProfileMenu } from '@/components/layout/user-profile-menu'
 import { NotificationsBell } from '@/components/layout/notifications-bell'
 import { AutoRefreshIndicator } from '@/components/layout/auto-refresh-indicator'
+import { ThemeToggle } from '@/components/layout/theme-toggle'
 
 interface SimpleTopBarProps {
   showEmailNotification?: boolean
@@ -16,23 +17,25 @@ export function SimpleTopBar({ showEmailNotification }: SimpleTopBarProps) {
       <div className="px-6 py-4">
         <div className="flex items-center justify-between gap-6">
           {/* Left: Logo + App Name */}
-          <div className="flex items-center gap-3">
-            <CheckSquare className="size-6 text-foreground" strokeWidth={2.5} />
+          <div className="flex items-center gap-3 group cursor-pointer">
+            <CheckSquare className="size-6 text-primary transition-colors duration-200" strokeWidth={2.5} />
             <span className="text-xl font-semibold text-foreground">Trackd</span>
           </div>
 
-          {/* Center: Search Bar (visual only for now) */}
+          {/* Center: Search Bar */}
           <div className="flex-1 max-w-xl relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
               type="search"
               placeholder="Search by company, role..."
-              className="pl-9 h-10 bg-background border-border shadow-sm text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/20"
+              className="pl-9 h-10 bg-card border-border shadow-sm text-foreground placeholder:text-muted-foreground 
+                focus:ring-2 focus:ring-primary focus:ring-offset-1 focus:border-primary transition-all duration-200"
             />
           </div>
 
-          {/* Right: Auto-refresh + Notification + User Profile */}
+          {/* Right: Theme Toggle + Auto-refresh + Notification + User Profile */}
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             <AutoRefreshIndicator 
               intervalSeconds={30} 
               enabled={true}
@@ -46,5 +49,4 @@ export function SimpleTopBar({ showEmailNotification }: SimpleTopBarProps) {
     </div>
   )
 }
-
 

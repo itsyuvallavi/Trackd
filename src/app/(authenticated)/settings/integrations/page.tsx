@@ -21,11 +21,11 @@ export default async function IntegrationsPage() {
   })
 
   return (
-    <div className="size-full flex dark">
+    <div className="size-full flex">
       <Sidebar />
       <SimpleTopBar showEmailNotification={!integration} />
       <div
-        className="flex-1 flex flex-col bg-muted/10"
+        className="flex-1 flex flex-col relative z-10"
         style={{ marginLeft: '4rem' }}
       >
         <div className="flex-1 overflow-auto pt-[88px]">

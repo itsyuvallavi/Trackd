@@ -12,15 +12,20 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={cn(
-          'inline-flex items-center justify-center rounded-md font-medium transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+          'inline-flex items-center justify-center rounded-md font-medium transition-all duration-200',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
           'disabled:pointer-events-none disabled:opacity-50',
           {
-            'bg-foreground text-background hover:bg-foreground/90': variant === 'primary',
-            'bg-background border border-foreground/20 hover:bg-foreground/5': variant === 'secondary',
-            'border border-input bg-background hover:bg-accent hover:text-accent-foreground': variant === 'outline',
-            'hover:bg-foreground/10': variant === 'ghost',
-            'bg-red-600 text-white hover:bg-red-700': variant === 'danger',
+            // Primary: Blue emphasis button
+            'bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm hover:shadow-blue': variant === 'primary',
+            // Secondary: Subtle gray button
+            'bg-muted text-foreground hover:bg-muted-foreground hover:text-background border border-border': variant === 'secondary',
+            // Outline: Bordered button with blue hover
+            'border border-border bg-card hover:bg-primary-lightest hover:text-primary hover:border-primary': variant === 'outline',
+            // Ghost: Transparent with blue hover
+            'hover:bg-primary-lightest hover:text-primary': variant === 'ghost',
+            // Danger: Red for destructive actions
+            'bg-error text-white hover:bg-error/90 shadow-sm': variant === 'danger',
           },
           {
             'h-8 px-3 text-sm': size === 'sm',

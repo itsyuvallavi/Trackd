@@ -23,7 +23,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'bg-card border-r-2 border-border flex flex-col py-4 fixed left-0 top-[72px] h-[calc(100vh-72px)] w-16 shadow-xl'
+        'bg-card border-r-2 border-border flex flex-col py-4 fixed left-0 top-[72px] h-[calc(100vh-72px)] w-16 shadow-xl z-20'
       )}
     >
       {/* Navigation Icons */}
