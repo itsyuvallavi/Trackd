@@ -165,14 +165,24 @@ function DroppableColumn({ status, label, color, jobs, isDragging }: DroppableCo
 
   const showDropIndicator = isOver
 
+  // Map status to content area background color (matching the header but more subtle)
+  const contentBgColor = {
+    'SAVED': 'bg-muted/50',
+    'APPLIED': 'bg-info-bg/50',
+    'INTERVIEW': 'bg-purple-100/50 dark:bg-purple-900/20',
+    'OFFER': 'bg-success-bg/50',
+    'REJECTED': 'bg-error-bg/50',
+    'GHOSTED': 'bg-warning-bg/50',
+  }[status] || 'bg-muted/50'
+
   return (
     <div ref={setNodeRef} className="flex flex-col h-full w-full transition-all">
-      <div className={`${color} rounded-t-lg px-4 py-3 font-semibold flex items-center justify-between ${showDropIndicator ? 'ring-2 ring-primary' : ''}`}>
+      <div className={`${color} border border-border rounded-t-lg px-4 py-3 font-semibold flex items-center justify-between ${showDropIndicator ? 'ring-2 ring-primary' : ''}`}>
         <span>{label}</span>
         <span className="text-sm font-normal opacity-70">{jobs.length}</span>
       </div>
       <div
-        className={`flex-1 border-x border-b border-foreground/20 rounded-b-lg p-2 bg-foreground/5 h-[calc(100vh-250px)] overflow-y-auto space-y-2 ${
+        className={`flex-1 border-x border-b border-border rounded-b-lg p-2 ${contentBgColor} h-[calc(100vh-250px)] overflow-y-auto space-y-2 ${
           isDragging ? 'transition-colors' : ''
         } ${showDropIndicator ? 'bg-primary/10' : ''}`}
       >

@@ -20,11 +20,17 @@ export function SyncEmailsButton() {
         // Store full stats for the toast to parse, but we'll simplify the display
         let message = `Fetched ${result.stats.totalEmails} emails since ${new Date(result.stats.syncSince).toLocaleDateString()}\n`
         message += `Processed ${result.stats.processedEmails} job-related emails\n`
-        if (result.stats.createdJobs > 0) {
-          message += `Created ${result.stats.createdJobs} new jobs\n`
-        }
         if (result.stats.updatedJobs > 0) {
           message += `Updated ${result.stats.updatedJobs} existing jobs\n`
+        }
+        if (result.stats.newJobsDetected > 0) {
+          message += `Detected ${result.stats.newJobsDetected} new jobs (check notifications)\n`
+        }
+        if (result.stats.ambiguousMatches > 0) {
+          message += `${result.stats.ambiguousMatches} ambiguous matches (check notifications)\n`
+        }
+        if (result.stats.noMatches > 0) {
+          message += `${result.stats.noMatches} unmatched emails (check notifications)\n`
         }
         if (result.stats.skippedEmails > 0) {
           message += `Skipped ${result.stats.skippedEmails} emails\n`

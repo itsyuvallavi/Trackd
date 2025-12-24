@@ -54,10 +54,10 @@ async function syncEmailsNow() {
       console.log(`   Suggested Status: ${classified.suggestedStatus || 'None'}`)
 
       // Try to match email to existing job
-      const matchedJobId = classifier.matchToJob(classified, jobs)
+      const matchResult = classifier.matchToJob(classified, jobs, email)
 
-      if (matchedJobId && classified.suggestedStatus) {
-        const job = jobs.find((j) => j.id === matchedJobId)
+      if ((matchResult.confidence === 'exact' || matchResult.confidence === 'fuzzy') && matchResult.jobId && classified.suggestedStatus) {
+        const job = jobs.find((j) => j.id === matchResult.jobId)
         console.log(`   ✓ Matched to job: "${job?.title}" at ${job?.company}`)
 
         // Only update if it's a status advancement (don't go backwards)
@@ -66,14 +66,14 @@ async function syncEmailsNow() {
         if (shouldUpdate) {
           // Update job status
           await prisma.job.update({
-            where: { id: matchedJobId },
+            where: { id: matchResult.jobId },
             data: { status: classified.suggestedStatus },
           })
 
           // Create activity record
           await prisma.activity.create({
             data: {
-              jobId: matchedJobId,
+              jobId: matchResult.jobId,
               userId,
               type: getActivityType(classified.type),
               fromStatus: job?.status,

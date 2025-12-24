@@ -63,6 +63,8 @@ export async function POST(request: Request) {
       'Lever': JobSource.COMPANY_SITE,
       'Workable': JobSource.WORKABLE,
       'EU Remote Jobs': JobSource.EU_REMOTE_JOBS,
+      'ZipRecruiter': JobSource.ZIPRECRUITER,
+      'Landing.jobs': JobSource.LANDING_JOBS,
       'Extension': JobSource.OTHER,
     }
     const source = sourceMap[jobData.source] || JobSource.OTHER

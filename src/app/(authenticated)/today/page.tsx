@@ -12,6 +12,19 @@ import { Badge } from '@/components/ui/badge'
 
 export const dynamic = 'force-dynamic'
 
+// Helper function to get status background color
+function getStatusBackgroundColor(status: JobStatus): string {
+  const statusBgMap: Record<JobStatus, string> = {
+    'SAVED': 'bg-muted/50',
+    'APPLIED': 'bg-info-bg/50',
+    'INTERVIEW': 'bg-purple-100/50 dark:bg-purple-900/20',
+    'OFFER': 'bg-success-bg/50',
+    'REJECTED': 'bg-error-bg/50',
+    'GHOSTED': 'bg-warning-bg/50',
+  }
+  return statusBgMap[status] || 'bg-muted/50'
+}
+
 export default async function TodayPage() {
   const user = await requireAuth()
   const today = new Date()
@@ -162,26 +175,26 @@ export default async function TodayPage() {
                 <table className="w-full">
                   <tbody>
                     {categorizedJobs.recentStatusChanges.map((activity) => (
-                      <tr key={activity.id} className="border-b last:border-0 hover:bg-accent/50">
-                        <td className="p-4">
-                          <Link href={`/jobs/${activity.jobId}`} className="font-medium hover:underline">
-                            {activity.job.title}
-                          </Link>
-                          <p className="text-sm text-muted-foreground">{activity.job.company}</p>
-                        </td>
-                        <td className="p-4">
-                          {activity.fromStatus && activity.toStatus && (
-                            <div className="flex items-center gap-2">
-                              <Badge className={STATUS_COLORS[activity.fromStatus]}>{STATUS_LABELS[activity.fromStatus]}</Badge>
-                              <span className="text-muted-foreground">→</span>
-                              <Badge className={STATUS_COLORS[activity.toStatus]}>{STATUS_LABELS[activity.toStatus]}</Badge>
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-4 text-sm text-muted-foreground">
-                          {formatRelativeTime(activity.createdAt)}
-                        </td>
-                      </tr>
+                        <tr key={activity.id} className={`border-b last:border-0 ${getStatusBackgroundColor(activity.job.status)} hover:opacity-80 transition-opacity`}>
+                          <td className="p-4">
+                            <Link href={`/jobs/${activity.jobId}`} className="font-medium hover:underline">
+                              {activity.job.title}
+                            </Link>
+                            <p className="text-sm text-muted-foreground">{activity.job.company}</p>
+                          </td>
+                          <td className="p-4">
+                            {activity.fromStatus && activity.toStatus && (
+                              <div className="flex items-center gap-2">
+                                <Badge className={STATUS_COLORS[activity.fromStatus]}>{STATUS_LABELS[activity.fromStatus]}</Badge>
+                                <span className="text-muted-foreground">→</span>
+                                <Badge className={STATUS_COLORS[activity.toStatus]}>{STATUS_LABELS[activity.toStatus]}</Badge>
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-4 text-sm text-muted-foreground">
+                            {formatRelativeTime(activity.createdAt)}
+                          </td>
+                        </tr>
                     ))}
                   </tbody>
                 </table>
@@ -197,20 +210,20 @@ export default async function TodayPage() {
                 <table className="w-full">
                   <tbody>
                     {categorizedJobs.withNextAction.map((job) => (
-                      <tr key={job.id} className="border-b last:border-0 hover:bg-accent/50">
-                        <td className="p-4">
-                          <Link href={`/jobs/${job.id}`} className="font-medium hover:underline">
-                            {job.title}
-                          </Link>
-                          <p className="text-sm text-muted-foreground">{job.company}</p>
-                        </td>
-                        <td className="p-4">
-                          <p className="text-orange-600 dark:text-orange-400">⚡ {job.nextAction}</p>
-                        </td>
-                        <td className="p-4">
-                          <Badge className={STATUS_COLORS[job.status]}>{STATUS_LABELS[job.status]}</Badge>
-                        </td>
-                      </tr>
+                        <tr key={job.id} className={`border-b last:border-0 ${getStatusBackgroundColor(job.status)} hover:opacity-80 transition-opacity`}>
+                          <td className="p-4">
+                            <Link href={`/jobs/${job.id}`} className="font-medium hover:underline">
+                              {job.title}
+                            </Link>
+                            <p className="text-sm text-muted-foreground">{job.company}</p>
+                          </td>
+                          <td className="p-4">
+                            <p className="text-orange-600 dark:text-orange-400">⚡ {job.nextAction}</p>
+                          </td>
+                          <td className="p-4">
+                            <Badge className={STATUS_COLORS[job.status]}>{STATUS_LABELS[job.status]}</Badge>
+                          </td>
+                        </tr>
                     ))}
                   </tbody>
                 </table>
@@ -228,13 +241,13 @@ export default async function TodayPage() {
                 <table className="w-full">
                   <tbody>
                     {categorizedJobs.dueToday.map((job) => (
-                      <tr key={job.id} className="border-b last:border-0">
-                        <td className="p-4">
-                          <Link href={`/jobs/${job.id}`} className="font-medium hover:underline">{job.company}</Link>
-                        </td>
-                        <td className="p-4">{job.title}</td>
-                        <td className="p-4">{job.status}</td>
-                      </tr>
+                        <tr key={job.id} className={`border-b last:border-0 ${getStatusBackgroundColor(job.status)} hover:opacity-80 transition-opacity`}>
+                          <td className="p-4">
+                            <Link href={`/jobs/${job.id}`} className="font-medium hover:underline">{job.company}</Link>
+                          </td>
+                          <td className="p-4">{job.title}</td>
+                          <td className="p-4">{job.status}</td>
+                        </tr>
                     ))}
                   </tbody>
                 </table>
@@ -252,13 +265,13 @@ export default async function TodayPage() {
                 <table className="w-full">
                   <tbody>
                     {categorizedJobs.overdue.map((job) => (
-                      <tr key={job.id} className="border-b last:border-0">
-                        <td className="p-4">
-                          <Link href={`/jobs/${job.id}`} className="font-medium hover:underline">{job.company}</Link>
-                        </td>
-                        <td className="p-4">{job.title}</td>
-                        <td className="p-4">{job.status}</td>
-                      </tr>
+                        <tr key={job.id} className={`border-b last:border-0 ${getStatusBackgroundColor(job.status)} hover:opacity-80 transition-opacity`}>
+                          <td className="p-4">
+                            <Link href={`/jobs/${job.id}`} className="font-medium hover:underline">{job.company}</Link>
+                          </td>
+                          <td className="p-4">{job.title}</td>
+                          <td className="p-4">{job.status}</td>
+                        </tr>
                     ))}
                   </tbody>
                 </table>
@@ -276,13 +289,13 @@ export default async function TodayPage() {
                 <table className="w-full">
                   <tbody>
                     {categorizedJobs.dueSoon.map((job) => (
-                      <tr key={job.id} className="border-b last:border-0">
-                        <td className="p-4">
-                          <Link href={`/jobs/${job.id}`} className="font-medium hover:underline">{job.company}</Link>
-                        </td>
-                        <td className="p-4">{job.title}</td>
-                        <td className="p-4">{job.status}</td>
-                      </tr>
+                        <tr key={job.id} className={`border-b last:border-0 ${getStatusBackgroundColor(job.status)} hover:opacity-80 transition-opacity`}>
+                          <td className="p-4">
+                            <Link href={`/jobs/${job.id}`} className="font-medium hover:underline">{job.company}</Link>
+                          </td>
+                          <td className="p-4">{job.title}</td>
+                          <td className="p-4">{job.status}</td>
+                        </tr>
                     ))}
                   </tbody>
                 </table>
@@ -300,13 +313,13 @@ export default async function TodayPage() {
                 <table className="w-full">
                   <tbody>
                     {categorizedJobs.recentlyApplied.map((job) => (
-                      <tr key={job.id} className="border-b last:border-0">
-                        <td className="p-4">
-                          <Link href={`/jobs/${job.id}`} className="font-medium hover:underline">{job.company}</Link>
-                        </td>
-                        <td className="p-4">{job.title}</td>
-                        <td className="p-4">{job.status}</td>
-                      </tr>
+                        <tr key={job.id} className={`border-b last:border-0 ${getStatusBackgroundColor(job.status)} hover:opacity-80 transition-opacity`}>
+                          <td className="p-4">
+                            <Link href={`/jobs/${job.id}`} className="font-medium hover:underline">{job.company}</Link>
+                          </td>
+                          <td className="p-4">{job.title}</td>
+                          <td className="p-4">{job.status}</td>
+                        </tr>
                     ))}
                   </tbody>
                 </table>

@@ -12,7 +12,7 @@ export const STATUS_LABELS: Record<JobStatus, string> = {
 export const STATUS_COLORS: Record<JobStatus, string> = {
   SAVED: 'bg-muted text-muted-foreground border border-border',
   APPLIED: 'bg-info-bg text-info-text border border-info/20',
-  INTERVIEW: 'bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-900/30 dark:text-purple-300',
+  INTERVIEW: 'bg-purple-100 text-purple-800 border border-purple-200 dark:bg-purple-900/30 dark:text-purple-200',
   OFFER: 'bg-success-bg text-success-text border border-success/20',
   REJECTED: 'bg-error-bg text-error-text border border-error/20',
   GHOSTED: 'bg-warning-bg text-warning-text border border-warning/20',

@@ -1,37 +1,24 @@
-'use server'
-
-import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { createEmailService } from '@/lib/email-service'
 import { EmailClassifier, EmailType } from '@/lib/email-classifier'
 import { ActivityType, JobStatus } from '@prisma/client'
-import { requireAuth } from '@/lib/auth'
 import { NotificationService } from '@/lib/notification-service'
 
 /**
- * Sync emails and update jobs based on email content
- * Always uses incremental sync (since lastSyncedAt) to avoid double-scanning
+ * Sync emails for a specific user (used by cron, doesn't require auth)
  */
-export async function syncEmails() {
-  let userId: string | null = null
-
+export async function syncEmailsForUser(userId: string) {
   try {
-    const user = await requireAuth()
-    userId = user.id
-
     // Get email integration settings
     const integration = await prisma.emailIntegration.findUnique({
       where: { userId },
     })
 
     if (!integration || !integration.isActive) {
-      return { success: false, error: 'Email integration not configured' }
+      return { success: false, error: 'Email integration not configured or inactive' }
     }
 
     // Determine the date to sync from
-    // Always use incremental sync (since lastSyncedAt) to avoid double-scanning
-    // If lastSyncedAt is in the future (data issue), reset it to 90 days ago
-    // If never synced, start from 90 days ago for initial sync
     let syncSince: Date
     if (!integration.lastSyncedAt) {
       // First sync: go back 90 days
@@ -40,11 +27,9 @@ export async function syncEmails() {
     } else {
       const lastSync = new Date(integration.lastSyncedAt)
       const now = new Date()
-      // If lastSyncedAt is in the future (data corruption/timezone issue), reset to 90 days ago
       if (lastSync > now) {
-        console.log(`⚠️  lastSyncedAt is in the future (${lastSync.toISOString()}), resetting to 90 days ago`)
+        console.log(`⚠️  lastSyncedAt is in the future, resetting to 90 days ago`)
         syncSince = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-        // Also update the database to fix the corrupted date
         await prisma.emailIntegration.update({
           where: { userId },
           data: { lastSyncedAt: syncSince },
@@ -55,17 +40,21 @@ export async function syncEmails() {
       console.log(`📅 Incremental sync: fetching emails since ${syncSince.toISOString()}`)
     }
 
+    // Only process integrations with IMAP config
+    if (!integration.imapHost || !integration.imapPort || !integration.imapUsername || !integration.imapPassword) {
+      return { success: false, error: 'Missing IMAP configuration' }
+    }
+
     // Fetch emails using the user's IMAP settings
     const emailService = createEmailService({
-      host: integration.imapHost!,
-      port: integration.imapPort!,
-      user: integration.imapUsername!,
-      password: integration.imapPassword!,
+      host: integration.imapHost,
+      port: integration.imapPort,
+      user: integration.imapUsername,
+      password: integration.imapPassword,
     })
     console.log('Starting email fetch...')
     const emails = await emailService.fetchEmailsSince(syncSince)
     console.log(`✓ Fetched ${emails.length} emails since ${syncSince}`)
-    console.log('Emails array:', emails.slice(0, 2).map(e => ({ subject: e.subject, from: e.from }))) // Log first 2 for debugging
 
     // Get all user's jobs for matching (include contact info for better matching)
     console.log('Fetching jobs from database...')
@@ -238,10 +227,6 @@ export async function syncEmails() {
     console.log(`  - New jobs detected: ${newJobsDetectedCount}`)
     console.log(`  - Ambiguous matches: ${ambiguousMatchesCount}`)
     console.log(`  - No matches: ${noMatchesCount}`)
-    console.log(`  - Skipped (OTHER): ${skippedOtherCount}`)
-    console.log(`  - Skipped (low confidence): ${skippedLowConfidenceCount}`)
-    console.log(`  - Fetched since: ${syncSince.toISOString()}`)
-    console.log(`  - Total emails fetched: ${emails.length}`)
 
     // Update last synced timestamp
     console.log('Updating last synced timestamp...')
@@ -253,12 +238,6 @@ export async function syncEmails() {
       },
     })
     console.log('✓ Last synced timestamp updated')
-
-    console.log('Revalidating paths...')
-    revalidatePath('/jobs')
-    revalidatePath('/today')
-    revalidatePath('/board')
-    console.log('✓ Paths revalidated')
 
     const stats = {
       totalEmails: emails.length,
@@ -277,179 +256,35 @@ export async function syncEmails() {
     // Create sync complete notification
     await notificationService.createSyncCompleteNotification(userId, stats)
 
-    const result = {
+    return {
       success: true,
       stats,
     }
-    console.log('Returning result:', result)
-    return result
   } catch (error) {
     console.error('Email sync error:', error)
 
-    // Log error to database and create notification
-    if (userId) {
-      try {
-        await prisma.emailIntegration.update({
-          where: { userId },
-          data: {
-            lastError: error instanceof Error ? error.message : 'Unknown error',
-          },
-        })
-        
-        // Create error notification
-        const notificationService = new NotificationService()
-        await notificationService.createSyncErrorNotification(
-          userId,
-          error instanceof Error ? error.message : 'Unknown error'
-        )
-      } catch (dbError) {
-        console.error('Failed to log error to database:', dbError)
-      }
+    // Log error to database
+    try {
+      await prisma.emailIntegration.update({
+        where: { userId },
+        data: {
+          lastError: error instanceof Error ? error.message : 'Unknown error',
+        },
+      })
+      
+      // Create error notification
+      const notificationService = new NotificationService()
+      await notificationService.createSyncErrorNotification(
+        userId,
+        error instanceof Error ? error.message : 'Unknown error'
+      )
+    } catch (dbError) {
+      console.error('Failed to log error to database:', dbError)
     }
 
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to sync emails',
-    }
-  }
-}
-
-/**
- * Save email integration settings
- */
-export async function saveEmailIntegration(formData: FormData) {
-  const user = await requireAuth()
-  const userId = user.id
-
-  const email = formData.get('email') as string
-  const imapHost = formData.get('imapHost') as string
-  const imapPort = parseInt(formData.get('imapPort') as string)
-  const imapUsername = formData.get('imapUsername') as string
-  const imapPassword = formData.get('imapPassword') as string
-
-  try {
-    // Test connection first using the provided settings
-    const emailService = createEmailService({
-      host: imapHost,
-      port: imapPort,
-      user: imapUsername,
-      password: imapPassword,
-    })
-    await emailService.testConnection()
-
-    // Save to database
-    await prisma.emailIntegration.upsert({
-      where: { userId },
-      create: {
-        userId,
-        provider: 'IMAP',
-        email,
-        imapHost,
-        imapPort,
-        imapUsername,
-        imapPassword,
-        isActive: true,
-      },
-      update: {
-        email,
-        imapHost,
-        imapPort,
-        imapUsername,
-        imapPassword,
-        isActive: true,
-        lastError: null,
-      },
-    })
-
-    revalidatePath('/settings/integrations')
-
-    return { success: true }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to save settings',
-    }
-  }
-}
-
-/**
- * Test email connection
- */
-export async function testEmailConnection() {
-  try {
-    const user = await requireAuth()
-
-    const integration = await prisma.emailIntegration.findUnique({
-      where: { userId: user.id },
-    })
-
-    if (!integration) {
-      return {
-        success: false,
-        error: 'Email integration not configured. Please save your settings first.',
-      }
-    }
-
-    const emailService = createEmailService({
-      host: integration.imapHost!,
-      port: integration.imapPort!,
-      user: integration.imapUsername!,
-      password: integration.imapPassword!,
-    })
-
-    await emailService.testConnection()
-    return { success: true }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Connection failed',
-    }
-  }
-}
-
-/**
- * Update auto-sync settings
- */
-export async function updateAutoSyncSettings(
-  autoSyncEnabled: boolean,
-  autoSyncFrequency: number
-) {
-  try {
-    const user = await requireAuth()
-
-    const integration = await prisma.emailIntegration.findUnique({
-      where: { userId: user.id },
-    })
-
-    if (!integration) {
-      return {
-        success: false,
-        error: 'Email integration not configured',
-      }
-    }
-
-    // Calculate nextSyncAt if auto-sync is enabled
-    let nextSyncAt: Date | null = null
-    if (autoSyncEnabled) {
-      nextSyncAt = new Date()
-      nextSyncAt.setMinutes(nextSyncAt.getMinutes() + autoSyncFrequency)
-    }
-
-    await prisma.emailIntegration.update({
-      where: { userId: user.id },
-      data: {
-        autoSyncEnabled,
-        autoSyncFrequency,
-        nextSyncAt,
-      },
-    })
-
-    revalidatePath('/settings/integrations')
-    return { success: true }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to update auto-sync settings',
     }
   }
 }

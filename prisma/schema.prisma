@@ -15,6 +15,8 @@ enum JobSource {
   RECRUITER
   EU_REMOTE_JOBS
   WORKABLE
+  ZIPRECRUITER
+  LANDING_JOBS
   OTHER
 }
 
@@ -40,6 +42,14 @@ enum ActivityType {
   INTERVIEW
   REJECTION
   OFFER
+}
+
+enum NotificationType {
+  AMBIGUOUS_MATCH
+  NEW_JOB_DETECTED
+  JOB_UPDATED
+  SYNC_COMPLETE
+  SYNC_ERROR
 }
 
 model Profile {
@@ -140,6 +150,11 @@ model EmailIntegration {
   lastSyncedAt DateTime?
   lastError    String?
 
+  // Auto-sync settings
+  autoSyncEnabled  Boolean   @default(false)
+  autoSyncFrequency Int      @default(60) // minutes
+  nextSyncAt       DateTime?
+
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
@@ -156,4 +171,19 @@ model ExtensionKey {
 
   @@index([keyHash])
   @@index([userId])
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  userId      String
+  type        NotificationType
+  title       String
+  message     String
+  metadata    Json?            // Store additional data (jobId, emailId, matchedJobs, etc.)
+  isRead      Boolean          @default(false)
+  actionUrl   String?          // Optional link to relevant page
+  createdAt   DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
 }

@@ -41,9 +41,15 @@ export default async function IntegrationsPage() {
             )}
           </div>
           {integration && integration.isActive && (
-            <p className="text-sm text-foreground/60 mt-1 ml-5">
-              {integration.email}
-            </p>
+            <div className="text-sm text-foreground/60 mt-1 ml-5 space-y-1">
+              <p>{integration.email}</p>
+              {integration.autoSyncEnabled && (
+                <p className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                  Auto-sync: Every {integration.autoSyncFrequency} minutes
+                </p>
+              )}
+            </div>
           )}
           {integration?.lastError && (
             <p className="text-sm text-red-600 dark:text-red-400 mt-2">

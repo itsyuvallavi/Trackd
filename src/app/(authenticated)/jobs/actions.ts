@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { createJobSchema, updateJobSchema } from '@/lib/validations/job'
 import { JobStatus, ActivityType } from '@prisma/client'
+import { NotificationService } from '@/lib/notification-service'
 
 export async function createJob(formData: FormData) {
   const user = await requireAuth()
@@ -152,6 +153,18 @@ export async function updateJobStatus(id: string, status: JobStatus) {
       description: `Status changed from ${previousStatus} to ${status}`,
     },
   })
+
+  // Create notification for job update
+  const notificationService = new NotificationService()
+  await notificationService.createJobUpdatedNotification(
+    user.id,
+    id,
+    job.title,
+    job.company,
+    previousStatus,
+    status,
+    'manual'
+  )
 
   revalidatePath('/jobs')
   revalidatePath(`/jobs/${id}`)

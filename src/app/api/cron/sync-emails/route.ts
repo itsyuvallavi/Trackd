@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { createEmailService } from '@/lib/email-service'
-import { EmailClassifier, EmailType } from '@/lib/email-classifier'
+import { syncEmailsForUser } from './sync-helper'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,142 +16,86 @@ export async function GET(request: Request) {
 
     console.log('🔄 Starting scheduled email sync...')
 
-    // Get all active email integrations
+    // Get all active email integrations with auto-sync enabled
     const integrations = await prisma.emailIntegration.findMany({
-      where: { isActive: true },
+      where: { 
+        isActive: true,
+        autoSyncEnabled: true,
+      },
     })
 
     if (integrations.length === 0) {
-      return NextResponse.json({ message: 'No active integrations' })
+      return NextResponse.json({ message: 'No active integrations with auto-sync enabled' })
     }
 
-    let totalJobsCreated = 0
+    let totalProcessed = 0
+    let totalUpdated = 0
+    let totalNewJobsDetected = 0
+    let totalAmbiguous = 0
 
     for (const integration of integrations) {
       try {
-        console.log(`Syncing emails for user: ${integration.userId}`)
-
-        // Fetch emails from last sync or last hour
-        const since = integration.lastSyncedAt || new Date(Date.now() - 60 * 60 * 1000)
-
-        // Only process integrations with IMAP config
-        if (!integration.imapHost || !integration.imapPort || !integration.imapUsername || !integration.imapPassword) {
-          console.log(`Skipping integration ${integration.id}: missing IMAP config`)
+        // Check if it's time to sync (based on autoSyncFrequency)
+        if (integration.nextSyncAt && new Date() < integration.nextSyncAt) {
+          console.log(`Skipping user ${integration.userId}: next sync at ${integration.nextSyncAt}`)
           continue
         }
 
-        const emailService = createEmailService({
-          host: integration.imapHost,
-          port: integration.imapPort,
-          user: integration.imapUsername,
-          password: integration.imapPassword,
-        })
-        const emails = await emailService.fetchEmailsSince(since)
+        console.log(`Syncing emails for user: ${integration.userId}`)
 
-        console.log(`Fetched ${emails.length} emails for ${integration.userId}`)
+        // Call the sync function (we'll create a helper that doesn't require auth)
+        const result = await syncEmailsForUser(integration.userId)
 
-        // Classify and create jobs
-        const classifier = new EmailClassifier()
-        let createdCount = 0
+        if (result.success && result.stats) {
+          totalProcessed += result.stats.processedEmails
+          totalUpdated += result.stats.updatedJobs
+          totalNewJobsDetected += result.stats.newJobsDetected
+          totalAmbiguous += result.stats.ambiguousMatches
 
-        for (const email of emails) {
-          const classified = classifier.classify(email)
-
-          // Skip non-job emails
-          if (classified.type === EmailType.OTHER || classified.confidence < 20) {
-            continue
-          }
-
-          if (!classified.jobInfo?.company) {
-            continue
-          }
-
-          // Generate job title
-          let jobTitle = classified.jobInfo.title
-          if (!jobTitle) {
-            jobTitle = `Position at ${classified.jobInfo.company}`
-          } else {
-            jobTitle = jobTitle
-              .replace(/^(Re:|Fwd:|Thank you for|Thanks for|Update on|Application|Your application)/gi, '')
-              .replace(/(at|@)\s*$/i, '')
-              .trim()
-          }
-
-          if (!jobTitle || jobTitle.length < 3) {
-            jobTitle = `Position at ${classified.jobInfo.company}`
-          }
-
-          // Check if job already exists
-          const existingJob = await prisma.job.findFirst({
-            where: {
-              userId: integration.userId,
-              company: {
-                contains: classified.jobInfo.company,
-                mode: 'insensitive',
-              },
-            },
-          })
-
-          if (existingJob) {
-            continue
-          }
-
-          // Create new job
-          const newJob = await prisma.job.create({
+          // Update nextSyncAt based on frequency
+          const nextSync = new Date()
+          nextSync.setMinutes(nextSync.getMinutes() + (integration.autoSyncFrequency || 60))
+          
+          await prisma.emailIntegration.update({
+            where: { id: integration.id },
             data: {
-              userId: integration.userId,
-              title: jobTitle,
-              company: classified.jobInfo.company,
-              location: classified.jobInfo.location || null,
-              source: 'OTHER',
-              status: classified.suggestedStatus || 'SAVED',
-              priority: 'B',
-              notes: email.textBody.substring(0, 2000),
+              nextSyncAt: nextSync,
+              lastError: null,
             },
           })
 
-          // Create activity
-          await prisma.activity.create({
-            data: {
-              jobId: newJob.id,
-              userId: integration.userId,
-              type: 'EMAIL_UPDATE',
-              toStatus: classified.suggestedStatus || 'SAVED',
-              description: `Detected from email: ${email.subject}`,
-            },
-          })
-
-          createdCount++
+          console.log(`✓ Sync complete for ${integration.userId}: ${result.stats.processedEmails} processed`)
+        } else {
+          throw new Error(result.error || 'Sync failed')
         }
-
-        // Update last synced timestamp
-        await prisma.emailIntegration.update({
-          where: { id: integration.id },
-          data: {
-            lastSyncedAt: new Date(),
-            lastError: null,
-          },
-        })
-
-        totalJobsCreated += createdCount
-        console.log(`Created ${createdCount} jobs for ${integration.userId}`)
       } catch (error) {
         console.error(`Error syncing for user ${integration.userId}:`, error)
 
-        // Log error to database
+        // Log error to database and create notification
         await prisma.emailIntegration.update({
           where: { id: integration.id },
           data: {
             lastError: error instanceof Error ? error.message : 'Unknown error',
           },
         })
+
+        // Create error notification
+        const { NotificationService } = await import('@/lib/notification-service')
+        const notificationService = new NotificationService()
+        await notificationService.createSyncErrorNotification(
+          integration.userId,
+          error instanceof Error ? error.message : 'Unknown error'
+        )
       }
     }
 
     return NextResponse.json({
       success: true,
-      totalJobsCreated,
       integrationsProcessed: integrations.length,
+      totalProcessed,
+      totalUpdated,
+      totalNewJobsDetected,
+      totalAmbiguous,
     })
   } catch (error) {
     console.error('Cron job error:', error)

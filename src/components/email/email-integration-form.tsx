@@ -2,9 +2,10 @@
 
 import { useState, useTransition } from 'react'
 import { EmailIntegration } from '@prisma/client'
-import { saveEmailIntegration, syncEmails, testEmailConnection } from '@/app/(authenticated)/settings/email-actions'
+import { saveEmailIntegration, syncEmails, testEmailConnection, updateAutoSyncSettings } from '@/app/(authenticated)/settings/email-actions'
 import { Button } from '@/components/ui/button'
 import { SyncResultToast } from './sync-result-toast'
+import { Clock, RefreshCw } from 'lucide-react'
 
 interface EmailIntegrationFormProps {
   integration: EmailIntegration | null
@@ -19,6 +20,9 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [syncResult, setSyncResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [showSyncModal, setShowSyncModal] = useState(false)
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(integration?.autoSyncEnabled || false)
+  const [autoSyncFrequency, setAutoSyncFrequency] = useState(integration?.autoSyncFrequency || 60)
+  const [isUpdatingAutoSync, setIsUpdatingAutoSync] = useState(false)
 
   const handleOAuthConnect = async (provider: 'google' | 'microsoft') => {
     try {
@@ -353,6 +357,123 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
               </Button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Auto-Sync Settings */}
+      {integration && integration.isActive && (
+        <div className="border border-border rounded-lg p-6 bg-card">
+          <div className="flex items-center gap-2 mb-4">
+            <RefreshCw className="size-5 text-primary" />
+            <h3 className="text-lg font-semibold">Auto-Sync</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Automatically sync your emails in the background at regular intervals.
+          </p>
+
+          <div className="space-y-4">
+            {/* Toggle */}
+            <div className="flex items-center justify-between">
+              <div>
+                <label htmlFor="autoSyncEnabled" className="text-sm font-medium text-foreground">
+                  Enable Auto-Sync
+                </label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Automatically check for new emails and update jobs
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  const newValue = !autoSyncEnabled
+                  setAutoSyncEnabled(newValue)
+                  setIsUpdatingAutoSync(true)
+                  try {
+                    const result = await updateAutoSyncSettings(newValue, autoSyncFrequency)
+                    if (!result.success) {
+                      setAutoSyncEnabled(!newValue) // Revert on error
+                      setMessage({ type: 'error', text: result.error || 'Failed to update auto-sync' })
+                    } else {
+                      setMessage({ type: 'success', text: 'Auto-sync settings updated' })
+                    }
+                  } catch (error) {
+                    setAutoSyncEnabled(!newValue)
+                    setMessage({ type: 'error', text: 'Failed to update auto-sync' })
+                  } finally {
+                    setIsUpdatingAutoSync(false)
+                  }
+                }}
+                disabled={isUpdatingAutoSync}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  autoSyncEnabled ? 'bg-primary' : 'bg-muted'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    autoSyncEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Frequency Selector */}
+            {autoSyncEnabled && (
+              <div>
+                <label htmlFor="autoSyncFrequency" className="block text-sm font-medium mb-2">
+                  Sync Frequency
+                </label>
+                <select
+                  id="autoSyncFrequency"
+                  value={autoSyncFrequency}
+                  onChange={async (e) => {
+                    const newFrequency = parseInt(e.target.value)
+                    setAutoSyncFrequency(newFrequency)
+                    setIsUpdatingAutoSync(true)
+                    try {
+                      const result = await updateAutoSyncSettings(autoSyncEnabled, newFrequency)
+                      if (!result.success) {
+                        setMessage({ type: 'error', text: result.error || 'Failed to update frequency' })
+                      } else {
+                        setMessage({ type: 'success', text: 'Sync frequency updated' })
+                      }
+                    } catch (error) {
+                      setMessage({ type: 'error', text: 'Failed to update frequency' })
+                    } finally {
+                      setIsUpdatingAutoSync(false)
+                    }
+                  }}
+                  disabled={isUpdatingAutoSync}
+                  className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1"
+                >
+                  <option value={15}>Every 15 minutes</option>
+                  <option value={30}>Every 30 minutes</option>
+                  <option value={60}>Every hour</option>
+                  <option value={180}>Every 3 hours</option>
+                  <option value={360}>Every 6 hours</option>
+                  <option value={720}>Every 12 hours</option>
+                  <option value={1440}>Every 24 hours</option>
+                </select>
+              </div>
+            )}
+
+            {/* Status Info */}
+            {integration.lastSyncedAt && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground pt-2 border-t border-border">
+                <Clock className="size-4" />
+                <span>
+                  Last synced: {new Date(integration.lastSyncedAt).toLocaleString()}
+                </span>
+              </div>
+            )}
+            {autoSyncEnabled && integration.nextSyncAt && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Clock className="size-4" />
+                <span>
+                  Next sync: {new Date(integration.nextSyncAt).toLocaleString()}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       )}
       </div>

@@ -1,6 +1,16 @@
 import { EmailMessage } from './email-service'
 import { JobStatus } from '@prisma/client'
 
+/**
+ * Match result with confidence level
+ */
+export interface MatchResult {
+  jobId: string | null
+  confidence: 'exact' | 'fuzzy' | 'ambiguous' | 'none'
+  matchedJobs?: Array<{ id: string; title: string; company: string }>
+  reason: string
+}
+
 export interface ClassifiedEmail {
   type: EmailType
   confidence: number
@@ -386,43 +396,156 @@ export class EmailClassifier {
   }
 
   /**
-   * Match email to existing jobs by company, title, or other criteria
+   * Match email to existing jobs by company, title, contact info, or other criteria
+   * Returns match result with confidence level
    */
   matchToJob(
     email: ClassifiedEmail,
-    jobs: Array<{ id: string; title: string; company: string; url?: string | null }>
-  ): string | null {
-    if (!email.jobInfo) return null
-
-    // Try exact match on company and title
-    for (const job of jobs) {
-      if (
-        email.jobInfo.company &&
-        job.company.toLowerCase().includes(email.jobInfo.company.toLowerCase())
-      ) {
-        if (
-          email.jobInfo.title &&
-          job.title.toLowerCase().includes(email.jobInfo.title.toLowerCase())
-        ) {
-          return job.id
-        }
-        // Match by company alone if title not found
-        return job.id
+    jobs: Array<{ 
+      id: string
+      title: string
+      company: string
+      url?: string | null
+      contactEmail?: string | null
+      contactName?: string | null
+      location?: string | null
+    }>,
+    emailMessage?: { from: string; subject: string }
+  ): MatchResult {
+    if (!email.jobInfo) {
+      return {
+        jobId: null,
+        confidence: 'none',
+        reason: 'No job info extracted from email',
       }
     }
 
-    // Try fuzzy match on title
-    if (email.jobInfo.title) {
-      for (const job of jobs) {
-        if (
-          job.title.toLowerCase().includes(email.jobInfo.title.toLowerCase()) ||
-          email.jobInfo.title.toLowerCase().includes(job.title.toLowerCase())
-        ) {
-          return job.id
+    const emailFrom = emailMessage?.from.toLowerCase() || ''
+    const emailDomain = emailFrom.split('@')[1]?.toLowerCase() || ''
+
+    // 1. EXACT MATCHES (Highest Priority)
+    
+    // Exact match: Company + Title
+    if (email.jobInfo.company && email.jobInfo.title) {
+      const exactMatches = jobs.filter(job => {
+        const companyMatch = job.company.toLowerCase().includes(email.jobInfo!.company!.toLowerCase()) ||
+                            email.jobInfo!.company!.toLowerCase().includes(job.company.toLowerCase())
+        const titleMatch = job.title.toLowerCase().includes(email.jobInfo!.title!.toLowerCase()) ||
+                          email.jobInfo!.title!.toLowerCase().includes(job.title.toLowerCase())
+        return companyMatch && titleMatch
+      })
+
+      if (exactMatches.length === 1) {
+        return {
+          jobId: exactMatches[0].id,
+          confidence: 'exact',
+          reason: `Exact match: company "${email.jobInfo.company}" + title "${email.jobInfo.title}"`,
         }
       }
     }
 
-    return null
+    // Exact match: Company + Contact Email
+    if (email.jobInfo.company && emailDomain) {
+      const contactMatches = jobs.filter(job => {
+        const companyMatch = job.company.toLowerCase().includes(email.jobInfo!.company!.toLowerCase()) ||
+                            email.jobInfo!.company!.toLowerCase().includes(job.company.toLowerCase())
+        if (!job.contactEmail) return false
+        const jobDomain = job.contactEmail.toLowerCase().split('@')[1]
+        return companyMatch && jobDomain === emailDomain
+      })
+
+      if (contactMatches.length === 1) {
+        return {
+          jobId: contactMatches[0].id,
+          confidence: 'exact',
+          reason: `Exact match: company "${email.jobInfo.company}" + contact email domain "${emailDomain}"`,
+        }
+      }
+    }
+
+    // 2. FUZZY MATCHES (Medium Priority)
+
+    // Fuzzy match: Company + Partial Title
+    if (email.jobInfo.company && email.jobInfo.title) {
+      const fuzzyMatches = jobs.filter(job => {
+        const companyMatch = job.company.toLowerCase().includes(email.jobInfo!.company!.toLowerCase()) ||
+                            email.jobInfo!.company!.toLowerCase().includes(job.company.toLowerCase())
+        if (!companyMatch) return false
+        
+        // Check if title words overlap
+        const emailTitleWords = email.jobInfo!.title!.toLowerCase().split(/\s+/)
+        const jobTitleWords = job.title.toLowerCase().split(/\s+/)
+        const commonWords = emailTitleWords.filter(word => 
+          word.length > 3 && jobTitleWords.includes(word)
+        )
+        return commonWords.length >= 2 // At least 2 common words
+      })
+
+      if (fuzzyMatches.length === 1) {
+        return {
+          jobId: fuzzyMatches[0].id,
+          confidence: 'fuzzy',
+          reason: `Fuzzy match: company "${email.jobInfo.company}" + similar title`,
+        }
+      }
+    }
+
+    // Fuzzy match: Company + Domain (if job has contact email)
+    if (email.jobInfo.company && emailDomain) {
+      const domainMatches = jobs.filter(job => {
+        const companyMatch = job.company.toLowerCase().includes(email.jobInfo!.company!.toLowerCase()) ||
+                            email.jobInfo!.company!.toLowerCase().includes(job.company.toLowerCase())
+        if (!companyMatch) return false
+        if (!job.contactEmail) return false
+        const jobDomain = job.contactEmail.toLowerCase().split('@')[1]
+        // Check if domains are similar (e.g., mlabs.com vs mlabstalentpartners.com)
+        return jobDomain.includes(emailDomain) || emailDomain.includes(jobDomain)
+      })
+
+      if (domainMatches.length === 1) {
+        return {
+          jobId: domainMatches[0].id,
+          confidence: 'fuzzy',
+          reason: `Fuzzy match: company "${email.jobInfo.company}" + similar email domain`,
+        }
+      }
+    }
+
+    // 3. AMBIGUOUS MATCHES (Low Priority - Multiple Candidates)
+
+    // Company only match - check if multiple jobs exist
+    if (email.jobInfo.company) {
+      const companyMatches = jobs.filter(job => {
+        return job.company.toLowerCase().includes(email.jobInfo!.company!.toLowerCase()) ||
+               email.jobInfo!.company!.toLowerCase().includes(job.company.toLowerCase())
+      })
+
+      if (companyMatches.length > 1) {
+        return {
+          jobId: null,
+          confidence: 'ambiguous',
+          matchedJobs: companyMatches.map(job => ({
+            id: job.id,
+            title: job.title,
+            company: job.company,
+          })),
+          reason: `Multiple jobs found for company "${email.jobInfo.company}" (${companyMatches.length} matches)`,
+        }
+      } else if (companyMatches.length === 1) {
+        // Single company match - use it but with lower confidence
+        return {
+          jobId: companyMatches[0].id,
+          confidence: 'fuzzy',
+          reason: `Company match only: "${email.jobInfo.company}" (no title match)`,
+        }
+      }
+    }
+
+    // 4. NO MATCH
+    return {
+      jobId: null,
+      confidence: 'none',
+      reason: 'No matching job found',
+    }
   }
 }

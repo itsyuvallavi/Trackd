@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Trackd - Job Application Tracker",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Save jobs to Trackd with one click",
   "permissions": [
     "activeTab",
@@ -18,6 +18,13 @@
     "https://*.lever.co/*",
     "https://*.workable.com/*",
     "https://euremotejobs.com/*",
+    "https://www.ziprecruiter.com/*",
+    "https://ziprecruiter.com/*",
+    "https://landing.jobs/*",
+    "https://4dayweek.io/*",
+    "https://www.4dayweek.io/*",
+    "https://remoterocketship.com/*",
+    "https://www.remoterocketship.com/*",
     "https://trackd.app/*"
   ],
   "action": {
@@ -34,5 +41,35 @@
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.linkedin.com/*",
+        "https://linkedin.com/*",
+        "https://www.indeed.com/*",
+        "https://indeed.com/*",
+        "https://*.greenhouse.io/*",
+        "https://*.lever.co/*",
+        "https://*.workable.com/*",
+        "https://euremotejobs.com/*",
+        "https://www.ziprecruiter.com/*",
+        "https://ziprecruiter.com/*",
+        "https://landing.jobs/*",
+        "https://4dayweek.io/*",
+        "https://www.4dayweek.io/*",
+        "https://remoterocketship.com/*",
+        "https://www.remoterocketship.com/*"
+      ],
+      "js": [
+        "scripts/content.js",
+        "scripts/extractors/linkedin-extractor.js",
+        "scripts/extractors/ziprecruiter-extractor.js",
+        "scripts/extractors/landing-jobs-extractor.js",
+        "scripts/extractors/4dayweek-extractor.js",
+        "scripts/extractors/remoterocketship-extractor.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }

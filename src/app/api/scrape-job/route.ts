@@ -98,6 +98,8 @@ function extractJobDataFromHTML(html: string, url: string): {
   else if (hostname.includes('lever.co')) source = 'Lever'
   else if (hostname.includes('workable.com')) source = 'Workable'
   else if (hostname.includes('euremotejobs.com')) source = 'EU Remote Jobs'
+  else if (hostname.includes('ziprecruiter.com')) source = 'ZipRecruiter'
+  else if (hostname.includes('landing.jobs')) source = 'Landing.jobs'
 
   // Try to extract data using regex patterns
   const data = {
