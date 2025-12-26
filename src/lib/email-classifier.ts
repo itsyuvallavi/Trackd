@@ -108,6 +108,11 @@ const KEYWORDS = {
     'position has been filled',
     'not be moving forward',
     'not able to offer',
+    'not able to advance',
+    'advance you to the next round',
+    'next round at this time',
+    'cannot advance',
+    'unable to advance',
     'on our radar for future',
     'keep you in mind',
     'not a fit at this time',
@@ -193,8 +198,19 @@ export class EmailClassifier {
     let confidence = 0
     let suggestedStatus: JobStatus | undefined
 
-    // Check for each email type
-    for (const [emailType, keywords] of Object.entries(KEYWORDS)) {
+    // Priority order: REJECTION and OFFER should take priority over APPLICATION_CONFIRMATION
+    // when both match, because they're more specific and actionable
+    const typePriority: Array<keyof typeof KEYWORDS> = [
+      'REJECTION',
+      'OFFER',
+      'INTERVIEW_INVITE',
+      'APPLICATION_CONFIRMATION',
+      'FOLLOW_UP',
+    ]
+
+    // Check for each email type in priority order
+    for (const emailTypeKey of typePriority) {
+      const keywords = KEYWORDS[emailTypeKey]
       const matchedKeywords = keywords.filter((keyword) =>
         combinedText.includes(keyword.toLowerCase())
       )
@@ -205,9 +221,11 @@ export class EmailClassifier {
         const matchConfidence = Math.min(matchedKeywords.length * 20, 100)
         detectedKeywords.push(...matchedKeywords)
 
-        if (matchConfidence > confidence) {
+        // If we found a higher priority type, use it (even if confidence is same or slightly lower)
+        // This ensures REJECTION/OFFER take precedence over APPLICATION_CONFIRMATION
+        if (matchConfidence >= confidence) {
           confidence = matchConfidence
-          type = EmailType[emailType as keyof typeof EmailType]
+          type = EmailType[emailTypeKey as keyof typeof EmailType]
         }
       }
     }
@@ -251,6 +269,62 @@ export class EmailClassifier {
   }
 
   /**
+   * Common non-company words that should be filtered out
+   */
+  private static readonly NON_COMPANY_WORDS = new Set([
+    // Email-related
+    're', 'fwd', 'fw', 'reply',
+    // Greetings/closings
+    'thank', 'thanks', 'hello', 'hi', 'dear', 'regards',
+    // Application-related
+    'application', 'update', 'status', 'confirmation', 'received',
+    'submitted', 'regarding', 'concerning',
+    // Actions
+    'interview', 'invitation', 'invite', 'schedule', 'meeting',
+    'next', 'steps', 'follow', 'up', 'followup',
+    // Pronouns and articles
+    'you', 'your', 'our', 'the', 'us', 'we', 'me', 'my', 'i', 'they', 'them',
+    // Generic
+    'new', 'important', 'urgent', 'action', 'required',
+    'reminder', 'notification', 'alert', 'info', 'information',
+  ])
+
+  /**
+   * Check if a string looks like a company name (not a generic phrase or job title)
+   */
+  private isLikelyCompanyName(text: string): boolean {
+    const lower = text.toLowerCase().trim()
+    const words = lower.split(/\s+/)
+
+    // Too short or too long
+    if (words.length === 0 || words.length > 5) return false
+    if (lower.length < 2 || lower.length > 50) return false
+
+    // Check if ALL words are non-company words
+    const nonCompanyWordCount = words.filter(w =>
+      EmailClassifier.NON_COMPANY_WORDS.has(w) || w.length < 2
+    ).length
+
+    // If more than half the words are noise, reject it
+    if (nonCompanyWordCount > words.length / 2) return false
+
+    // Check for specific patterns that indicate it's NOT a company
+    if (/^(thank|thanks|dear|hello|hi|your|our|the|re|fwd|fw)\s/i.test(lower)) return false
+    if (/\s(update|status|application|interview|invitation|confirmation)$/i.test(lower)) return false
+
+    // Reject if it looks like a complete job title
+    // (ends with common job title words OR starts with seniority prefixes)
+    if (/\b(engineer|developer|designer|analyst|architect|manager|specialist|coordinator|director|consultant|associate|assistant|administrator|technician|scientist|researcher|accountant|nurse|teacher|writer|editor|recruiter|representative|executive|officer|advisor|planner|therapist|attorney|lawyer|paralegal|pharmacist|physician|surgeon|dentist|veterinarian|chef|mechanic|electrician|plumber|carpenter|driver|pilot|agent|broker|auditor|clerk|secretary|receptionist|cashier|salesperson|marketer|producer|creator|strategist|supervisor|inspector|investigator|estimator|appraiser|adjuster|underwriter|actuary|statistician|economist|psychologist|sociologist|anthropologist|historian|librarian|curator|archivist|translator|interpreter|photographer|videographer|animator|illustrator|copywriter|journalist|reporter|anchor|broadcaster|publicist)$/i.test(lower)) return false
+    // Reject if it starts with seniority prefix (with or without space after)
+    if (/^(senior|junior|lead|staff|principal|mid|entry|chief|head|vice|assistant|associate|executive)(\s|$)/i.test(lower)) return false
+
+    // Reject common false positives from email body
+    if (lower === 'this time' || lower === 'all' || lower === 'candidates') return false
+
+    return true
+  }
+
+  /**
    * Extract job information from email content
    */
   private extractJobInfo(email: EmailMessage): ClassifiedEmail['jobInfo'] {
@@ -258,36 +332,53 @@ export class EmailClassifier {
     const subject = email.subject
     const body = email.textBody
 
-    // 1. Extract company name from subject line
-    // Common patterns:
-    // - "Company Name: ..." (e.g., "Software Mind: Thanks for applying")
-    // - "... at Company Name" (e.g., "Application for Position at Ramp")
-    // - "Company Name -" (e.g., "Crodu - Application received")
-    // - "Thank you for your application to Company Name"
+    // 1. Extract company name from subject line using prioritized patterns
+    // Try most specific patterns first
 
-    const companyPatterns = [
-      /^([^:]+):\s*/,  // "Company Name: ..."
-      /\sat\s+([A-Z][A-Za-z\s&]+?)(?:\s*[-|]|\s*$)/,  // "at Company Name"
-      /^([A-Z][A-Za-z\s&]+?)\s*[-–]\s*/,  // "Company Name - ..."
-      /to\s+([A-Z][A-Za-z\s&]+?)(?:\s*[-|]|\s*$)/,  // "to Company Name"
-      /for\s+your\s+(?:interest|application)\s+(?:in|to|at)\s+([A-Z][A-Za-z\s&|]+?)(?:\s*[-—]|\s*$|\.)/i,  // "interest in Company Name"
-      /thank\s+you\s+for\s+applying\s+(?:to|at)\s+([A-Z][A-Za-z\s&]+?)(?:\s*[-|]|\s*$)/i,  // "applying to Company Name"
+    const companyExtractionAttempts: Array<{ pattern: RegExp; group: number; description: string }> = [
+      // "Yuval, Holycode has received your resume" - Name, Company pattern
+      { pattern: /^[A-Z][a-z]+,\s+([A-Z][A-Za-z0-9\s&.]+?)\s+has\s+received/i, group: 1, description: 'Name, X has received' },
+      // "Thanks for applying to CoverGo" - Workable/common pattern (extract company after "to")
+      { pattern: /thanks?\s+for\s+applying\s+to\s+([A-Z][A-Za-z0-9\s&.]+?)(?:\s*[!.]|\s*$)/i, group: 1, description: 'thanks for applying to X' },
+      // "Thank you for applying to Google" - most explicit
+      { pattern: /thank\s+you\s+for\s+(?:applying|your\s+application)\s+(?:to|at)\s+([A-Z][A-Za-z0-9\s&.]+?)(?:\s*[-|!.,]|\s*$)/i, group: 1, description: 'thank you for applying to X' },
+      // "for your interest in Apple" or "for your application to Apple" - but NOT followed by job title
+      { pattern: /for\s+your\s+(?:interest|application)\s+(?:in|to|at)\s+([A-Z][A-Za-z0-9\s&.]+?)(?:\s*[-|!.,]|\s*$)/i, group: 1, description: 'for your interest in X' },
+      // "Update on your application to Ramp" or "An update on your application to Canonical"
+      { pattern: /update\s+on\s+your\s+application\s+to\s+([A-Z][A-Za-z0-9\s&.]+?)(?:\s*[-|!.,]|\s*$)/i, group: 1, description: 'update on application to X' },
+      // "Your application to Ramp" or "application at Ramp"
+      // Don't match "application for [Job Title]" - only match "application to/at [Company]"
+      { pattern: /(?:application|applied)\s+(?:to|at)\s+([A-Z][A-Za-z0-9\s&.]+?)(?:\s+(?:is|has|was)|\s*[-|!.,]|\s*$)/i, group: 1, description: 'application to X' },
+      // "Your Application @ TRACTIAN" - @ pattern
+      { pattern: /application\s*@\s*([A-Z][A-Za-z0-9\s&.]+?)(?:\s*[-|!.]|\s*$)/i, group: 1, description: 'application @ X' },
+      // "Thank you for applying at GlobalLogic" - at Company at end
+      { pattern: /applying\s+at\s+([A-Z][A-Za-z0-9\s&.]+?)(?:\s*[-|!.,]|\s*$)/i, group: 1, description: 'applying at X' },
+      // "Have you completed your full application for React.js / Svelte Engineer - Remote Job at EnthuZiastic?" - at Company at END
+      // Check this before generic "at X" pattern since it's more specific (end of string)
+      { pattern: /\s+at\s+([A-Z][A-Za-z0-9\s&.]+?)[?.\s]*$/i, group: 1, description: 'at X at end' },
+      // "Mid-level Product Designer (Remote, Europe) - LearnWorlds" - [Title] - [Company] at END of subject
+      // This should be checked early since it's very specific (end of string with dash before it)
+      { pattern: /[-–]\s+([A-Z][A-Za-z0-9]+(?:\s+[A-Z][A-Za-z0-9]+){0,3})$/i, group: 1, description: 'X at end after dash' },
+      // "Application for Position at Ramp" - at Company pattern (generic, comes last)
+      { pattern: /\s+at\s+([A-Z][A-Za-z0-9\s&.]+?)(?:\s*[-|!.,]|\s*$)/i, group: 1, description: 'at X' },
+      // "Software Mind: Thanks for applying" - Company: prefix (most reliable)
+      { pattern: /^([A-Z][A-Za-z0-9\s&.]+?):\s+/i, group: 1, description: 'X: prefix' },
+      // "Thank you for your Application - City Storage Systems" - Application - Company
+      { pattern: /application\s*[-–]\s*([A-Z][A-Za-z0-9\s&.]+?)(?:\s*$)/i, group: 1, description: 'Application - X' },
+      // "Crodu - Application received" or "Crodu - recruitment" - Company - suffix
+      { pattern: /^([A-Z][A-Za-z0-9\s&.]+?)\s*[-–]\s+(?:application|thank|your|we|interview|update|next|status|recruitment|job)/i, group: 1, description: 'X - job words' },
+      // "Update from Phantom" - Update from X
+      { pattern: /update\s+from\s+([A-Z][A-Za-z0-9\s&.]+?)(?:\s*[-|!.]|\s*$)/i, group: 1, description: 'update from X' },
+      // "Interview - TechCo" or "Update - CompanyName" or "Interview invitation - TechCo" - prefix - Company pattern
+      { pattern: /^(?:interview\s*(?:invitation)?|update|status|application|confirmation|invitation|next\s+steps?)\s*[-–]\s+([A-Z][A-Za-z0-9\s&.]+?)(?:\s*[-|!.]|\s*$)/i, group: 1, description: 'job words - X' },
     ]
 
-    for (const pattern of companyPatterns) {
+    for (const { pattern, group, description } of companyExtractionAttempts) {
       const match = subject.match(pattern)
-      if (match && match[1]) {
-        const company = match[1].trim()
-        // Filter out common noise words and validate
-        if (
-          company.length > 2 &&
-          !company.toLowerCase().startsWith('re') &&
-          !company.toLowerCase().startsWith('fwd') &&
-          !company.toLowerCase().includes('thank') &&
-          !company.toLowerCase().includes('application') &&
-          !company.toLowerCase().includes('update')
-        ) {
-          jobInfo.company = company
+      if (match && match[group]) {
+        const candidate = match[group].trim()
+        if (this.isLikelyCompanyName(candidate)) {
+          jobInfo.company = candidate
           break
         }
       }
@@ -297,39 +388,83 @@ export class EmailClassifier {
     if (!jobInfo.company && body) {
       const bodyStart = body.substring(0, 500)
       const bodyCompanyPatterns = [
-        /(?:at|with|join)\s+([A-Z][A-Za-z\s&]+?)(?:\s+team|\s+is|\s+and|\.|\!)/,
-        /([A-Z][A-Za-z\s&]+?)\s+(?:team|is hiring|recruiting)/,
+        // "interview with Amazon" or "at Google"
+        /(?:interview(?:ing)?|position|role|job)\s+(?:at|with)\s+([A-Z][A-Za-z0-9\s&.]+?)(?:\s+(?:for|and|is)|[.,!]|\s*$)/i,
+        // "joining Amazon" or "join the TechCo team"
+        /(?:join(?:ing)?)\s+(?:the\s+)?([A-Z][A-Za-z0-9\s&.]+?)(?:\s+team|[.,!]|\s*$)/i,
+        // "TechCo team" or "TechCo is"
+        /([A-Z][A-Za-z0-9\s&.]+?)\s+(?:team|is\s+(?:pleased|excited|happy|delighted))/i,
       ]
 
       for (const pattern of bodyCompanyPatterns) {
         const match = bodyStart.match(pattern)
         if (match && match[1]) {
-          const company = match[1].trim()
-          if (company.length > 2 && company.split(' ').length <= 5) {
-            jobInfo.company = company
+          const candidate = match[1].trim()
+          if (this.isLikelyCompanyName(candidate)) {
+            jobInfo.company = candidate
             break
           }
         }
       }
     }
 
-    // 3. Fallback: Extract company from email domain
+    // 3. Fallback: Extract company from email domain (skip common email providers and ATS)
     if (!jobInfo.company) {
       const domain = this.extractDomain(email.from)
-      const companyFromDomain = domain.split('.')[0]
-      if (companyFromDomain && companyFromDomain.length > 2) {
-        jobInfo.company =
-          companyFromDomain.charAt(0).toUpperCase() + companyFromDomain.slice(1)
+      const domainParts = domain.split('.')
+      
+      // Skip common ATS and email provider domains
+      const skipDomains = new Set([
+        'greenhouse', 'lever', 'workday', 'myworkday', 'icims', 'taleo',
+        'smartrecruiters', 'jobvite', 'ashbyhq', 'gmail', 'yahoo', 'outlook',
+        'hotmail', 'mail', 'email', 'noreply', 'no-reply', 'notifications',
+        'jobs', 'careers', 'recruiting', 'talent', 'hire', 'apply',
+        'feedback', 'info', 'hr', 'recruiting',
+      ])
+
+      // Try first part of domain
+      let companyFromDomain = domainParts[0]
+      
+      // If first part is in skip list and we have multiple parts, try second part
+      // e.g., "talent.oshkoshcorp.com" -> extract "oshkoshcorp"
+      if (domainParts.length >= 2 && skipDomains.has(companyFromDomain.toLowerCase())) {
+        companyFromDomain = domainParts[1]
+      }
+      
+      if (companyFromDomain && companyFromDomain.length > 2 && !skipDomains.has(companyFromDomain.toLowerCase())) {
+        // Remove common suffixes to get base company name
+        // e.g., "oshkoshcorp" -> "oshkosh", "acmecorp" -> "acme"
+        const baseName = companyFromDomain.replace(/(corp|inc|llc|ltd|co|tech|systems|solutions)$/i, '')
+        // Capitalize first letter
+        jobInfo.company = baseName.charAt(0).toUpperCase() + baseName.slice(1)
       }
     }
 
     // 4. Extract job title from subject
+    // Common job title endings (profession-agnostic)
+    const JOB_TITLE_SUFFIX = '(?:Engineer|Developer|Designer|Analyst|Architect|Manager|Specialist|Coordinator|Director|Consultant|Administrator|Technician|Scientist|Researcher|Accountant|Nurse|Teacher|Writer|Editor|Recruiter|Representative|Executive|Officer|Advisor|Planner|Therapist|Attorney|Lawyer|Pharmacist|Physician|Chef|Mechanic|Electrician|Driver|Agent|Broker|Auditor|Clerk|Supervisor|Inspector|Producer|Creator|Strategist)'
+
     const titlePatterns = [
-      /application\s+for\s+(.+?)(?:\s*-|\s*at|\s*\||\s*$)/i,
-      /re:\s+(.+?)(?:\s*-|\s*at|\s*\||\s*$)/i,
-      /(.+?)\s*-\s*job\s+application/i,
-      /position:\s*(.+?)(?:\s*-|\s*at|\s*\||\s*$)/i,
-      /applying\s+for\s+(?:the\s+)?(.+?)(?:\s+position|\s+role|\s*-|\s*at|\s*$)/i,
+      // "Mid-level Product Designer (Remote, Europe) - LearnWorlds" - [Title] (location) - Company
+      new RegExp(`^([A-Za-z0-9\\-]+(?:\\s+[A-Za-z0-9\\-]+)*\\s+${JOB_TITLE_SUFFIX})\\s*(?:\\([^)]+\\))?\\s*[-–]\\s*[A-Za-z]+`, 'i'),
+      // "Application for Senior Developer at Company" - must come first
+      /application\s+for\s+(?:the\s+)?([A-Za-z0-9\s\-\/().,&]+?)(?:\s+(?:at|position|role)|\s*[-|]|\s*$)/i,
+      // "Update on CompanyName [Job Title] Role" - Company + Title + Role/Position
+      new RegExp(`on\\s+[A-Za-z0-9]+\\s+([A-Za-z0-9\\s\\-\\/]+?\\s*${JOB_TITLE_SUFFIX})(?:\\s+Role|\\s+Position|\\s*$)`, 'i'),
+      // "Your application [Job Title] (level info)" - "application" followed by title (no "for")
+      new RegExp(`\\bapplication\\s+([A-Z][A-Za-z0-9\\s\\-]+?\\s*${JOB_TITLE_SUFFIX}(?:\\s*\\([^)]+\\))?)`, 'i'),
+      // "Thank you for your interest in [Job Title] (tech stack)"
+      new RegExp(`interest\\s+in\\s+([A-Za-z0-9\\s\\-\\/]+?\\s*${JOB_TITLE_SUFFIX}(?:\\s*\\([^)]+\\))?)`, 'i'),
+      // "An update on your application to Canonical - Web Developer" - Company - Title
+      new RegExp(`application\\s+to\\s+[A-Za-z\\s]+\\s*[-–]\\s*([A-Za-z\\s]+?${JOB_TITLE_SUFFIX})`, 'i'),
+      // "Interview for React Developer"
+      /interview\s+(?:for|invitation\s+for)\s+(?:the\s+)?([A-Za-z0-9\s\-\/().,&]+?)(?:\s+(?:at|position|role)|\s*[-|]|\s*$)/i,
+      // "Position: Full Stack Engineer"
+      /(?:position|role|job):\s*([A-Za-z0-9\s\-\/().,&]+?)(?:\s*[-|]|\s*$)/i,
+      // "Re: Senior Developer - Application"
+      /^re:\s*([A-Za-z0-9\s\-\/().,&]+?)(?:\s*[-|]|\s*$)/i,
+      // "Company: Thanks for applying to Senior Developer"
+      /applying\s+(?:for|to)\s+(?:the\s+)?([A-Za-z0-9\s\-\/().,&]+?)(?:\s+position|\s+role|\s*[-|]|\s*$)/i,
     ]
 
     for (const pattern of titlePatterns) {
@@ -339,9 +474,12 @@ export class EmailClassifier {
         // Make sure it's not just the company name or generic text
         if (
           title.length > 3 &&
+          title.length < 80 &&
           !title.toLowerCase().includes('application') &&
           !title.toLowerCase().includes('interest') &&
-          title !== jobInfo.company
+          !title.toLowerCase().includes('thank') &&
+          !title.toLowerCase().includes('update') &&
+          title.toLowerCase() !== jobInfo.company?.toLowerCase()
         ) {
           jobInfo.title = title
           break
@@ -351,20 +489,21 @@ export class EmailClassifier {
 
     // 5. If no title from subject, try to extract from email body
     if (!jobInfo.title && body) {
-      // Look for common job title patterns in first 1000 chars
       const bodyStart = body.substring(0, 1000)
 
       const bodyTitlePatterns = [
         // "application for the Wordpress & Full Stack Developer job"
-        /application\s+for\s+the\s+([A-Z][A-Za-z\s\-\/().,&]+?)\s+(?:job|position|role)/i,
+        /application\s+for\s+(?:the\s+)?([A-Z][A-Za-z0-9\s\-\/().,&]+?)\s+(?:job|position|role)/i,
         // "applying to our Full Stack Engineer role"
-        /(?:applying|applied)\s+(?:to|for)\s+(?:our|the)\s+([A-Z][A-Za-z\s\-\/().,&]+?)\s+(?:role|position)/i,
+        /(?:applying|applied)\s+(?:to|for)\s+(?:our|the)\s+([A-Z][A-Za-z0-9\s\-\/().,&]+?)\s+(?:role|position)/i,
         // "interested in the Senior Developer position"
-        /interested\s+in\s+(?:the|our)\s+([A-Z][A-Za-z\s\-\/().,&]+?)\s+(?:position|role)/i,
-        // "Position: Senior Engineer"
-        /(?:position|role|job):\s*([A-Z][A-Za-z\s\-\/().,&]+?)(?:\s*\n|\s*-|\s*at|\s*$)/i,
-        // Generic: "for the [Title] position/role/opportunity"
-        /for\s+(?:the|our)\s+([A-Z][A-Za-z\s\-\/().,&]+?)\s+(?:position|role|opportunity)/i,
+        /interested\s+in\s+(?:the|our)\s+([A-Z][A-Za-z0-9\s\-\/().,&]+?)\s+(?:position|role)/i,
+        // "Position: Senior Engineer" or "Role: Developer"
+        /(?:position|role|job|opening):\s*([A-Z][A-Za-z0-9\s\-\/().,&]+?)(?:\s*[\n.,]|\s*-|\s*at|\s*$)/i,
+        // "for the Senior Developer position/role/opportunity"
+        /for\s+(?:the|our)\s+([A-Z][A-Za-z0-9\s\-\/().,&]+?)\s+(?:position|role|opportunity)/i,
+        // "interview for the Software Engineer role"
+        /interview\s+(?:for|regarding)\s+(?:the|our)\s+([A-Z][A-Za-z0-9\s\-\/().,&]+?)\s+(?:position|role)/i,
       ]
 
       for (const pattern of bodyTitlePatterns) {
@@ -375,9 +514,9 @@ export class EmailClassifier {
           const isValid =
             title.length >= 5 &&                              // At least 5 chars
             title.length < 80 &&                              // Not too long
-            title.split(' ').length >= 2 &&                   // At least 2 words
+            title.split(' ').length >= 1 &&                   // At least 1 word
             title.split(' ').length <= 10 &&                  // Max 10 words
-            title !== jobInfo.company &&                      // Not just company name
+            title.toLowerCase() !== jobInfo.company?.toLowerCase() &&
             !title.toLowerCase().includes('thank') &&
             !title.toLowerCase().includes('application') &&
             !title.toLowerCase().includes('interest') &&
@@ -511,7 +650,49 @@ export class EmailClassifier {
       }
     }
 
-    // 3. AMBIGUOUS MATCHES (Low Priority - Multiple Candidates)
+    // 3. TITLE-ONLY MATCH (when company matching failed but title matches)
+    // This handles cases like React.js/Svelte where company was extracted incorrectly
+    // Run this if we have a title and either no company or company matching didn't work
+    if (email.jobInfo.title) {
+      const normalizeTitle = (title: string) => {
+        return title.toLowerCase()
+          .replace(/\s+/g, ' ')
+          .replace(/[^\w\s]/g, '')
+          .trim()
+      }
+
+      const emailTitleNormalized = normalizeTitle(email.jobInfo.title)
+      const titleMatches = jobs.filter(job => {
+        const jobTitleNormalized = normalizeTitle(job.title)
+        
+        // Exact normalized match
+        if (jobTitleNormalized === emailTitleNormalized) return true
+        
+        // Substring match
+        if (jobTitleNormalized.includes(emailTitleNormalized) || emailTitleNormalized.includes(jobTitleNormalized)) {
+          const lengthDiff = Math.abs(jobTitleNormalized.length - emailTitleNormalized.length)
+          const shorterLength = Math.min(jobTitleNormalized.length, emailTitleNormalized.length)
+          if (lengthDiff < shorterLength * 0.3) return true
+        }
+        
+        // Word overlap (80%+ match)
+        const emailWords = emailTitleNormalized.split(/\s+/).filter(w => w.length > 2)
+        const jobWords = jobTitleNormalized.split(/\s+/).filter(w => w.length > 2)
+        const commonWords = emailWords.filter(word => jobWords.includes(word))
+        const matchRatio = commonWords.length / Math.max(emailWords.length, jobWords.length)
+        return matchRatio >= 0.8
+      })
+
+      if (titleMatches.length === 1) {
+        return {
+          jobId: titleMatches[0].id,
+          confidence: 'fuzzy',
+          reason: `Title match: "${email.jobInfo.title}" (company "${email.jobInfo.company || 'unknown'}" did not match)`,
+        }
+      }
+    }
+
+    // 4. AMBIGUOUS MATCHES (Low Priority - Multiple Candidates)
 
     // Company only match - check if multiple jobs exist
     if (email.jobInfo.company) {
@@ -541,7 +722,7 @@ export class EmailClassifier {
       }
     }
 
-    // 4. NO MATCH
+    // 5. NO MATCH
     return {
       jobId: null,
       confidence: 'none',

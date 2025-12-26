@@ -30,9 +30,24 @@ export function NewJobDetectedNotification({
 }: NewJobDetectedNotificationProps) {
   const handleCreateJob = async () => {
     try {
+      const metadata = notification.metadata as any
+      
+      // If insufficient info or title says "New Email Detected", redirect to no-match page
+      const isUnmatchedEmail = notification.title === 'New Email Detected' || 
+                               metadata.hasInsufficientInfo || 
+                               (!metadata.company && !metadata.title)
+      
+      if (isUnmatchedEmail) {
+        // Always use notificationId for reliability (ignore old actionUrl format)
+        window.location.href = `/notifications/no-match?notificationId=${notification.id}`
+        onClose()
+        return
+      }
+
       const response = await fetch(`/api/notifications/${notification.id}/create-job`, {
         method: 'POST',
       })
+      
       if (response.ok) {
         const data = await response.json()
         if (data.jobId) {
@@ -42,6 +57,15 @@ export function NewJobDetectedNotification({
           window.location.reload() // Refresh to update notification list
         }
         onClose()
+      } else {
+        const data = await response.json()
+        // If insufficient info error, redirect to no-match page
+        if (data.redirectTo) {
+          window.location.href = data.redirectTo
+          onClose()
+        } else {
+          console.error('Error creating job:', data.error)
+        }
       }
     } catch (error) {
       console.error('Error creating job:', error)

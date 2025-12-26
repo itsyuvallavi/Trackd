@@ -33,6 +33,8 @@ export const SOURCE_LABELS: Record<JobSource, string> = {
   RECRUITER: 'Recruiter',
   EU_REMOTE_JOBS: 'EU Remote Jobs',
   WORKABLE: 'Workable',
+  ZIPRECRUITER: 'ZipRecruiter',
+  LANDING_JOBS: 'Landing.jobs',
   OTHER: 'Other',
 }
 

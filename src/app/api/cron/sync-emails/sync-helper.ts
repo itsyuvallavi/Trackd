@@ -8,6 +8,7 @@ import { NotificationService } from '@/lib/notification-service'
  * Sync emails for a specific user (used by cron, doesn't require auth)
  */
 export async function syncEmailsForUser(userId: string) {
+  const syncStartTime = new Date()
   try {
     // Get email integration settings
     const integration = await prisma.emailIntegration.findUnique({
@@ -86,9 +87,12 @@ export async function syncEmailsForUser(userId: string) {
     let skippedCount = 0
     let skippedOtherCount = 0
     let skippedLowConfidenceCount = 0
+    let exactMatchesCount = 0
+    let fuzzyMatchesCount = 0
     let ambiguousMatchesCount = 0
     let newJobsDetectedCount = 0
     let noMatchesCount = 0
+    let notificationsCreatedCount = 0
 
     console.log(`Processing ${emails.length} emails...`)
     for (let i = 0; i < emails.length; i++) {
@@ -120,6 +124,13 @@ export async function syncEmailsForUser(userId: string) {
 
         // Try to match email to existing job using enhanced matching
         const matchResult = classifier.matchToJob(classified, jobs, email)
+
+        // Track match type for logging
+        if (matchResult.confidence === 'exact') {
+          exactMatchesCount++
+        } else if (matchResult.confidence === 'fuzzy') {
+          fuzzyMatchesCount++
+        }
 
         if (matchResult.confidence === 'exact' || matchResult.confidence === 'fuzzy') {
           // We have a confident match - update the job
@@ -162,6 +173,7 @@ export async function syncEmailsForUser(userId: string) {
               )
 
               updatedCount++
+              notificationsCreatedCount++ // Job update notification
               console.log(`Updated job ${matchResult.jobId} to status ${classified.suggestedStatus}`)
             } else {
               console.log(`Skipped updating job ${matchResult.jobId} - status would go backwards`)
@@ -177,42 +189,92 @@ export async function syncEmailsForUser(userId: string) {
               classified
             )
             ambiguousMatchesCount++
+            notificationsCreatedCount++
             console.log(`Ambiguous match: ${matchResult.matchedJobs.length} jobs found for email "${email.subject}"`)
           }
         } else if (matchResult.confidence === 'none') {
           // No match found - check if we can detect a new job
           if (classified.jobInfo?.company && classified.jobInfo?.title && 
               classified.jobInfo.title !== 'Unknown Position') {
-            // Check if this company + title combination already exists
-            const existingJob = jobs.find(job => {
-              const companyMatch = job.company.toLowerCase().includes(classified.jobInfo!.company!.toLowerCase()) ||
-                                  classified.jobInfo!.company!.toLowerCase().includes(job.company.toLowerCase())
-              const titleMatch = job.title.toLowerCase().includes(classified.jobInfo!.title!.toLowerCase()) ||
-                                classified.jobInfo!.title!.toLowerCase().includes(job.title.toLowerCase())
-              return companyMatch && titleMatch
-            })
-
-            if (!existingJob) {
-              // New job detected - create notification
-              await notificationService.createNewJobDetectedNotification(
-                userId,
-                email,
-                classified,
-                {
-                  company: classified.jobInfo.company,
-                  title: classified.jobInfo.title,
-                  location: classified.jobInfo.location,
+            // Normalize titles for comparison (remove extra spaces, special chars)
+            const normalizeTitle = (title: string) => {
+              return title.toLowerCase()
+                .replace(/\s+/g, ' ')
+                .replace(/[^\w\s]/g, '')
+                .trim()
+            }
+            
+            const emailTitleNormalized = normalizeTitle(classified.jobInfo.title)
+            
+            // Check for duplicate by title first (primary matching)
+            // If title matches exactly or very closely, it's likely the same job
+            const titleMatches = jobs.filter(job => {
+              const jobTitleNormalized = normalizeTitle(job.title)
+              
+              // Exact match after normalization
+              if (jobTitleNormalized === emailTitleNormalized) {
+                return true
+              }
+              
+              // Check if one title contains the other (for variations like "React.js / Svelte Engineer" vs "React.js / Svelte Engineer - Remote")
+              if (jobTitleNormalized.includes(emailTitleNormalized) || 
+                  emailTitleNormalized.includes(jobTitleNormalized)) {
+                // If titles are very similar (one is subset of other), check length difference
+                const lengthDiff = Math.abs(jobTitleNormalized.length - emailTitleNormalized.length)
+                const shorterLength = Math.min(jobTitleNormalized.length, emailTitleNormalized.length)
+                // If difference is less than 30% of shorter title, consider it a match
+                if (lengthDiff < shorterLength * 0.3) {
+                  return true
                 }
-              )
-              newJobsDetectedCount++
-              console.log(`New job detected: "${classified.jobInfo.title}" at ${classified.jobInfo.company}`)
+              }
+              
+              // Check word overlap - if most significant words match, it's likely the same
+              const emailWords = emailTitleNormalized.split(/\s+/).filter(w => w.length > 2)
+              const jobWords = jobTitleNormalized.split(/\s+/).filter(w => w.length > 2)
+              const commonWords = emailWords.filter(word => jobWords.includes(word))
+              const matchRatio = commonWords.length / Math.max(emailWords.length, jobWords.length)
+              
+              // If 80%+ of words match, consider it a duplicate
+              return matchRatio >= 0.8
+            })
+            
+            if (titleMatches.length > 0) {
+              console.log(`Job already exists (title match): "${classified.jobInfo.title}" matches existing job "${titleMatches[0].title}" at ${titleMatches[0].company}`)
+              // Don't create notification - job already exists
             } else {
-              console.log(`Job already exists: "${classified.jobInfo.title}" at ${classified.jobInfo.company}`)
+              // Also check company + title combination (secondary check)
+              const companyTitleMatch = jobs.find(job => {
+                const companyMatch = job.company.toLowerCase().includes(classified.jobInfo!.company!.toLowerCase()) ||
+                                    classified.jobInfo!.company!.toLowerCase().includes(job.company.toLowerCase())
+                const titleMatch = job.title.toLowerCase().includes(classified.jobInfo!.title!.toLowerCase()) ||
+                                classified.jobInfo!.title!.toLowerCase().includes(job.title.toLowerCase())
+                return companyMatch && titleMatch
+              })
+
+              if (!companyTitleMatch) {
+                // New job detected - create notification
+                await notificationService.createNewJobDetectedNotification(
+                  userId,
+                  email,
+                  classified,
+                  {
+                    company: classified.jobInfo.company,
+                    title: classified.jobInfo.title,
+                    location: classified.jobInfo.location,
+                  }
+                )
+                newJobsDetectedCount++
+                notificationsCreatedCount++
+                console.log(`New job detected: "${classified.jobInfo.title}" at ${classified.jobInfo.company}`)
+              } else {
+                console.log(`Job already exists (company+title match): "${classified.jobInfo.title}" at ${classified.jobInfo.company}`)
+              }
             }
           } else {
             // Insufficient info - create no-match notification
             await notificationService.createNoMatchNotification(userId, email, classified)
             noMatchesCount++
+            notificationsCreatedCount++
             console.log(`No match found and insufficient info for email "${email.subject}"`)
           }
         }
@@ -255,6 +317,45 @@ export async function syncEmailsForUser(userId: string) {
 
     // Create sync complete notification
     await notificationService.createSyncCompleteNotification(userId, stats)
+    notificationsCreatedCount++ // Sync complete notification
+
+    const syncCompletedAt = new Date()
+    const syncDuration = syncCompletedAt.getTime() - syncStartTime.getTime()
+
+    // Save sync log to database
+    // Note: If you get "Cannot read properties of undefined (reading 'create')", 
+    // restart your dev server after running `prisma generate`
+    try {
+      await prisma.emailSyncLog.create({
+      data: {
+        userId,
+        startedAt: syncStartTime,
+        completedAt: syncCompletedAt,
+        duration: syncDuration,
+        source: 'cron',
+        totalEmails: emails.length,
+        processedEmails: processedCount,
+        skippedEmails: skippedCount,
+        skippedOther: skippedOtherCount,
+        skippedLowConfidence: skippedLowConfidenceCount,
+        exactMatches: exactMatchesCount,
+        fuzzyMatches: fuzzyMatchesCount,
+        ambiguousMatches: ambiguousMatchesCount,
+        newJobsDetected: newJobsDetectedCount,
+        noMatches: noMatchesCount,
+        jobsUpdated: updatedCount,
+        notificationsCreated: notificationsCreatedCount,
+        success: true,
+        details: {
+          syncSince: syncSince.toISOString(),
+          jobsCount: jobs.length,
+        },
+      },
+      })
+    } catch (logError) {
+      // If emailSyncLog model doesn't exist, log warning but don't fail the sync
+      console.warn('Failed to save sync log (model may not be available). Run: bunx prisma generate && restart server', logError)
+    }
 
     return {
       success: true,
@@ -262,29 +363,57 @@ export async function syncEmailsForUser(userId: string) {
     }
   } catch (error) {
     console.error('Email sync error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
     // Log error to database
     try {
       await prisma.emailIntegration.update({
         where: { userId },
         data: {
-          lastError: error instanceof Error ? error.message : 'Unknown error',
+          lastError: errorMessage,
         },
       })
       
       // Create error notification
       const notificationService = new NotificationService()
-      await notificationService.createSyncErrorNotification(
-        userId,
-        error instanceof Error ? error.message : 'Unknown error'
-      )
+      await notificationService.createSyncErrorNotification(userId, errorMessage)
+
+      // Save error sync log (only if model exists)
+      const syncCompletedAt = new Date()
+      try {
+        await prisma.emailSyncLog.create({
+          data: {
+            userId,
+            startedAt: syncStartTime,
+            completedAt: syncCompletedAt,
+            duration: syncCompletedAt.getTime() - syncStartTime.getTime(),
+            source: 'cron',
+            totalEmails: 0,
+            processedEmails: 0,
+            skippedEmails: 0,
+            skippedOther: 0,
+            skippedLowConfidence: 0,
+            exactMatches: 0,
+            fuzzyMatches: 0,
+            ambiguousMatches: 0,
+            newJobsDetected: 0,
+            noMatches: 0,
+            jobsUpdated: 0,
+            notificationsCreated: 1, // Error notification
+            success: false,
+            errorMessage,
+          },
+        })
+      } catch (logError) {
+        console.error('Failed to save error sync log:', logError)
+      }
     } catch (dbError) {
       console.error('Failed to log error to database:', dbError)
     }
 
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to sync emails',
+      error: errorMessage,
     }
   }
 }

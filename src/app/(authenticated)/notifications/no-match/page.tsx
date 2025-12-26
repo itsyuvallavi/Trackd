@@ -2,21 +2,21 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { SimpleTopBar } from '@/components/layout/simple-top-bar'
-import { AmbiguousMatchResolver } from '@/components/notifications/ambiguous-match-resolver'
+import { NoMatchJobCreator } from '@/components/notifications/no-match-job-creator'
 import { notFound } from 'next/navigation'
 
-export default async function AmbiguousMatchPage({
+export default async function NoMatchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ emailSubject?: string; notificationId?: string }>
+  searchParams: Promise<{ notificationId?: string; emailSubject?: string }>
 }) {
   const user = await requireAuth()
   const params = await searchParams
-  const { emailSubject, notificationId } = params
+  const { notificationId, emailSubject } = params
 
-  console.log('AmbiguousMatchPage - searchParams:', { notificationId, emailSubject, userId: user.id })
+  console.log('NoMatchPage - searchParams:', { notificationId, emailSubject, userId: user.id })
 
-  // If notificationId is provided, fetch the notification
+  // Fetch the notification
   let notification = null
   if (notificationId) {
     console.log('Looking up notification by ID:', notificationId)
@@ -24,18 +24,17 @@ export default async function AmbiguousMatchPage({
       where: {
         id: notificationId,
         userId: user.id,
-        type: 'AMBIGUOUS_MATCH',
+        type: 'NEW_JOB_DETECTED',
       },
     })
     console.log('Notification found by ID:', notification ? 'yes' : 'no')
   } else if (emailSubject) {
     console.log('Looking up notification by emailSubject:', emailSubject)
-    // Otherwise, find the most recent ambiguous match notification with this subject
     // Try Prisma JSON path query first
     notification = await prisma.notification.findFirst({
       where: {
         userId: user.id,
-        type: 'AMBIGUOUS_MATCH',
+        type: 'NEW_JOB_DETECTED',
         metadata: {
           path: ['emailSubject'],
           equals: emailSubject,
@@ -52,14 +51,14 @@ export default async function AmbiguousMatchPage({
       const allNotifications = await prisma.notification.findMany({
         where: {
           userId: user.id,
-          type: 'AMBIGUOUS_MATCH',
+          type: 'NEW_JOB_DETECTED',
         },
         orderBy: {
           createdAt: 'desc',
         },
       })
       
-      console.log(`Found ${allNotifications.length} ambiguous match notifications`)
+      console.log(`Found ${allNotifications.length} NEW_JOB_DETECTED notifications`)
       
       notification = allNotifications.find(n => {
         const meta = n.metadata as any
@@ -72,23 +71,24 @@ export default async function AmbiguousMatchPage({
       }) || null
     }
   } else {
-    // If neither is provided, try to find the most recent unread ambiguous match
-    console.log('No notificationId or emailSubject, looking for most recent unread')
+    // If neither is provided, try to find the most recent unread unmatched email notification
+    console.log('No notificationId or emailSubject, looking for most recent unread unmatched')
     notification = await prisma.notification.findFirst({
       where: {
         userId: user.id,
-        type: 'AMBIGUOUS_MATCH',
+        type: 'NEW_JOB_DETECTED',
+        title: 'New Email Detected',
         isRead: false,
       },
       orderBy: {
         createdAt: 'desc',
       },
     })
-    console.log('Most recent unread found:', notification ? 'yes' : 'no')
+    console.log('Most recent unread unmatched found:', notification ? 'yes' : 'no')
   }
 
   if (!notification) {
-    console.error('Ambiguous match notification not found', { 
+    console.error('No-match notification not found', { 
       notificationId, 
       emailSubject, 
       userId: user.id,
@@ -102,38 +102,11 @@ export default async function AmbiguousMatchPage({
     emailSubject: string
     emailFrom: string
     emailDate: string
-    matchedJobs: Array<{ id: string; title: string; company: string }>
-    suggestedStatus?: string
-    emailType?: string
+    company?: string
+    title?: string
+    hasInsufficientInfo?: boolean
     emailTextBody?: string
   }
-
-  // Fetch full job details for the matched jobs
-  const jobIds = metadata.matchedJobs.map(job => job.id)
-  const jobs = await prisma.job.findMany({
-    where: {
-      id: { in: jobIds },
-      userId: user.id,
-    },
-    select: {
-      id: true,
-      title: true,
-      company: true,
-      location: true,
-      status: true,
-      url: true,
-      appliedAt: true,
-      interviewAt: true,
-    },
-    orderBy: {
-      savedAt: 'desc',
-    },
-  })
-
-  // Ensure jobs are in the same order as matchedJobs
-  const orderedJobs = metadata.matchedJobs
-    .map(matched => jobs.find(job => job.id === matched.id))
-    .filter(Boolean) as typeof jobs
 
   return (
     <div className="size-full flex">
@@ -145,14 +118,13 @@ export default async function AmbiguousMatchPage({
       >
         <div className="flex-1 overflow-auto pt-[88px]">
           <div className="max-w-4xl mx-auto px-8 py-6">
-            <AmbiguousMatchResolver
+            <NoMatchJobCreator
               notificationId={notification.id}
               emailSubject={metadata.emailSubject}
               emailFrom={metadata.emailFrom}
               emailDate={metadata.emailDate}
-              matchedJobs={orderedJobs}
-              suggestedStatus={metadata.suggestedStatus}
-              emailType={metadata.emailType}
+              company={metadata.company}
+              title={metadata.title}
               emailTextBody={metadata.emailTextBody}
             />
           </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { NotificationType } from '@prisma/client'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Info, CheckCircle2, X } from 'lucide-react'
 
 interface Notification {
@@ -28,11 +28,21 @@ export function SyncCompleteNotification({
   onDismiss,
   onClose,
 }: SyncCompleteNotificationProps) {
-  const handleActionClick = () => {
-    onClose()
+  const router = useRouter()
+  
+  const handleActionClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    
+    // Mark as read if needed (don't wait for it)
     if (!notification.isRead) {
       onMarkAsRead(notification.id)
     }
+    
+    // Close the dropdown
+    onClose()
+    
+    // Let the anchor tag handle navigation naturally
+    // Don't preventDefault - this ensures the link works even if JS fails
   }
 
   return (
@@ -40,6 +50,10 @@ export function SyncCompleteNotification({
       className={`flex items-start gap-3 px-3 py-3 hover:bg-primary-lightest transition-colors text-sm border-b border-border last:border-0 ${
         !notification.isRead ? 'bg-primary-lightest/30' : ''
       }`}
+      onClick={(e) => {
+        // Don't close dropdown when clicking inside the notification
+        e.stopPropagation()
+      }}
     >
       <div className="mt-0.5 shrink-0">
         <Info className="size-4 text-info" />
@@ -49,15 +63,13 @@ export function SyncCompleteNotification({
         <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-line">
           {notification.message}
         </p>
-        {notification.actionUrl && (
-          <Link
-            href={notification.actionUrl}
-            className="text-xs text-primary hover:underline mt-1 inline-block"
-            onClick={handleActionClick}
-          >
-            View jobs →
-          </Link>
-        )}
+        <a
+          href={notification.actionUrl || '/jobs'}
+          onClick={handleActionClick}
+          className="text-xs text-primary hover:underline mt-1 inline-block text-left cursor-pointer relative z-10"
+        >
+          View jobs →
+        </a>
       </div>
       <div className="flex gap-1 shrink-0">
         {!notification.isRead && (

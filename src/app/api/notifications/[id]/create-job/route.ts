@@ -32,6 +32,19 @@ export async function POST(
     }
 
     const metadata = notification.metadata as any
+    
+    // For unmatched emails, we might not have both company and title
+    // In that case, redirect to the no-match page instead
+    if (metadata.hasInsufficientInfo || (!metadata.company && !metadata.title)) {
+      return NextResponse.json(
+        { 
+          error: 'Insufficient information',
+          redirectTo: `/notifications/no-match?notificationId=${id}`
+        },
+        { status: 400 }
+      )
+    }
+
     if (!metadata.company || !metadata.title) {
       return NextResponse.json(
         { error: 'Invalid notification data' },

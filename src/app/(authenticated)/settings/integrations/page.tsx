@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { EmailIntegrationForm } from '@/components/email/email-integration-form'
 import { ExtensionKeySection } from '@/components/email/extension-key-section'
+import { SyncHistory } from '@/components/email/sync-history'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { SimpleTopBar } from '@/components/layout/simple-top-bar'
 import { requireAuth } from '@/lib/auth'
@@ -60,7 +61,7 @@ export default async function IntegrationsPage() {
 
         <div className="space-y-6">
           {/* Email Integration Section */}
-          <div className="border border-foreground/20 rounded-lg p-6">
+          <div className="border border-foreground/20 rounded-lg p-6 bg-card">
             <EmailIntegrationForm integration={integration} />
           </div>
 
@@ -71,6 +72,9 @@ export default async function IntegrationsPage() {
               lastUsedAt: extensionKey.lastUsedAt?.toISOString() || null
             } : null}
           />
+
+          {/* Sync History Section */}
+          <SyncHistory />
         </div>
         </div>
       </div>

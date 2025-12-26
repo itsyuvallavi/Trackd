@@ -26,6 +26,7 @@ interface AmbiguousMatchResolverProps {
   matchedJobs: MatchedJob[]
   suggestedStatus?: string
   emailType?: string
+  emailTextBody?: string
 }
 
 export function AmbiguousMatchResolver({
@@ -36,6 +37,7 @@ export function AmbiguousMatchResolver({
   matchedJobs,
   suggestedStatus,
   emailType,
+  emailTextBody,
 }: AmbiguousMatchResolverProps) {
   const router = useRouter()
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
@@ -144,6 +146,16 @@ export function AmbiguousMatchResolver({
             </div>
           )}
         </div>
+        {emailTextBody && (
+          <details className="mt-4">
+            <summary className="cursor-pointer text-primary hover:underline font-medium text-sm">
+              View email content
+            </summary>
+            <div className="mt-3 p-4 bg-muted rounded-lg text-sm whitespace-pre-wrap max-h-96 overflow-y-auto border border-border">
+              {emailTextBody}
+            </div>
+          </details>
+        )}
       </div>
 
       {/* Matched Jobs */}

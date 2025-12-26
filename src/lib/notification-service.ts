@@ -23,12 +23,12 @@ export class NotificationService {
     email: EmailMessage,
     matchedJobs: Array<{ id: string; title: string; company: string }>,
     classified: ClassifiedEmail
-  ): Promise<void> {
+  ): Promise<string> {
     const jobList = matchedJobs
       .map((job, idx) => `${idx + 1}. ${job.title} at ${job.company}`)
       .join('\n')
 
-    await prisma.notification.create({
+    const notification = await prisma.notification.create({
       data: {
         userId,
         type: 'AMBIGUOUS_MATCH',
@@ -45,10 +45,21 @@ export class NotificationService {
           })),
           suggestedStatus: classified.suggestedStatus,
           emailType: classified.type,
+          emailTextBody: email.textBody.substring(0, 2000), // Store first 2000 chars for context
         },
-        actionUrl: `/notifications/ambiguous?emailSubject=${encodeURIComponent(email.subject)}`,
+        actionUrl: '', // Will be updated below
       },
     })
+
+    // Update with notificationId in actionUrl
+    await prisma.notification.update({
+      where: { id: notification.id },
+      data: {
+        actionUrl: `/notifications/ambiguous?notificationId=${notification.id}`,
+      },
+    })
+
+    return notification.id
   }
 
   /**
@@ -182,8 +193,8 @@ export class NotificationService {
     userId: string,
     email: EmailMessage,
     classified: ClassifiedEmail
-  ): Promise<void> {
-    await prisma.notification.create({
+  ): Promise<string> {
+    const notification = await prisma.notification.create({
       data: {
         userId,
         type: 'NEW_JOB_DETECTED', // Use same type but with different metadata
@@ -196,11 +207,21 @@ export class NotificationService {
           company: classified.jobInfo?.company,
           title: classified.jobInfo?.title,
           hasInsufficientInfo: true,
-          emailTextBody: email.textBody.substring(0, 500),
+          emailTextBody: email.textBody.substring(0, 2000), // Store first 2000 chars for context
         },
-        actionUrl: `/notifications/no-match?emailSubject=${encodeURIComponent(email.subject)}`,
+        actionUrl: '', // Will be updated below
       },
     })
+
+    // Update with notificationId in actionUrl
+    await prisma.notification.update({
+      where: { id: notification.id },
+      data: {
+        actionUrl: `/notifications/no-match?notificationId=${notification.id}`,
+      },
+    })
+
+    return notification.id
   }
 
   /**

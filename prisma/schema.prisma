@@ -187,3 +187,46 @@ model Notification {
   @@index([userId, isRead])
   @@index([userId, createdAt])
 }
+
+model EmailSyncLog {
+  id          String   @id @default(cuid())
+  userId      String
+  
+  // Sync metadata
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  duration    Int?     // milliseconds
+  
+  // Sync source (manual, auto, cron)
+  source      String   @default("manual") // "manual", "auto", "cron"
+  
+  // Sync statistics
+  totalEmails        Int      @default(0)
+  processedEmails    Int      @default(0)
+  skippedEmails      Int      @default(0)
+  skippedOther       Int      @default(0)
+  skippedLowConfidence Int    @default(0)
+  
+  // Match results
+  exactMatches       Int      @default(0)
+  fuzzyMatches       Int      @default(0)
+  ambiguousMatches   Int      @default(0)
+  newJobsDetected    Int      @default(0)
+  noMatches          Int      @default(0)
+  
+  // Actions taken
+  jobsUpdated        Int      @default(0)
+  notificationsCreated Int    @default(0)
+  
+  // Error handling
+  success            Boolean  @default(true)
+  errorMessage       String?
+  
+  // Additional details stored as JSON
+  details            Json?    // Store detailed breakdown, email subjects, etc.
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([userId, createdAt])
+  @@index([userId, success])
+}

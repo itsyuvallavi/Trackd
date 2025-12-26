@@ -83,7 +83,7 @@ export function ExtensionKeySection({ initialData }: ExtensionKeySectionProps) {
 
   if (isLoading) {
     return (
-      <div className="border border-border rounded-lg p-6">
+      <div className="border border-border rounded-lg p-6 bg-card">
         <div className="flex items-center gap-3 mb-4">
           <Chrome className="size-6 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Chrome Extension</h3>
@@ -94,7 +94,7 @@ export function ExtensionKeySection({ initialData }: ExtensionKeySectionProps) {
   }
 
   return (
-    <div className="border border-border rounded-lg p-6">
+    <div className="border border-border rounded-lg p-6 bg-card">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <Chrome className="size-6" />

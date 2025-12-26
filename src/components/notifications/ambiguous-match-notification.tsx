@@ -50,15 +50,15 @@ export function AmbiguousMatchNotification({
           {notification.message}
         </p>
         <div className="flex items-center gap-2 mt-2">
-          {notification.actionUrl && (
-            <Link
-              href={notification.actionUrl}
-              className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-md hover:bg-primary-hover transition-colors font-medium"
-              onClick={handleActionClick}
-            >
-              Resolve Match
-            </Link>
-          )}
+          <Link
+            href={notification.actionUrl?.includes('notificationId=') 
+              ? notification.actionUrl 
+              : `/notifications/ambiguous?notificationId=${notification.id}`}
+            className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-md hover:bg-primary-hover transition-colors font-medium"
+            onClick={handleActionClick}
+          >
+            Resolve Match
+          </Link>
         </div>
       </div>
       <div className="flex gap-1 shrink-0">
