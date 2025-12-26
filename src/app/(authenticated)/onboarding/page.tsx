@@ -329,13 +329,15 @@ function OnboardingContent() {
 
 export default function OnboardingPage() {
   return (
-    <Suspense fallback={
-      <div className="size-full flex items-center justify-center bg-background">
-        <div className="animate-pulse">Loading...</div>
-      </div>
-    }>
-      <OnboardingContent />
-    </Suspense>
+    <div className="size-full flex">
+      <Suspense fallback={
+        <div className="flex-1 min-h-screen bg-background flex items-center justify-center">
+          <div className="animate-pulse">Loading...</div>
+        </div>
+      }>
+        <OnboardingContent />
+      </Suspense>
+    </div>
   )
 }
 

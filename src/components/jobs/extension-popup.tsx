@@ -185,7 +185,7 @@ export function ExtensionPopup() {
           </Button>
           <Button onClick={handleDownload} className="flex-1">
             <Download className="size-4 mr-2" />
-            Download Extension
+            Download
           </Button>
         </div>
       </div>
