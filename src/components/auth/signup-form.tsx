@@ -35,7 +35,12 @@ export function SignUpForm() {
 
     if (error) {
       console.error('OAuth error:', error)
-      setError(error.message)
+      // Check if error is due to email already existing with different provider
+      if (error.message.includes('already registered') || error.message.includes('already exists')) {
+        setError('This email is already registered. Please sign in instead.')
+      } else {
+        setError(error.message)
+      }
       setIsLoading(false)
     } else {
       // If successful, the browser should redirect automatically
@@ -66,7 +71,12 @@ export function SignUpForm() {
     })
 
     if (error) {
-      setError(error.message)
+      // Check if error is due to email already existing
+      if (error.message.includes('already registered') || error.message.includes('already exists')) {
+        setError('This email is already registered. Please sign in instead.')
+      } else {
+        setError(error.message)
+      }
       setIsLoading(false)
     } else {
       // If email confirmations are disabled, user can sign in immediately

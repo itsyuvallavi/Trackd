@@ -40,7 +40,12 @@ export function LoginForm({ next }: LoginFormProps) {
 
     if (error) {
       console.error('OAuth error:', error)
-      setError(error.message)
+      // Check if error is due to email already existing with different provider
+      if (error.message.includes('already registered') || error.message.includes('already exists')) {
+        setError('This email is already registered. Please sign in with email and password instead.')
+      } else {
+        setError(error.message)
+      }
       setIsLoading(false)
     } else {
       // If successful, the browser should redirect automatically
