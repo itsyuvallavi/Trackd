@@ -1,8 +1,8 @@
 console.log('[Trackd] Extension loaded')
 
 // API URL - change this for your environment
-const API_URL = 'http://localhost:3000' // For local development
-// const API_URL = 'https://your-app.vercel.app' // For production
+// const API_URL = 'http://localhost:3000' // For local development
+const API_URL = 'https://trackd-eight.vercel.app' // For production
 
 // Content script files to inject
 const CONTENT_SCRIPT_FILES = [
