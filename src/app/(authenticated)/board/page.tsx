@@ -1,11 +1,15 @@
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
-import { Sidebar } from '@/components/layout/Sidebar'
-import { SimpleTopBar } from '@/components/layout/simple-top-bar'
-import { KanbanBoard } from '@/components/board/kanban-board'
+import { AppShell } from '@/components/layout/app-shell'
+import dynamic from 'next/dynamic'
 import { JobStatus } from '@prisma/client'
 
-export const dynamic = 'force-dynamic'
+// Lazy load KanbanBoard since it's a heavy component with drag-and-drop
+const KanbanBoard = dynamic(() => import('@/components/board/kanban-board').then(mod => ({ default: mod.KanbanBoard })), {
+  loading: () => <div className="animate-pulse text-center py-8 text-muted-foreground">Loading board...</div>,
+})
+
+export const revalidate = 60 // Revalidate every 60 seconds
 
 const COLUMNS: { status: JobStatus; label: string; color: string }[] = [
   { status: 'SAVED', label: 'Saved', color: 'bg-muted' },
@@ -44,26 +48,19 @@ export default async function BoardPage() {
   })
 
   return (
-    <div className="size-full flex">
-      <Sidebar />
-      <SimpleTopBar showEmailNotification={!emailIntegration} />
-      <div
-        className="flex-1 flex flex-col relative z-10"
-        style={{ marginLeft: '4rem' }}
-      >
-        <div className="flex-1 overflow-auto pt-[88px]">
-          <div className="max-w-[1600px] mx-auto px-8 py-6">
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold">Board</h1>
-              <p className="text-foreground/60 mt-1">
-                {totalJobs} total jobs • {activeJobs} active
-              </p>
-            </div>
-
-            <KanbanBoard columns={COLUMNS} jobsByStatus={jobsByStatus} />
+    <AppShell showEmailNotification={!emailIntegration}>
+      <div className="flex-1 overflow-auto">
+        <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-4 md:py-6">
+          <div className="mb-6 md:mb-8">
+            <h1 className="text-2xl md:text-3xl font-bold">Board</h1>
+            <p className="text-foreground/60 mt-1 text-sm md:text-base">
+              {totalJobs} total jobs • {activeJobs} active
+            </p>
           </div>
+
+          <KanbanBoard columns={COLUMNS} jobsByStatus={jobsByStatus} />
         </div>
       </div>
-    </div>
+    </AppShell>
   )
 }

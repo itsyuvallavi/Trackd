@@ -13,9 +13,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid provider' }, { status: 400 })
   }
 
-  // For now, we'll use direct provider OAuth and track a static user id.
-  // In production, you'd want to use direct OAuth2 with Gmail/Graph API scopes
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  // Get base URL from environment variable or request origin
+  // In production, NEXT_PUBLIC_APP_URL should be set in Vercel environment variables
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+    (process.env.NODE_ENV === 'production' 
+      ? request.nextUrl.origin 
+      : 'http://localhost:3000')
   const callbackUrl = `${baseUrl}/api/auth/email/oauth/callback`
 
   // For Google (Gmail)

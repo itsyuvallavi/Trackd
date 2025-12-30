@@ -2,8 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { EmailIntegrationForm } from '@/components/email/email-integration-form'
 import { ExtensionKeySection } from '@/components/email/extension-key-section'
 import { SyncHistory } from '@/components/email/sync-history'
-import { Sidebar } from '@/components/layout/Sidebar'
-import { SimpleTopBar } from '@/components/layout/simple-top-bar'
+import { AppShell } from '@/components/layout/app-shell'
 import { requireAuth } from '@/lib/auth'
 
 export default async function IntegrationsPage() {
@@ -22,18 +21,12 @@ export default async function IntegrationsPage() {
   })
 
   return (
-    <div className="size-full flex">
-      <Sidebar />
-      <SimpleTopBar showEmailNotification={!integration} />
-      <div
-        className="flex-1 flex flex-col relative z-10"
-        style={{ marginLeft: '4rem' }}
-      >
-        <div className="flex-1 overflow-auto pt-[88px]">
-          <div className="max-w-4xl mx-auto px-8 py-6">
-        <div className="mb-8">
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold">Email Integration</h1>
+    <AppShell showEmailNotification={!integration}>
+      <div className="flex-1 overflow-auto">
+        <div className="max-w-4xl mx-auto px-4 md:px-8 py-4 md:py-6">
+          <div className="mb-6 md:mb-8">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl md:text-3xl font-bold">Email Integration</h1>
             {integration && integration.isActive && (
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-green-500"></div>
@@ -78,7 +71,6 @@ export default async function IntegrationsPage() {
         </div>
         </div>
       </div>
-    </div>
-    </div>
+    </AppShell>
   )
 }

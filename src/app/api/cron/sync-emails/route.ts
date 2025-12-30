@@ -6,11 +6,19 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
-    // Verify this is called by Vercel Cron (in production)
+    // Verify this is called by Vercel Cron or with proper auth
+    // Vercel Cron doesn't send auth headers, so we check for CRON_SECRET if provided
+    // If no CRON_SECRET env var is set, allow the request (for Vercel Cron)
     const authHeader = request.headers.get('authorization')
-    if (process.env.NODE_ENV === 'production') {
+    
+    // If CRON_SECRET is set, require it (for GitHub Actions or manual calls)
+    // If not set, allow the request (assumes Vercel Cron)
+    if (process.env.CRON_SECRET) {
       if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        // Allow in development for testing
+        if (process.env.NODE_ENV === 'production') {
+          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
       }
     }
 

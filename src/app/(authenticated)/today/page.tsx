@@ -1,8 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
-import { Sidebar } from '@/components/layout/Sidebar'
-import { SimpleTopBar } from '@/components/layout/simple-top-bar'
+import { AppShell } from '@/components/layout/app-shell'
 import { StatusStats } from '@/components/dashboard/status-stats'
 import { JobStatus } from '@prisma/client'
 import { formatRelativeTime } from '@/lib/utils'
@@ -10,7 +9,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 30 // Revalidate every 30 seconds (more frequent for today view)
 
 // Helper function to get status background color
 function getStatusBackgroundColor(status: JobStatus): string {
@@ -30,59 +29,79 @@ export default async function TodayPage() {
   const today = new Date()
   const sevenDaysFromNow = new Date(today)
   sevenDaysFromNow.setDate(today.getDate() + 7)
+  const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
 
-  // Get all jobs for status counts
-  const allJobs = await prisma.job.findMany({
-    where: {
-      userId: user.id,
-    },
-    include: {
-      activities: {
-        orderBy: { createdAt: 'desc' },
-        take: 1, // Get most recent activity
+  // Optimize: Combine queries using Promise.all and fetch only needed data
+  const [statusCounts, activeJobs, recentActivities, recentAppliedActivities] = await Promise.all([
+    // Use groupBy for efficient status counting
+    prisma.job.groupBy({
+      by: ['status'],
+      where: { userId: user.id },
+      _count: true,
+    }),
+    // Only fetch active jobs (SAVED, APPLIED, INTERVIEW) with minimal fields
+    prisma.job.findMany({
+      where: {
+        userId: user.id,
+        status: { in: ['SAVED', 'APPLIED', 'INTERVIEW'] },
       },
-    },
-    orderBy: { savedAt: 'desc' },
-  })
-
-  // Get recent activities for status changes
-  const recentActivities = await prisma.activity.findMany({
-    where: {
-      userId: user.id,
-      type: {
-        in: ['STATUS_CHANGE', 'INTERVIEW', 'REJECTION', 'OFFER'],
+      select: {
+        id: true,
+        title: true,
+        company: true,
+        status: true,
+        savedAt: true,
+        interviewAt: true,
+        nextAction: true,
       },
-    },
-    include: {
-      job: true,
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 10,
-  })
-
-  // Get recent status changes to APPLIED (to identify truly recently applied jobs)
-  const recentAppliedActivities = await prisma.activity.findMany({
-    where: {
-      userId: user.id,
-      toStatus: 'APPLIED',
-      type: {
-        in: ['STATUS_CHANGE'],
+      orderBy: { savedAt: 'desc' },
+    }),
+    // Get recent activities with selected job fields
+    prisma.activity.findMany({
+      where: {
+        userId: user.id,
+        type: { in: ['STATUS_CHANGE', 'INTERVIEW', 'REJECTION', 'OFFER'] },
+        createdAt: { gte: sevenDaysAgo },
       },
-      createdAt: {
-        gte: new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+      select: {
+        id: true,
+        type: true,
+        fromStatus: true,
+        toStatus: true,
+        createdAt: true,
+        jobId: true,
+        job: {
+          select: {
+            id: true,
+            title: true,
+            company: true,
+            status: true,
+          },
+        },
       },
-    },
-    include: {
-      job: true,
-    },
-    orderBy: { createdAt: 'desc' },
-  })
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    }),
+    // Get recent APPLIED status changes
+    prisma.activity.findMany({
+      where: {
+        userId: user.id,
+        toStatus: 'APPLIED',
+        type: 'STATUS_CHANGE',
+        createdAt: { gte: sevenDaysAgo },
+      },
+      select: {
+        jobId: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ])
 
   // Get job IDs that were recently applied (moved TO APPLIED in last 7 days)
   const recentlyAppliedJobIds = new Set(recentAppliedActivities.map(a => a.jobId))
 
-  // Calculate status counts
-  const statusCounts: Record<JobStatus, number> = {
+  // Convert groupBy result to status counts
+  const statusCountsMap: Record<JobStatus, number> = {
     SAVED: 0,
     APPLIED: 0,
     INTERVIEW: 0,
@@ -91,14 +110,12 @@ export default async function TodayPage() {
     GHOSTED: 0,
   }
 
-  allJobs.forEach((job) => {
-    statusCounts[job.status] = (statusCounts[job.status] || 0) + 1
+  statusCounts.forEach((item) => {
+    statusCountsMap[item.status as JobStatus] = item._count
   })
 
-  // Get jobs that need attention (active statuses only)
-  const jobs = allJobs.filter((job) =>
-    ['SAVED', 'APPLIED', 'INTERVIEW'].includes(job.status)
-  )
+  // Active jobs already fetched with filter
+  const jobs = activeJobs
 
   // Categorize jobs by urgency
   const categorizedJobs = {
@@ -123,12 +140,8 @@ export default async function TodayPage() {
       // (not jobs that were already applied and then moved back to applied)
       return recentlyAppliedJobIds.has(job.id) && job.status === 'APPLIED'
     }),
-    withNextAction: allJobs.filter(job => job.nextAction && ['SAVED', 'APPLIED', 'INTERVIEW'].includes(job.status)),
-    recentStatusChanges: recentActivities.filter(activity => {
-      // Show activities from last 7 days
-      const daysSinceActivity = Math.floor((today.getTime() - activity.createdAt.getTime()) / (1000 * 60 * 60 * 24))
-      return daysSinceActivity <= 7
-    }).slice(0, 5), // Show 5 most recent
+    withNextAction: jobs.filter(job => job.nextAction), // Already filtered to active statuses
+    recentStatusChanges: recentActivities.slice(0, 5), // Already filtered by date in query
   }
 
   const totalNeedingAttention =
@@ -141,30 +154,24 @@ export default async function TodayPage() {
   })
 
   return (
-    <div className="size-full flex">
-      <Sidebar />
-      <SimpleTopBar showEmailNotification={!emailIntegration} />
-      <div
-        className="flex-1 flex flex-col relative z-10"
-        style={{ marginLeft: '4rem' }}
-      >
-        <div className="flex-1 overflow-auto pt-[88px]">
-          <div className="max-w-[1600px] mx-auto px-8 py-6">
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold">Today</h1>
-              <p className="text-foreground/60 mt-1">
-                {totalNeedingAttention === 0
-                  ? "You're all caught up!"
-                  : `${totalNeedingAttention} ${
-                      totalNeedingAttention === 1 ? 'job needs' : 'jobs need'
-                    } attention`}
-              </p>
-            </div>
+    <AppShell showEmailNotification={!emailIntegration}>
+      <div className="flex-1 overflow-auto">
+        <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-4 md:py-6">
+          <div className="mb-6 md:mb-8">
+            <h1 className="text-2xl md:text-3xl font-bold">Today</h1>
+            <p className="text-foreground/60 mt-1 text-sm md:text-base">
+              {totalNeedingAttention === 0
+                ? "You're all caught up!"
+                : `${totalNeedingAttention} ${
+                    totalNeedingAttention === 1 ? 'job needs' : 'jobs need'
+                  } attention`}
+            </p>
+          </div>
 
-            {/* Status Counter Widget */}
-            <div className="mb-8">
-              <StatusStats counts={statusCounts} />
-            </div>
+          {/* Status Counter Widget */}
+          <div className="mb-6 md:mb-8">
+            <StatusStats counts={statusCountsMap} />
+          </div>
 
             <div className="space-y-8">
               {/* Recent Status Changes */}
@@ -341,9 +348,8 @@ export default async function TodayPage() {
             </div>
           )}
         </div>
-        </div>
       </div>
-    </div>
-    </div>
-    )
-  }
+      </div>
+    </AppShell>
+  )
+}

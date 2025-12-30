@@ -8,11 +8,18 @@ export function ExtensionPopup() {
   const [isOpen, setIsOpen] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
 
-  // Show popup when component mounts (only once)
+  // Show popup when component mounts (only once on first visit to jobs page)
   useEffect(() => {
-    const hasSeenPopup = localStorage.getItem('trackd-extension-popup-dismissed')
+    const hasSeenPopup = localStorage.getItem('trackd-extension-popup-seen')
+    console.log('[ExtensionPopup] Checking localStorage:', { hasSeenPopup })
+    
     if (!hasSeenPopup) {
+      console.log('[ExtensionPopup] Showing popup and marking as seen')
       setIsOpen(true)
+      // Mark as seen immediately so it doesn't show again
+      localStorage.setItem('trackd-extension-popup-seen', 'true')
+    } else {
+      console.log('[ExtensionPopup] Popup already seen, not showing')
     }
   }, [])
 
@@ -39,12 +46,10 @@ export function ExtensionPopup() {
 
   const handleDismiss = () => {
     setIsOpen(false)
-    localStorage.setItem('trackd-extension-popup-dismissed', 'true')
   }
 
   const handleCloseGuide = () => {
     setShowGuide(false)
-    localStorage.setItem('trackd-extension-popup-dismissed', 'true')
   }
 
   if (!isOpen && !showGuide) return null
@@ -52,9 +57,9 @@ export function ExtensionPopup() {
   if (showGuide) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-card border border-border rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
-          <div className="sticky top-0 bg-card border-b border-border px-6 py-4 flex items-center justify-between">
-            <h2 className="text-2xl font-bold">How to Install & Use the Extension</h2>
+        <div className="bg-card border border-border rounded-lg max-w-lg w-full shadow-xl">
+          <div className="bg-card border-b border-border px-6 py-4 flex items-center justify-between">
+            <h2 className="text-xl font-bold">Setup Instructions</h2>
             <button
               onClick={handleCloseGuide}
               className="text-muted-foreground hover:text-foreground transition-colors"
@@ -63,88 +68,50 @@ export function ExtensionPopup() {
             </button>
           </div>
 
-          <div className="p-6 space-y-6">
-            {/* Step 1 */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+          <div className="p-6 space-y-5">
+            {/* Step 1: Install Extension */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="size-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                   <span className="text-primary font-semibold text-sm">1</span>
                 </div>
-                <h3 className="font-semibold text-lg">Install the Extension</h3>
+                <h3 className="font-semibold">Install Extension</h3>
               </div>
-              <div className="pl-11 space-y-2 text-sm text-muted-foreground">
-                <p><strong>Chrome/Edge/Brave:</strong></p>
-                <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>Open <code className="bg-accent px-1 rounded">chrome://extensions/</code></li>
-                  <li>Enable "Developer mode" (toggle in top right)</li>
-                  <li>Click "Load unpacked"</li>
-                  <li>Select the extracted extension folder</li>
-                </ul>
-                <p className="mt-3"><strong>Firefox:</strong></p>
-                <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>Open <code className="bg-accent px-1 rounded">about:debugging#/runtime/this-firefox</code></li>
-                  <li>Click "Load Temporary Add-on"</li>
-                  <li>Select the <code className="bg-accent px-1 rounded">manifest.json</code> file</li>
-                </ul>
+              <div className="pl-9 text-sm text-muted-foreground">
+                <p>Open <code className="bg-accent px-1.5 py-0.5 rounded text-xs">chrome://extensions/</code></p>
+                <p>Enable "Developer mode" → Click "Load unpacked" → Select the extracted folder</p>
               </div>
             </div>
 
-            {/* Step 2 */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+            {/* Step 2: Get API Key */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="size-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                   <span className="text-primary font-semibold text-sm">2</span>
                 </div>
-                <h3 className="font-semibold text-lg">Navigate to a Job Posting</h3>
+                <h3 className="font-semibold">Get Your API Key</h3>
               </div>
-              <div className="pl-11 space-y-2 text-sm text-muted-foreground">
-                <p>Go to any job posting on LinkedIn, Indeed, or other job sites.</p>
-                <div className="border border-border rounded-lg p-4 bg-accent/30 mt-3">
-                  <p className="text-xs text-muted-foreground italic">
-                    📸 Screenshot placeholder: Job posting page
-                  </p>
-                </div>
+              <div className="pl-9 text-sm text-muted-foreground space-y-2">
+                <p>Go to <strong>Settings → Integrations</strong> in the web app</p>
+                <p>Click <strong>"Generate Extension Key"</strong> and copy it</p>
               </div>
             </div>
 
-            {/* Step 3 */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+            {/* Step 3: Connect Extension */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="size-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                   <span className="text-primary font-semibold text-sm">3</span>
                 </div>
-                <h3 className="font-semibold text-lg">Click the Extension Icon</h3>
+                <h3 className="font-semibold">Connect Extension</h3>
               </div>
-              <div className="pl-11 space-y-2 text-sm text-muted-foreground">
-                <p>Click the Trackd extension icon in your browser toolbar.</p>
-                <div className="border border-border rounded-lg p-4 bg-accent/30 mt-3">
-                  <p className="text-xs text-muted-foreground italic">
-                    📸 Screenshot placeholder: Extension popup showing job details
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Step 4 */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <span className="text-primary font-semibold text-sm">4</span>
-                </div>
-                <h3 className="font-semibold text-lg">Review & Save</h3>
-              </div>
-              <div className="pl-11 space-y-2 text-sm text-muted-foreground">
-                <p>Review the extracted job details, edit if needed, and click "Save Job". The job will appear in your tracker immediately!</p>
-                <div className="border border-border rounded-lg p-4 bg-accent/30 mt-3">
-                  <p className="text-xs text-muted-foreground italic">
-                    📸 Screenshot placeholder: Extension popup with save button
-                  </p>
-                </div>
+              <div className="pl-9 text-sm text-muted-foreground">
+                <p>Click the Trackd extension icon → Paste your key → Click "Connect"</p>
               </div>
             </div>
 
             <div className="pt-4 border-t border-border">
-              <Button onClick={handleCloseGuide} className="w-full" size="lg">
+              <Button onClick={handleCloseGuide} className="w-full">
                 Got it
               </Button>
             </div>

@@ -120,7 +120,26 @@ export function KanbanBoard({ columns, jobsByStatus }: KanbanBoardProps) {
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="grid grid-cols-3 xl:grid-cols-6 gap-4">
+      {/* Mobile: Horizontal scrollable columns */}
+      <div className="md:hidden overflow-x-auto mobile-scroll-x pb-4 -mx-4 px-4">
+        <div className="flex gap-4" style={{ width: `${columns.length * 280}px` }}>
+          {columns.map((column) => (
+            <div key={column.status} className="w-[260px] flex-shrink-0 snap-start">
+              <DroppableColumn
+                status={column.status}
+                label={column.label}
+                color={column.color}
+                jobs={jobsByStatus[column.status]}
+                isDragging={isDragging}
+                isMobile={true}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Desktop: Grid layout */}
+      <div className="hidden md:grid md:grid-cols-3 xl:grid-cols-6 gap-4">
         {columns.map((column) => (
           <div key={column.status} className="w-full">
             <DroppableColumn
@@ -129,6 +148,7 @@ export function KanbanBoard({ columns, jobsByStatus }: KanbanBoardProps) {
               color={column.color}
               jobs={jobsByStatus[column.status]}
               isDragging={isDragging}
+              isMobile={false}
             />
           </div>
         ))}
@@ -152,9 +172,10 @@ interface DroppableColumnProps {
   color: string
   jobs: (Job & { activities: Activity[] })[]
   isDragging: boolean
+  isMobile?: boolean
 }
 
-function DroppableColumn({ status, label, color, jobs, isDragging }: DroppableColumnProps) {
+function DroppableColumn({ status, label, color, jobs, isDragging, isMobile }: DroppableColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: status,
     data: {
@@ -177,12 +198,14 @@ function DroppableColumn({ status, label, color, jobs, isDragging }: DroppableCo
 
   return (
     <div ref={setNodeRef} className="flex flex-col h-full w-full transition-all">
-      <div className={`${color} border border-border rounded-t-lg px-4 py-3 font-semibold flex items-center justify-between ${showDropIndicator ? 'ring-2 ring-primary' : ''}`}>
-        <span>{label}</span>
-        <span className="text-sm font-normal opacity-70">{jobs.length}</span>
+      <div className={`${color} border border-border rounded-t-lg px-3 md:px-4 py-2 md:py-3 font-semibold flex items-center justify-between ${showDropIndicator ? 'ring-2 ring-primary' : ''}`}>
+        <span className="text-sm md:text-base">{label}</span>
+        <span className="text-xs md:text-sm font-normal opacity-70">{jobs.length}</span>
       </div>
       <div
-        className={`flex-1 border-x border-b border-border rounded-b-lg p-2 ${contentBgColor} h-[calc(100vh-250px)] overflow-y-auto space-y-2 ${
+        className={`flex-1 border-x border-b border-border rounded-b-lg p-2 ${contentBgColor} ${
+          isMobile ? 'h-[60vh] min-h-[300px]' : 'h-[calc(100vh-250px)]'
+        } overflow-y-auto space-y-2 ${
           isDragging ? 'transition-colors' : ''
         } ${showDropIndicator ? 'bg-primary/10' : ''}`}
       >
@@ -190,7 +213,7 @@ function DroppableColumn({ status, label, color, jobs, isDragging }: DroppableCo
           <DraggableCard key={job.id} job={job} />
         ))}
         {jobs.length === 0 && (
-          <div className="text-center py-8 text-sm text-foreground/40">
+          <div className="text-center py-6 md:py-8 text-xs md:text-sm text-foreground/40">
             {isDragging && showDropIndicator ? 'Drop here' : 'No jobs'}
           </div>
         )}

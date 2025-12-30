@@ -11,8 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useState, useMemo, useCallback } from 'react'
-import { AddJobModal } from '@/components/jobs/add-job-modal'
-import { AddJobFromUrlModal } from '@/components/jobs/add-job-from-url-modal'
+import dynamic from 'next/dynamic'
 import { JobActionsMenu } from '@/components/jobs/job-actions-menu'
 import { StatusDropdown } from '@/components/jobs/status-dropdown'
 import { ApplicationsHeader } from '@/components/jobs/applications-header'
@@ -20,7 +19,17 @@ import { EmptyState } from '@/components/jobs/empty-state'
 import { ExtensionPopup } from '@/components/jobs/extension-popup'
 import { Tooltip } from '@/components/ui/tooltip'
 import { STATUS_LABELS } from '@/lib/constants'
+import { JobCardMobile } from '@/components/jobs/job-card-mobile'
 import Link from 'next/link'
+
+// Lazy load modals since they're not immediately visible
+const AddJobModal = dynamic(() => import('@/components/jobs/add-job-modal').then(mod => ({ default: mod.AddJobModal })), {
+  ssr: false,
+})
+
+const AddJobFromUrlModal = dynamic(() => import('@/components/jobs/add-job-from-url-modal').then(mod => ({ default: mod.AddJobFromUrlModal })), {
+  ssr: false,
+})
 
 // Status badge styling
 const statusStyles = {
@@ -164,7 +173,9 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
         isOpen={isAddUrlModalOpen}
         onClose={() => setIsAddUrlModalOpen(false)}
       />
-      {jobs.length === 0 && <ExtensionPopup />}
+      
+      {/* Extension Popup - show for first-time users */}
+      <ExtensionPopup />
 
       {/* Applications Header with Tabs */}
       <ApplicationsHeader
@@ -198,8 +209,17 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
               </p>
             </div>
           ) : (
-            <div className="border border-border rounded-lg bg-card overflow-hidden shadow-md">
-              <Table>
+            <>
+              {/* Mobile: Card View */}
+              <div className="md:hidden space-y-3">
+                {filteredJobs.map((job) => (
+                  <JobCardMobile key={job.id} job={job} />
+                ))}
+              </div>
+
+              {/* Desktop: Table View */}
+              <div className="hidden md:block border border-border rounded-lg bg-card overflow-hidden shadow-md">
+                <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent border-b-2 border-border bg-muted/30">
                     <TableHead className="text-muted-foreground font-bold text-xs uppercase tracking-wider py-2">
@@ -297,7 +317,8 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                   ))}
                 </TableBody>
               </Table>
-            </div>
+              </div>
+            </>
           )}
       </div>
     </>

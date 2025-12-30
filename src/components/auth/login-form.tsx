@@ -24,7 +24,10 @@ export function LoginForm({ next }: LoginFormProps) {
     setIsLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithOAuth({
+    console.log('Starting Google OAuth sign in...')
+    console.log('Redirect URL:', `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`)
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(
@@ -33,9 +36,22 @@ export function LoginForm({ next }: LoginFormProps) {
       },
     })
 
+    console.log('OAuth response:', { data, error })
+
     if (error) {
+      console.error('OAuth error:', error)
       setError(error.message)
       setIsLoading(false)
+    } else {
+      // If successful, the browser should redirect automatically
+      // If data.url exists, it means Supabase returned a redirect URL
+      if (data?.url) {
+        console.log('Redirecting to:', data.url)
+        window.location.href = data.url
+      } else {
+        console.warn('No redirect URL returned from OAuth')
+        setIsLoading(false)
+      }
     }
   }
 
@@ -44,7 +60,7 @@ export function LoginForm({ next }: LoginFormProps) {
     setIsLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
@@ -52,8 +68,15 @@ export function LoginForm({ next }: LoginFormProps) {
     if (error) {
       setError(error.message)
       setIsLoading(false)
-    } else {
-      router.push(next)
+    } else if (data.user) {
+      // Check if user has completed onboarding
+      const hasCompletedOnboarding =
+        data.user.user_metadata &&
+        (data.user.user_metadata as Record<string, unknown>)['onboarding_completed'] === true
+
+      // Redirect to onboarding if not completed, otherwise to the requested page
+      const redirectTo = hasCompletedOnboarding ? next : '/onboarding'
+      router.push(redirectTo)
       router.refresh()
     }
   }

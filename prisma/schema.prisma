@@ -119,6 +119,7 @@ model Activity {
 
   @@index([jobId, createdAt])
   @@index([userId, createdAt])
+  @@index([userId, type, createdAt]) // For filtering by type and date (used in /today page)
 }
 
 enum EmailProvider {
@@ -159,6 +160,7 @@ model EmailIntegration {
   updatedAt    DateTime     @updatedAt
 
   @@index([userId])
+  @@index([userId, isActive]) // For filtering by active status
 }
 
 model ExtensionKey {

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { updateProfile } from './actions'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300 // Revalidate every 5 minutes (profile changes less frequently)
 
 export default async function ProfilePage() {
   const user = await requireAuth()

@@ -3,8 +3,6 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutGrid,
-  Kanban,
   FolderOpen,
   Settings,
 } from 'lucide-react'
@@ -15,15 +13,14 @@ export function Sidebar() {
   const pathname = usePathname()
 
   const navItems = [
-    { href: '/today', icon: LayoutGrid, label: 'Today' },
-    { href: '/jobs', icon: FolderOpen, label: 'All Jobs' },
-    { href: '/board', icon: Kanban, label: 'Board' },
+    { href: '/jobs', icon: FolderOpen, label: 'Jobs' },
   ]
 
   return (
     <aside
       className={cn(
-        'bg-card border-r-2 border-border flex flex-col py-4 fixed left-0 top-[72px] h-[calc(100vh-72px)] w-16 shadow-xl z-20'
+        'hidden md:flex',
+        'bg-card border-r-2 border-border flex-col py-4 fixed left-0 top-[72px] h-[calc(100vh-72px)] w-16 shadow-xl z-20'
       )}
     >
       {/* Navigation Icons */}

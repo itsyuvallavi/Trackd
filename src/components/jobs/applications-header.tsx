@@ -61,21 +61,22 @@ export function ApplicationsHeader({
   return (
     <>
       {/* Title Section */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Applications</h1>
-        <p className="text-foreground/60 mt-1">View all of your job applications.</p>
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-2xl md:text-3xl font-bold">Applications</h1>
+        <p className="text-foreground/60 mt-1 text-sm md:text-base">View all of your job applications.</p>
       </div>
 
       {/* Tabs */}
-      <div className="mb-6 border-b border-border">
-        <div className="flex items-center justify-between gap-6">
-          <div className="flex gap-6">
+      <div className="mb-6 border-b border-border overflow-x-auto scrollbar-hide">
+        <div className="flex items-center justify-between gap-4 min-w-max md:min-w-0">
+          <div className="flex gap-4 md:gap-6">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => onStatusChange(tab.id)}
                 className={cn(
-                  'pb-4 px-2 text-sm font-semibold transition-all duration-200 relative whitespace-nowrap',
+                  'pb-3 md:pb-4 px-1 md:px-2 text-xs md:text-sm font-semibold transition-all duration-200 relative whitespace-nowrap',
+                  'min-h-[44px] flex items-center',
                   activeStatus === tab.id
                     ? 'text-primary'
                     : 'text-muted-foreground hover:text-foreground'
@@ -83,7 +84,7 @@ export function ApplicationsHeader({
               >
                 <span>{tab.label}</span>
                 <span className={cn(
-                  "ml-2 px-2 py-0.5 rounded-full text-xs font-medium",
+                  "ml-1 md:ml-2 px-1.5 md:px-2 py-0.5 rounded-full text-xs font-medium",
                   activeStatus === tab.id
                     ? "bg-primary/10 text-primary"
                     : "bg-muted text-muted-foreground"
@@ -94,10 +95,10 @@ export function ApplicationsHeader({
               </button>
             ))}
           </div>
-          
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2">
-            <AddJobDropdown 
+
+          {/* Action Buttons - Hidden on mobile, moved elsewhere */}
+          <div className="hidden md:flex items-center gap-2">
+            <AddJobDropdown
               onManualAdd={onManualAdd}
               onUrlAdd={onUrlAdd}
             />
@@ -115,9 +116,9 @@ export function ApplicationsHeader({
       </div>
 
       {/* Search and Filters Row */}
-      <div className="mb-8 flex items-center justify-between gap-3">
-        {/* Search */}
-        <div className="flex-1 max-w-sm relative">
+      <div className="mb-6 md:mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        {/* Search - Full width on mobile */}
+        <div className="w-full md:flex-1 md:max-w-sm relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
             type="search"
@@ -127,26 +128,31 @@ export function ApplicationsHeader({
               setLocalSearch(e.target.value)
               onSearchChange(e.target.value)
             }}
-            className="pl-9 h-10 bg-background border-border"
+            className="pl-9 h-11 md:h-10 bg-background border-border"
           />
         </div>
 
-        {/* Right Side: Date Range Picker and Filters */}
-        <div className="flex items-center gap-3">
-          {/* Date Range Picker */}
+        {/* Filters Row */}
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
           <DateRangePicker
             value={dateRange}
             onChange={onDateRangeChange}
           />
-
-          {/* Filters Button */}
           <Button
             variant="outline"
-            className="h-10 px-4 gap-2 text-foreground hover:bg-accent"
+            className="h-11 md:h-10 px-4 gap-2 text-foreground hover:bg-accent whitespace-nowrap"
           >
             <SlidersHorizontal className="size-4" />
             <span className="text-sm">Filters</span>
           </Button>
+
+          {/* Add button visible on mobile */}
+          <div className="md:hidden">
+            <AddJobDropdown
+              onManualAdd={onManualAdd}
+              onUrlAdd={onUrlAdd}
+            />
+          </div>
         </div>
       </div>
     </>

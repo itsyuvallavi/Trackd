@@ -13,7 +13,10 @@ function createPrismaClient() {
   if (!globalForPrisma.pool) {
     globalForPrisma.pool = new Pool({
       connectionString,
-      max: 5,
+      max: 10, // Increased from 5 for production use
+      min: 2,  // Keep minimum connections warm
+      idleTimeoutMillis: 30000, // Close idle connections after 30s
+      connectionTimeoutMillis: 5000, // Timeout if can't acquire connection in 5s
     })
   }
 

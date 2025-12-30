@@ -7,11 +7,13 @@ import { SpeedInsights } from "@vercel/speed-insights/next"
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: 'swap', // Better perceived performance by showing fallback font first
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: 'swap', // Better perceived performance by showing fallback font first
 });
 
 export const metadata: Metadata = {

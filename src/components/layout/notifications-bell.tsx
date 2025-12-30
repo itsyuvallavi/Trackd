@@ -84,6 +84,18 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
 
 
   const hasNotifications = unreadCount > 0 || notifications.length > 0 || showEmailNotification
+  // Show red dot if there are unread notifications OR if email notification should be shown
+  const showRedDot = unreadCount > 0 || showEmailNotification
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[NotificationsBell] Debug:', {
+      showEmailNotification,
+      unreadCount,
+      showRedDot,
+      notificationsCount: notifications.length
+    })
+  }, [showEmailNotification, unreadCount, showRedDot, notifications.length])
 
   return (
     <div className="relative">
@@ -95,7 +107,7 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
           onClick={() => setIsOpen((prev) => !prev)}
         >
           <Bell className="size-5" />
-          {unreadCount > 0 && (
+          {showRedDot && (
             <span className="absolute -top-0.5 -right-0.5 inline-flex h-2.5 w-2.5 rounded-full bg-error ring-2 ring-card" />
           )}
         </Button>

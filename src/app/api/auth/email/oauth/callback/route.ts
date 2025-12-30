@@ -12,7 +12,12 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get('error')
   const stateParam = searchParams.get('state')
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  // Get base URL from environment variable or request origin
+  // In production, NEXT_PUBLIC_APP_URL should be set in Vercel environment variables
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+    (process.env.NODE_ENV === 'production' 
+      ? request.nextUrl.origin 
+      : 'http://localhost:3000')
   
   // Helper to create absolute redirect URLs
   const createRedirectUrl = (path: string, params?: Record<string, string>) => {
