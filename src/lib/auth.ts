@@ -34,11 +34,25 @@ export async function requireAuth() {
 
   // Ensure Profile exists (safety check after removing the trigger)
   try {
+    // Check if profile exists by id
     const existingProfile = await prisma.profile.findUnique({
-      where: { id: user.id },
+      where: { id: user.id }
     })
 
     if (!existingProfile) {
+      // Check if there's an orphaned profile with this email (from deleted user)
+      const orphanedProfile = await prisma.profile.findUnique({
+        where: { email: user.email ?? '' }
+      })
+
+      if (orphanedProfile) {
+        // Delete the orphaned profile first
+        await prisma.profile.delete({
+          where: { id: orphanedProfile.id }
+        })
+      }
+
+      // Create new profile
       await prisma.profile.create({
         data: {
           id: user.id,
