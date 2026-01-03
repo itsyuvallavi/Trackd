@@ -101,7 +101,7 @@ export function AmbiguousMatchResolver({
       INTERVIEW: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
       OFFER: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
       REJECTED: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-      GHOSTED: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+      ARCHIVED: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
     }
     return colors[status] || colors.SAVED
   }

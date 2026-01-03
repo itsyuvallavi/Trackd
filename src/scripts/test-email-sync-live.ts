@@ -143,7 +143,7 @@ function formatStatus(status: JobStatus): string {
     INTERVIEW: 'yellow',
     OFFER: 'green',
     REJECTED: 'red',
-    GHOSTED: 'magenta',
+    ARCHIVED: 'magenta',
   }
   return colorize(status, colors[status])
 }
@@ -713,7 +713,7 @@ function shouldUpdateStatus(currentStatus: JobStatus, suggestedStatus: JobStatus
     INTERVIEW: 2,
     OFFER: 3,
     REJECTED: 99,
-    GHOSTED: 99,
+    ARCHIVED: 99,
   }
 
   const currentLevel = statusHierarchy[currentStatus]

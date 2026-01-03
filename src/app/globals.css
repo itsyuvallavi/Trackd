@@ -37,7 +37,7 @@
   --success-bg: #D1FAE5;
   --success-text: #065F46;
 
-  --warning: #D97706;              /* Amber orange - warning, overdue (GHOSTED) */
+  --warning: #D97706;              /* Amber orange - warning, overdue (ARCHIVED) */
   --warning-bg: #FEF3C7;
   --warning-text: #92400E;
 
@@ -259,6 +259,28 @@ body {
   }
 }
 
+@keyframes slideInFromRightFull {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInFromRightSmooth {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 @keyframes slideInFromLeft {
   from {
     opacity: 0;
@@ -291,6 +313,12 @@ body {
 
 .slide-in-from-right-4 {
   animation-name: slideInFromRight;
+}
+
+.slide-in-from-right-full {
+  animation-name: slideInFromRightSmooth;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); /* Smooth ease-out */
+  animation-fill-mode: both;
 }
 
 .slide-in-from-left-4 {

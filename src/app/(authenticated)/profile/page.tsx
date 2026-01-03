@@ -2,6 +2,7 @@ import { AppShell } from '@/components/layout/app-shell'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { updateProfile } from './actions'
+import { ThemeSelector } from '@/components/profile/theme-selector'
 
 export const revalidate = 300 // Revalidate every 5 minutes (profile changes less frequently)
 
@@ -39,18 +40,25 @@ export default async function ProfilePage() {
             Manage your basic account details.
           </p>
 
-          <div className="rounded-xl border border-border bg-card/80 backdrop-blur px-6 py-6 space-y-6 shadow-sm">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase mb-1">
-                Email
-              </p>
-              <p className="text-sm text-foreground">{profile.email}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Email is managed via Supabase Auth (Google or email/password).
-              </p>
-            </div>
+                 <div className="rounded-xl border border-border bg-card/80 backdrop-blur px-6 py-6 space-y-6 shadow-sm">
+                   <div>
+                     <p className="text-xs font-medium text-muted-foreground uppercase mb-1">
+                       Email
+                     </p>
+                     <p className="text-sm text-foreground">{profile.email}</p>
+                     <p className="text-xs text-muted-foreground mt-1">
+                       Email is managed via Supabase Auth (Google or email/password).
+                     </p>
+                   </div>
 
-            <form action={updateProfile} className="space-y-5">
+                   <div>
+                     <p className="text-xs font-medium text-muted-foreground uppercase mb-2">
+                       Theme
+                     </p>
+                     <ThemeSelector />
+                   </div>
+
+                   <form action={updateProfile} className="space-y-5">
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-foreground">
                   Name

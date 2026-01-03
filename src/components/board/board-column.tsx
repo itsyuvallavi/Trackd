@@ -16,7 +16,7 @@ export function BoardColumn({ status, label, color, jobs }: BoardColumnProps) {
     'INTERVIEW': 'bg-purple-100/50 dark:bg-purple-900/20',
     'OFFER': 'bg-success-bg/50',
     'REJECTED': 'bg-error-bg/50',
-    'GHOSTED': 'bg-warning-bg/50',
+    'ARCHIVED': 'bg-warning-bg/50',
   }[status] || 'bg-muted/50'
 
   return (

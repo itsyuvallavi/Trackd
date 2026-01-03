@@ -6,7 +6,7 @@ interface StatusStatsProps {
   activeStatus?: JobStatus
 }
 
-const STATUS_ORDER: JobStatus[] = ['SAVED', 'APPLIED', 'INTERVIEW', 'OFFER', 'REJECTED', 'GHOSTED']
+const STATUS_ORDER: JobStatus[] = ['SAVED', 'APPLIED', 'INTERVIEW', 'OFFER', 'REJECTED', 'ARCHIVED']
 
 export function StatusStats({ counts, activeStatus }: StatusStatsProps) {
   const totalJobs = Object.values(counts).reduce((sum, count) => sum + count, 0)

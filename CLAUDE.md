@@ -103,7 +103,7 @@ my-app/
 ### Planned Routes
 - `/` - Landing/dashboard
 - `/today` - What needs attention today (overdue, due today, due in 7 days)
-- `/board` - Kanban view (SAVED → APPLIED → INTERVIEW → OFFER → REJECTED → GHOSTED)
+- `/board` - Kanban view (SAVED → APPLIED → INTERVIEW → OFFER → REJECTED → ARCHIVED)
 - `/jobs` - High-density table view with sort/filter
 - `/jobs/new-url` - Paste job URL to scrape and save
 - `/jobs/:id` - Job detail with timeline and notes
@@ -117,7 +117,7 @@ my-app/
 ## Data Model (Prisma)
 
 ### Core Models
-- **Job** - Job posting with status (SAVED, APPLIED, INTERVIEW, OFFER, REJECTED, GHOSTED)
+- **Job** - Job posting with status (SAVED, APPLIED, INTERVIEW, OFFER, REJECTED, ARCHIVED)
   - Includes: title, company, location, source, url, priority (A/B/C), dates, nextAction, tags, notes, salary, contact info
 - **Activity** - Timeline events (NOTE, STATUS_CHANGE, EMAIL_UPDATE, INTERVIEW, REJECTION, OFFER)
   - Tracks status transitions and email-triggered updates

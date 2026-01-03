@@ -19,7 +19,7 @@ function getStatusBackgroundColor(status: JobStatus): string {
     'INTERVIEW': 'bg-purple-100/50 dark:bg-purple-900/20',
     'OFFER': 'bg-success-bg/50',
     'REJECTED': 'bg-error-bg/50',
-    'GHOSTED': 'bg-warning-bg/50',
+    'ARCHIVED': 'bg-warning-bg/50',
   }
   return statusBgMap[status] || 'bg-muted/50'
 }
@@ -107,7 +107,7 @@ export default async function TodayPage() {
     INTERVIEW: 0,
     OFFER: 0,
     REJECTED: 0,
-    GHOSTED: 0,
+    ARCHIVED: 0,
   }
 
   statusCounts.forEach((item) => {

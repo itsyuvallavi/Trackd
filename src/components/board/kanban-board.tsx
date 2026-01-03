@@ -56,7 +56,7 @@ export function KanbanBoard({ columns, jobsByStatus }: KanbanBoardProps) {
     }
     // Priority 2: Check if over.id is a valid status (column ID)
     else {
-      const validStatuses: JobStatus[] = ['SAVED', 'APPLIED', 'INTERVIEW', 'OFFER', 'REJECTED', 'GHOSTED']
+      const validStatuses: JobStatus[] = ['SAVED', 'APPLIED', 'INTERVIEW', 'OFFER', 'REJECTED', 'ARCHIVED']
       if (validStatuses.includes(over.id as JobStatus)) {
         newStatus = over.id as JobStatus
       }
@@ -193,7 +193,7 @@ function DroppableColumn({ status, label, color, jobs, isDragging, isMobile }: D
     'INTERVIEW': 'bg-purple-100/50 dark:bg-purple-900/20',
     'OFFER': 'bg-success-bg/50',
     'REJECTED': 'bg-error-bg/50',
-    'GHOSTED': 'bg-warning-bg/50',
+    'ARCHIVED': 'bg-warning-bg/50',
   }[status] || 'bg-muted/50'
 
   return (

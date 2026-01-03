@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { User, Settings, LogOut } from 'lucide-react'
 import Link from 'next/link'
@@ -13,6 +13,7 @@ export function UserProfileMenu() {
   const [email, setEmail] = useState<string>('')
   const router = useRouter()
   const supabase = createClient()
+  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let isMounted = true
@@ -51,6 +52,32 @@ export function UserProfileMenu() {
     }
   }, [supabase])
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+
+    // Close on Escape key
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleEscape)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [isOpen])
+
   async function handleLogout() {
     await supabase.auth.signOut()
     setIsOpen(false)
@@ -59,7 +86,7 @@ export function UserProfileMenu() {
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={menuRef}>
       {/* Profile Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
@@ -70,14 +97,8 @@ export function UserProfileMenu() {
 
       {isOpen && (
         <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 z-20 bg-black/20 backdrop-blur-[2px]"
-            onClick={() => setIsOpen(false)}
-          />
-
           {/* Dropdown Menu */}
-          <div className="absolute right-0 mt-2 w-56 bg-card border border-border rounded-lg shadow-xl z-30 py-2 animate-in slide-in-from-top-2 fade-in duration-200">
+          <div className="absolute right-0 mt-2 w-56 bg-card border border-border rounded-lg shadow-xl z-50 py-2 animate-in slide-in-from-top-2 fade-in duration-200">
             {/* User Info */}
             <div className="px-4 py-3 border-b border-border">
               <p className="text-sm font-medium text-foreground truncate">

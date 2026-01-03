@@ -12,7 +12,7 @@ interface StatusDropdownProps {
   currentStatus: JobStatus
 }
 
-const statusOptions: JobStatus[] = ['SAVED', 'APPLIED', 'INTERVIEW', 'OFFER', 'REJECTED', 'GHOSTED']
+const statusOptions: JobStatus[] = ['SAVED', 'APPLIED', 'INTERVIEW', 'OFFER', 'REJECTED', 'ARCHIVED']
 
 export function StatusDropdown({ jobId, currentStatus }: StatusDropdownProps) {
   const router = useRouter()

@@ -1,6 +1,6 @@
 'use client'
 
-import { Search, StickyNote } from 'lucide-react'
+import { Search, StickyNote, CheckCircle2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -20,6 +20,8 @@ import { ExtensionPopup } from '@/components/jobs/extension-popup'
 import { Tooltip } from '@/components/ui/tooltip'
 import { STATUS_LABELS } from '@/lib/constants'
 import { JobCardMobile } from '@/components/jobs/job-card-mobile'
+import { useColumnVisibility, type ColumnKey } from '@/components/jobs/column-visibility-settings'
+import { cn } from '@/lib/utils'
 import Link from 'next/link'
 
 // Lazy load modals since they're not immediately visible
@@ -38,7 +40,7 @@ const statusStyles = {
   INTERVIEW: 'bg-violet-500/10 text-violet-300 border-violet-500/20',
   OFFER: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
   REJECTED: 'bg-red-600/10 text-red-300 border-red-600/20',
-  GHOSTED: 'bg-amber-600/10 text-amber-300 border-amber-600/20',
+  ARCHIVED: 'bg-amber-600/10 text-amber-300 border-amber-600/20',
 }
 
 // Status color indicators (for left side of job title) - more unique shades
@@ -48,7 +50,7 @@ const statusColorIndicators = {
   INTERVIEW: 'bg-violet-500',      // Violet purple
   OFFER: 'bg-emerald-500',         // Emerald green
   REJECTED: 'bg-red-600',          // Crimson red
-  GHOSTED: 'bg-amber-600',         // Amber orange
+  ARCHIVED: 'bg-amber-600',         // Amber orange
 }
 
 interface Job {
@@ -78,10 +80,19 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeStatus, setActiveStatus] = useState('all')
   const [dateRange, setDateRange] = useState<DateRange>({ from: null, to: null })
+  const { visibleColumns, setVisibleColumns, isHydrated } = useColumnVisibility()
 
   // Filter jobs based on search query, status, and date range
+  // By default, exclude archived and rejected jobs unless explicitly viewing them
   const filteredJobs = useMemo(() => {
-    let filtered = jobs
+    let filtered = jobs.filter(job => {
+      // If viewing "all" (active applications), exclude archived and rejected jobs
+      if (activeStatus === 'all') {
+        return job.status !== 'ARCHIVED' && job.status !== 'REJECTED'
+      }
+      // Otherwise, show jobs matching the selected status
+      return true
+    })
 
     // Filter by status
     if (activeStatus !== 'all') {
@@ -134,7 +145,7 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
     return filtered
   }, [jobs, searchQuery, activeStatus, dateRange])
 
-  // Calculate status counts from all jobs (not filtered)
+  // Calculate status counts from active jobs only (excluding ARCHIVED and REJECTED for "all" count)
   const statusCounts = jobs.reduce((acc, job) => {
     const status = job.status as keyof typeof acc
     if (status in acc) {
@@ -147,8 +158,13 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
     INTERVIEW: 0,
     OFFER: 0,
     REJECTED: 0,
-    GHOSTED: 0,
+    ARCHIVED: 0,
   })
+  
+  // Calculate total active jobs (excluding ARCHIVED and REJECTED)
+  const totalActiveJobs = jobs.filter(job => 
+    job.status !== 'ARCHIVED' && job.status !== 'REJECTED'
+  ).length
 
   // Debounced search handler
   const handleSearchChange = useCallback((query: string) => {
@@ -179,7 +195,7 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
 
       {/* Applications Header with Tabs */}
       <ApplicationsHeader
-            totalJobs={jobs.length}
+            totalJobs={totalActiveJobs}
             statusCounts={statusCounts}
             onSearchChange={handleSearchChange}
             onStatusChange={handleStatusChange}
@@ -189,6 +205,8 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
             dateRange={dateRange}
             onManualAdd={() => setIsAddModalOpen(true)}
             onUrlAdd={() => setIsAddUrlModalOpen(true)}
+            visibleColumns={visibleColumns}
+            onColumnsChange={setVisibleColumns}
           />
 
       {/* Table */}
@@ -222,25 +240,42 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                 <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent border-b border-border">
-                    <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5">
-                      Role
-                    </TableHead>
-                    <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5">
-                      Company
-                    </TableHead>
-                    <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5">
+                    {visibleColumns.has('role') && (
+                      <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5" style={{ width: '250px', minWidth: '250px', maxWidth: '250px' }}>
+                        Role
+                      </TableHead>
+                    )}
+                    {visibleColumns.has('company') && (
+                      <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5" style={{ width: '180px', minWidth: '180px', maxWidth: '180px' }}>
+                        Company
+                      </TableHead>
+                    )}
+                    <TableHead 
+                      className={cn(
+                        "text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5",
+                        (!isHydrated || visibleColumns.has('source')) ? "" : "hidden"
+                      )}
+                      style={{ width: '120px', minWidth: '120px', maxWidth: '120px' }}
+                      suppressHydrationWarning
+                    >
                       Source
                     </TableHead>
-                    <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5 text-center">
-                      Location
-                    </TableHead>
-                    <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5 text-center">
-                      Status
-                    </TableHead>
-                    <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5 text-center" style={{ maxWidth: '200px', width: '200px' }}>
-                      Notes
-                    </TableHead>
-                    <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5 text-center" style={{ width: '64px', minWidth: '64px' }}>
+                    {visibleColumns.has('location') && (
+                      <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5 text-center" style={{ width: '150px', minWidth: '150px', maxWidth: '150px' }}>
+                        Location
+                      </TableHead>
+                    )}
+                    {visibleColumns.has('status') && (
+                      <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5 text-center" style={{ width: '120px', minWidth: '120px', maxWidth: '120px' }}>
+                        Status
+                      </TableHead>
+                    )}
+                    {visibleColumns.has('notes') && (
+                      <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5 text-center" style={{ width: '48px', minWidth: '48px', maxWidth: '48px' }}>
+                        Notes
+                      </TableHead>
+                    )}
+                    <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5 text-center" style={{ width: '64px', minWidth: '64px', maxWidth: '64px' }}>
                       Actions
                     </TableHead>
                   </TableRow>
@@ -251,60 +286,74 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                       key={job.id}
                       className="border-b border-border/50 hover:bg-muted/30 transition-colors"
                     >
-                      <TableCell className="py-1.5">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-0.5 h-4 rounded-full shrink-0 ${statusColorIndicators[job.status as keyof typeof statusColorIndicators]}`} />
-                          {job.title.length > 30 ? (
-                            <Tooltip content={job.title}>
+                      {visibleColumns.has('role') && (
+                        <TableCell className="py-1.5" style={{ width: '250px', minWidth: '250px', maxWidth: '250px' }}>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-0.5 h-4 rounded-full shrink-0 ${statusColorIndicators[job.status as keyof typeof statusColorIndicators]}`} />
+                            {job.title.length > 30 ? (
+                              <Tooltip content={job.title}>
+                                <Link 
+                                  href={`/jobs/${job.id}`}
+                                  className="text-sm font-medium hover:text-primary transition-colors truncate"
+                                >
+                                  {job.title.substring(0, 30)}...
+                                </Link>
+                              </Tooltip>
+                            ) : (
                               <Link 
                                 href={`/jobs/${job.id}`}
-                                className="text-sm font-medium hover:text-primary transition-colors truncate"
+                                className="text-sm font-medium hover:text-primary transition-colors"
                               >
-                                {job.title.substring(0, 30)}...
+                                {job.title}
                               </Link>
-                            </Tooltip>
-                          ) : (
-                            <Link 
-                              href={`/jobs/${job.id}`}
-                              className="text-sm font-medium hover:text-primary transition-colors"
-                            >
-                              {job.title}
-                            </Link>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm font-medium py-1.5">
-                        {job.company}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground py-1.5">
+                            )}
+                          </div>
+                        </TableCell>
+                      )}
+                      {visibleColumns.has('company') && (
+                        <TableCell className="text-sm font-medium py-1.5" style={{ width: '180px', minWidth: '180px', maxWidth: '180px' }}>
+                          {job.company}
+                        </TableCell>
+                      )}
+                      <TableCell 
+                        className={cn(
+                          "text-xs text-muted-foreground py-1.5",
+                          (!isHydrated || visibleColumns.has('source')) ? "" : "hidden"
+                        )}
+                        style={{ width: '120px', minWidth: '120px', maxWidth: '120px' }}
+                        suppressHydrationWarning
+                      >
                         {job.source}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground text-center py-1.5">
-                        {job.location || '-'}
-                      </TableCell>
-                      <TableCell className="text-center py-1.5">
-                        <div className="flex justify-center">
-                          <StatusDropdown 
-                            jobId={job.id} 
-                            currentStatus={job.status as any}
-                          />
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-1.5 text-center" style={{ maxWidth: '200px', width: '200px' }}>
-                        {job.notes ? (
-                          <Tooltip content={job.notes}>
-                            <div className="flex items-center justify-center gap-1.5 cursor-default overflow-hidden">
-                              <StickyNote className="size-3 text-muted-foreground shrink-0" />
-                              <p className="text-xs text-muted-foreground truncate" style={{ maxWidth: '160px' }}>
-                                {job.notes}
-                              </p>
-                            </div>
-                          </Tooltip>
-                        ) : (
-                          <span className="text-xs text-muted-foreground/50">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center py-1.5" style={{ width: '64px', minWidth: '64px' }}>
+                      {visibleColumns.has('location') && (
+                        <TableCell className="text-xs text-muted-foreground text-center py-1.5" style={{ width: '150px', minWidth: '150px', maxWidth: '150px' }}>
+                          {job.location || '-'}
+                        </TableCell>
+                      )}
+                      {visibleColumns.has('status') && (
+                        <TableCell className="text-center py-1.5" style={{ width: '120px', minWidth: '120px', maxWidth: '120px' }}>
+                          <div className="flex justify-center">
+                            <StatusDropdown 
+                              jobId={job.id} 
+                              currentStatus={job.status as any}
+                            />
+                          </div>
+                        </TableCell>
+                      )}
+                      {visibleColumns.has('notes') && (
+                        <TableCell className="py-1.5 text-center" style={{ width: '48px', minWidth: '48px', maxWidth: '48px' }}>
+                          {job.notes ? (
+                            <Tooltip content={job.notes}>
+                              <div className="flex items-center justify-center">
+                                <CheckCircle2 className="size-4 text-muted-foreground hover:text-foreground transition-colors cursor-help" />
+                              </div>
+                            </Tooltip>
+                          ) : (
+                            <span className="text-xs text-muted-foreground/50">-</span>
+                          )}
+                        </TableCell>
+                      )}
+                      <TableCell className="text-center py-1.5" style={{ width: '64px', minWidth: '64px', maxWidth: '64px' }}>
                         <div className="flex justify-center">
                           <JobActionsMenu jobId={job.id} />
                         </div>

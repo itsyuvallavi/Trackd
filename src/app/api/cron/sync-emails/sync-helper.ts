@@ -5,10 +5,62 @@ import { AIClassifier } from '@/lib/ai-email-classifier'
 import { AIJobMatcher } from '@/lib/ai-job-matcher'
 import { ActivityType, JobStatus } from '@prisma/client'
 import { NotificationService } from '@/lib/notification-service'
+import { createHash } from 'crypto'
 
 // Feature flags
 const USE_AI_CLASSIFIER = process.env.ENABLE_AI_CLASSIFICATION === 'true'
 const USE_AI_MATCHING = process.env.ENABLE_AI_MATCHING === 'true'
+
+/**
+ * Create a unique identifier for an email to prevent duplicate processing
+ */
+function createEmailIdentifier(email: { id?: string; subject: string; from: string; date: Date }): string {
+  // Use messageId if available (most reliable)
+  if (email.id && email.id.includes('@') && !email.id.includes('Date.now()')) {
+    return email.id
+  }
+  
+  // Otherwise, create a hash from subject + from + date
+  // Normalize the date to the day (ignore time) to handle timezone differences
+  const dateStr = email.date.toISOString().split('T')[0] // YYYY-MM-DD
+  const hashInput = `${email.subject}|${email.from}|${dateStr}`
+  return createHash('sha256').update(hashInput).digest('hex').substring(0, 32)
+}
+
+/**
+ * Check if an email has already been processed for a specific job
+ */
+async function isEmailAlreadyProcessed(
+  userId: string,
+  jobId: string,
+  emailIdentifier: string
+): Promise<boolean> {
+  // Fetch recent activities for this job and check metadata in memory
+  // This is more reliable than Prisma JSON path queries
+  const recentActivities = await prisma.activity.findMany({
+    where: {
+      userId,
+      jobId,
+      // Only check activities from the last 90 days to limit query size
+      createdAt: {
+        gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+      },
+    },
+    select: {
+      metadata: true,
+    },
+    take: 100, // Limit to most recent 100 activities
+  })
+  
+  // Check if any activity has the same emailIdentifier
+  return recentActivities.some(activity => {
+    if (!activity.metadata || typeof activity.metadata !== 'object') {
+      return false
+    }
+    const metadata = activity.metadata as { emailIdentifier?: string }
+    return metadata.emailIdentifier === emailIdentifier
+  })
+}
 
 /**
  * Sync emails for a specific user (used by cron, doesn't require auth)
@@ -163,6 +215,17 @@ export async function syncEmailsForUser(userId: string) {
           if (matchResult.jobId && classified.suggestedStatus) {
             const job = jobs.find((j) => j.id === matchResult.jobId)
 
+            // Create unique identifier for this email
+            const emailIdentifier = createEmailIdentifier(email)
+            
+            // Check if this email has already been processed for this job
+            const alreadyProcessed = await isEmailAlreadyProcessed(userId, matchResult.jobId, emailIdentifier)
+            
+            if (alreadyProcessed) {
+              console.log(`Skipped duplicate email "${email.subject}" for job ${matchResult.jobId} (already processed)`)
+              continue
+            }
+
             // Only update if it's a status advancement (don't go backwards)
             const shouldUpdate = shouldUpdateStatus(job?.status, classified.suggestedStatus)
 
@@ -177,6 +240,7 @@ export async function syncEmailsForUser(userId: string) {
 
               // Create activity record with AI-extracted metadata
               const activityMetadata: Record<string, unknown> = {
+                emailIdentifier, // Store unique identifier to prevent duplicates
                 emailSubject: email.subject,
                 emailFrom: email.from,
                 emailDate: email.date.toISOString(),
@@ -488,7 +552,7 @@ function shouldUpdateStatus(
     INTERVIEW: 2,
     OFFER: 3,
     REJECTED: 99,
-    GHOSTED: 99,
+    ARCHIVED: 99,
   }
 
   const currentLevel = statusHierarchy[currentStatus]

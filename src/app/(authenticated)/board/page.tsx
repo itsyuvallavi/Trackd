@@ -17,7 +17,7 @@ const COLUMNS: { status: JobStatus; label: string; color: string }[] = [
   { status: 'INTERVIEW', label: 'Interview', color: 'bg-purple-100 dark:bg-purple-900/30' },
   { status: 'OFFER', label: 'Offer', color: 'bg-success-bg' },
   { status: 'REJECTED', label: 'Rejected', color: 'bg-error-bg' },
-  { status: 'GHOSTED', label: 'Ghosted', color: 'bg-warning-bg' },
+  { status: 'ARCHIVED', label: 'Archived', color: 'bg-warning-bg' },
 ]
 
 export default async function BoardPage() {

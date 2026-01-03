@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Search, SlidersHorizontal, Download } from 'lucide-react'
+import { Search, Download } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { Tooltip } from '@/components/ui/tooltip'
 import { AddJobDropdown } from '@/components/jobs/add-job-dropdown'
+import { ColumnVisibilitySettings, type ColumnKey } from '@/components/jobs/column-visibility-settings'
 import { cn } from '@/lib/utils'
 
 interface DateRange {
@@ -22,7 +22,7 @@ interface ApplicationsHeaderProps {
     INTERVIEW: number
     OFFER: number
     REJECTED: number
-    GHOSTED: number
+    ARCHIVED: number
   }
   onSearchChange: (query: string) => void
   onStatusChange: (status: string) => void
@@ -32,6 +32,8 @@ interface ApplicationsHeaderProps {
   dateRange: DateRange
   onManualAdd: () => void
   onUrlAdd: () => void
+  visibleColumns: Set<ColumnKey>
+  onColumnsChange: (columns: Set<ColumnKey>) => void
 }
 
 export function ApplicationsHeader({
@@ -44,18 +46,20 @@ export function ApplicationsHeader({
   activeStatus,
   dateRange,
   onManualAdd,
-  onUrlAdd
+  onUrlAdd,
+  visibleColumns,
+  onColumnsChange
 }: ApplicationsHeaderProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery)
 
   const tabs = [
-    { id: 'all', label: 'All Applications', count: totalJobs },
+    { id: 'all', label: 'Active Applications', count: totalJobs },
     { id: 'SAVED', label: 'Saved', count: statusCounts.SAVED },
     { id: 'APPLIED', label: 'Applied', count: statusCounts.APPLIED },
     { id: 'INTERVIEW', label: 'Interview', count: statusCounts.INTERVIEW },
     { id: 'OFFER', label: 'Offer', count: statusCounts.OFFER },
     { id: 'REJECTED', label: 'Rejected', count: statusCounts.REJECTED },
-    { id: 'GHOSTED', label: 'Ghosted', count: statusCounts.GHOSTED },
+    { id: 'ARCHIVED', label: 'Archived', count: statusCounts.ARCHIVED },
   ]
 
   return (
@@ -134,22 +138,10 @@ export function ApplicationsHeader({
 
         {/* Filters Row */}
         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
-          <DateRangePicker
-            value={dateRange}
-            onChange={onDateRangeChange}
+          <ColumnVisibilitySettings
+            visibleColumns={visibleColumns}
+            onColumnsChange={onColumnsChange}
           />
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 px-3 gap-1.5 text-xs whitespace-nowrap"
-            onClick={() => {
-              // TODO: Implement filter functionality
-              console.log('Filters clicked')
-            }}
-          >
-            <SlidersHorizontal className="size-3.5" />
-            <span>Filters</span>
-          </Button>
 
           {/* Add button visible on mobile */}
           <div className="md:hidden">

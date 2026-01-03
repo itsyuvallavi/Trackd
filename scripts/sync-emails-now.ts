@@ -116,7 +116,7 @@ function shouldUpdateStatus(
     INTERVIEW: 2,
     OFFER: 3,
     REJECTED: 99,
-    GHOSTED: 99,
+    ARCHIVED: 99,
   }
 
   const currentLevel = statusHierarchy[currentStatus]
