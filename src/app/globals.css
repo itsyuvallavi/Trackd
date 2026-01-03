@@ -223,6 +223,8 @@ html.dark {
 
 body {
   background: var(--background);
+  background-image: none;
+  background-size: auto;
   position: relative;
 }
 
