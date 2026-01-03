@@ -61,43 +61,43 @@ export function ApplicationsHeader({
   return (
     <>
       {/* Title Section */}
-      <div className="mb-6 md:mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold">Applications</h1>
-        <p className="text-foreground/60 mt-1 text-sm md:text-base">View all of your job applications.</p>
+      <div className="mb-4">
+        <h1 className="text-xl md:text-2xl font-semibold">Applications</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">{totalJobs} total applications</p>
       </div>
 
       {/* Tabs */}
-      <div className="mb-6 border-b border-border overflow-x-auto scrollbar-hide">
-        <div className="flex items-center justify-between gap-4 min-w-max md:min-w-0">
-          <div className="flex gap-4 md:gap-6">
+      <div className="mb-4 border-b border-border overflow-x-auto scrollbar-hide">
+        <div className="flex items-center justify-between gap-3 min-w-max md:min-w-0">
+          <div className="flex gap-3 md:gap-4">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => onStatusChange(tab.id)}
                 className={cn(
-                  'pb-3 md:pb-4 px-1 md:px-2 text-xs md:text-sm font-semibold transition-all duration-200 relative whitespace-nowrap',
-                  'min-h-[44px] flex items-center',
+                  'pb-2 px-1 text-xs font-medium transition-colors relative whitespace-nowrap',
+                  'flex items-center gap-1.5',
                   activeStatus === tab.id
-                    ? 'text-primary'
+                    ? 'text-foreground'
                     : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 <span>{tab.label}</span>
                 <span className={cn(
-                  "ml-1 md:ml-2 px-1.5 md:px-2 py-0.5 rounded-full text-xs font-medium",
+                  "px-1.5 py-0.5 rounded text-xs font-medium",
                   activeStatus === tab.id
-                    ? "bg-primary/10 text-primary"
+                    ? "bg-foreground/10 text-foreground"
                     : "bg-muted text-muted-foreground"
                 )}>{tab.count}</span>
                 {activeStatus === tab.id && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+                  <div className="absolute bottom-0 left-0 right-0 h-px bg-foreground" />
                 )}
               </button>
             ))}
           </div>
 
-          {/* Action Buttons - Hidden on mobile, moved elsewhere */}
-          <div className="hidden md:flex items-center gap-2">
+          {/* Action Buttons */}
+          <div className="hidden md:flex items-center gap-1.5">
             <AddJobDropdown
               onManualAdd={onManualAdd}
               onUrlAdd={onUrlAdd}
@@ -105,10 +105,10 @@ export function ApplicationsHeader({
             <Tooltip content="Export jobs">
               <Button
                 variant="ghost"
-                size="sm"
-                className="size-9 p-0 text-foreground hover:text-primary hover:bg-primary/10 border border-border/50 transition-all duration-200"
+                size="icon-sm"
+                className="text-muted-foreground hover:text-foreground"
               >
-                <Download className="size-4" />
+                <Download className="size-3.5" />
               </Button>
             </Tooltip>
           </div>
@@ -116,34 +116,39 @@ export function ApplicationsHeader({
       </div>
 
       {/* Search and Filters Row */}
-      <div className="mb-6 md:mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        {/* Search - Full width on mobile */}
+      <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        {/* Search */}
         <div className="w-full md:flex-1 md:max-w-sm relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search for Applications"
+            placeholder="Search applications..."
             value={localSearch}
             onChange={(e) => {
               setLocalSearch(e.target.value)
               onSearchChange(e.target.value)
             }}
-            className="pl-9 h-11 md:h-10 bg-background border-border"
+            className="pl-8 h-8 text-sm bg-background border-border"
           />
         </div>
 
         {/* Filters Row */}
-        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
           <DateRangePicker
             value={dateRange}
             onChange={onDateRangeChange}
           />
           <Button
             variant="outline"
-            className="h-11 md:h-10 px-4 gap-2 text-foreground hover:bg-accent whitespace-nowrap"
+            size="sm"
+            className="h-8 px-3 gap-1.5 text-xs whitespace-nowrap"
+            onClick={() => {
+              // TODO: Implement filter functionality
+              console.log('Filters clicked')
+            }}
           >
-            <SlidersHorizontal className="size-4" />
-            <span className="text-sm">Filters</span>
+            <SlidersHorizontal className="size-3.5" />
+            <span>Filters</span>
           </Button>
 
           {/* Add button visible on mobile */}

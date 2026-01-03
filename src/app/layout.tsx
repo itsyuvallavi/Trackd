@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Public_Sans } from "next/font/google";
 import "./globals.css";
 import { SpeedInsights } from "@vercel/speed-insights/next"
 
+const publicSans = Public_Sans({subsets:['latin'],variable:'--font-sans'});
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,13 +22,10 @@ export const metadata: Metadata = {
   description: "A low-friction job application tracker that automatically stays up to date by combining job URL capture with email-based status detection.",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({children}: Readonly<{children: React.ReactNode;}>) 
+{
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={publicSans.variable}>
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -40,7 +38,7 @@ export default function RootLayout({
                   document.documentElement.classList.remove('dark');
                 }
               })();
-            `,
+            `
           }}
         />
       </head>

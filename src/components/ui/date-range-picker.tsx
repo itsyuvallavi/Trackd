@@ -125,22 +125,23 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
       <Button
         variant="outline"
         onClick={() => setIsOpen(!isOpen)}
-        className="h-10 px-4 gap-2 text-foreground hover:bg-accent justify-start"
+        size="sm"
+        className="h-8 px-3 gap-1.5 text-xs text-foreground hover:bg-accent whitespace-nowrap"
       >
-        <Calendar className="size-4" />
-        <span className="text-sm">{getDisplayText()}</span>
+        <Calendar className="size-3.5" />
+        <span>{getDisplayText()}</span>
       </Button>
 
       {isOpen && (
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 z-20"
+            className="fixed inset-0 z-40"
             onClick={() => setIsOpen(false)}
           />
 
           {/* Calendar Dropdown */}
-          <div className="absolute right-0 mt-2 p-4 bg-card border border-border rounded-lg shadow-2xl z-30 animate-in slide-in-from-top-2 fade-in duration-150 w-[320px]">
+          <div className="absolute right-0 mt-2 p-4 bg-card border border-border rounded-lg shadow-2xl z-50 animate-in slide-in-from-top-2 fade-in duration-150 w-[320px]">
             {/* Month/Year Header */}
             <div className="mb-4 text-center">
               <h3 className="text-base font-bold text-foreground">

@@ -4,9 +4,12 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { createEmailService } from '@/lib/email-service'
 import { EmailClassifier, EmailType } from '@/lib/email-classifier'
+import { AIClassifier } from '@/lib/ai-email-classifier'
+import { AIJobMatcher } from '@/lib/ai-job-matcher'
 import { ActivityType, JobStatus } from '@prisma/client'
 import { requireAuth } from '@/lib/auth'
 import { NotificationService } from '@/lib/notification-service'
+import { ExtractedEntities } from '@/lib/ai/types'
 
 /**
  * Sync emails and update jobs based on email content
@@ -90,8 +93,13 @@ export async function syncEmails() {
     }
 
     // Classify and process each email
-    console.log('Starting email classification...')
-    const classifier = new EmailClassifier()
+    // Feature flags
+    const USE_AI_CLASSIFIER = process.env.ENABLE_AI_CLASSIFICATION === 'true'
+    const USE_AI_MATCHING = process.env.ENABLE_AI_MATCHING === 'true'
+
+    console.log(`Starting email classification... (using ${USE_AI_CLASSIFIER ? 'AI' : 'keyword-based'} classifier)`)
+    const classifier = USE_AI_CLASSIFIER ? new AIClassifier() : new EmailClassifier()
+    const matcher = USE_AI_MATCHING ? new AIJobMatcher() : new EmailClassifier() // Use AIJobMatcher or EmailClassifier for matching
     const notificationService = new NotificationService()
     let updatedCount = 0
     let processedCount = 0
@@ -112,8 +120,20 @@ export async function syncEmails() {
         console.log(`Processing email ${i + 1}/${emails.length}...`)
       }
       try {
-        const classified = classifier.classify(email)
+        // Classify email (AI classifier is async, keyword-based is sync)
+        const classified = USE_AI_CLASSIFIER
+          ? await (classifier as AIClassifier).classify(email)
+          : (classifier as EmailClassifier).classify(email)
+
         console.log(`Email "${email.subject}": type=${classified.type}, confidence=${classified.confidence}%, jobInfo=`, classified.jobInfo)
+
+        // Check if AI determined email should not be processed
+        if (USE_AI_CLASSIFIER && 'shouldProcess' in classified.metadata && classified.metadata.shouldProcess === false) {
+          skippedCount++
+          skippedOtherCount++
+          console.log(`Skipped email "${email.subject}" - AI determined it's not job-related (shouldProcess=false)`)
+          continue
+        }
 
         // Only process job-related emails
         if (classified.type === EmailType.OTHER) {
@@ -133,8 +153,11 @@ export async function syncEmails() {
         processedCount++
         console.log(`Processing email: ${email.subject} (type: ${classified.type}, confidence: ${classified.confidence}%)`)
 
-        // Try to match email to existing job using enhanced matching
-        const matchResult = classifier.matchToJob(classified, jobs, email)
+        // Try to match email to existing job (AI matcher is async, keyword-based is sync)
+        console.log(`Starting job matching... (using ${USE_AI_MATCHING ? 'AI' : 'keyword-based'} matcher)`)
+        const matchResult = USE_AI_MATCHING
+          ? await (matcher as AIJobMatcher).matchToJob(classified, jobs)
+          : (matcher as EmailClassifier).matchToJob(classified, jobs, email)
 
         // Track match type for logging
         if (matchResult.confidence === 'exact') {
@@ -160,7 +183,25 @@ export async function syncEmails() {
                 data: { status: classified.suggestedStatus },
               })
 
-              // Create activity record
+              // Create activity record with AI-extracted metadata
+              const activityMetadata: Record<string, unknown> = {
+                emailSubject: email.subject,
+                emailFrom: email.from,
+                emailDate: email.date.toISOString(),
+              }
+
+              // Add AI-extracted entities to metadata if available
+              if (USE_AI_CLASSIFIER && 'extractedEntities' in classified.metadata && classified.metadata.extractedEntities) {
+                const extracted = classified.metadata.extractedEntities as ExtractedEntities
+                if (extracted.interviewDate) activityMetadata.interviewDate = extracted.interviewDate
+                if (extracted.interviewTime) activityMetadata.interviewTime = extracted.interviewTime
+                if (extracted.nextSteps && extracted.nextSteps.length > 0) activityMetadata.nextSteps = extracted.nextSteps
+                if (extracted.contactName) activityMetadata.contactName = extracted.contactName
+                if (extracted.contactEmail) activityMetadata.contactEmail = extracted.contactEmail
+                if (extracted.salary) activityMetadata.salary = extracted.salary
+                if (extracted.rejectionReason) activityMetadata.rejectionReason = extracted.rejectionReason
+              }
+
               await prisma.activity.create({
                 data: {
                   jobId: matchResult.jobId,
@@ -169,6 +210,7 @@ export async function syncEmails() {
                   fromStatus: oldStatus,
                   toStatus: classified.suggestedStatus,
                   description: `Email detected: ${email.subject}`,
+                  metadata: activityMetadata,
                 },
               })
 

@@ -111,6 +111,7 @@ model Activity {
   fromStatus  JobStatus?
   toStatus    JobStatus?
   description String?
+  metadata    Json?        // Store AI-extracted context (interview dates, next steps, etc.)
 
   createdAt   DateTime     @default(now())
 

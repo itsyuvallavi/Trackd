@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Sidebar } from '@/components/layout/Sidebar'
+import { AppShell } from '@/components/layout/app-shell'
 import { scrapeJobUrl, ScrapedJobData } from '../scrape-actions'
 import { createJob } from '../actions'
 import { Button } from '@/components/ui/button'
@@ -87,16 +87,15 @@ export default function NewUrlPage() {
   }
 
   return (
-    <div className="size-full flex">
-      <Sidebar />
-      <div className="flex-1 ml-16 min-h-screen p-8 relative z-10">
-        <div className="max-w-3xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Add Job from URL</h1>
-          <p className="text-foreground/60">
-            Paste a job URL and we&apos;ll try to extract the details automatically.
-          </p>
-        </div>
+    <AppShell>
+      <div className="flex-1 overflow-auto">
+        <div className="max-w-3xl mx-auto px-4 md:px-8 py-4 md:py-8">
+          <div className="mb-6 md:mb-8">
+            <h1 className="text-2xl md:text-3xl font-bold mb-2">Add Job from URL</h1>
+            <p className="text-sm text-muted-foreground">
+              Paste a job URL and we&apos;ll try to extract the details automatically.
+            </p>
+          </div>
 
         {/* URL Input Form */}
         {!scrapedData && (
@@ -321,6 +320,6 @@ export default function NewUrlPage() {
         )}
         </div>
       </div>
-    </div>
+    </AppShell>
   )
 }

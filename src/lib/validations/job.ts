@@ -4,7 +4,10 @@ import { JobStatus, JobPriority, JobSource } from '@prisma/client'
 export const createJobSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   company: z.string().min(1, 'Company is required'),
-  url: z.string().url('Must be a valid URL').optional().or(z.literal('')),
+  url: z.preprocess(
+    (val) => (val === '' || val === null || val === undefined ? undefined : val),
+    z.string().url('Must be a valid URL').optional()
+  ),
   location: z.string().optional(),
   source: z.nativeEnum(JobSource).default('MANUAL'),
   status: z.nativeEnum(JobStatus).default('SAVED'),
@@ -12,7 +15,10 @@ export const createJobSchema = z.object({
   notes: z.string().optional(),
   salary: z.string().optional(),
   contactName: z.string().optional(),
-  contactEmail: z.string().email('Must be a valid email').optional().or(z.literal('')),
+  contactEmail: z.preprocess(
+    (val) => (val === '' || val === null || val === undefined ? undefined : val),
+    z.string().email('Must be a valid email').optional()
+  ),
   nextAction: z.string().optional(),
 })
 

@@ -8,23 +8,24 @@ import { JobStatus, ActivityType } from '@prisma/client'
 import { NotificationService } from '@/lib/notification-service'
 
 export async function createJob(formData: FormData) {
-  const user = await requireAuth()
-  const rawData = {
-    title: formData.get('title') as string,
-    company: formData.get('company') as string,
-    url: formData.get('url') as string,
-    location: formData.get('location') as string,
-    source: formData.get('source') as string || 'MANUAL',
-    status: formData.get('status') as string || 'SAVED',
-    priority: formData.get('priority') as string || 'B',
-    notes: formData.get('notes') as string,
-    salary: formData.get('salary') as string,
-    contactName: formData.get('contactName') as string,
-    contactEmail: formData.get('contactEmail') as string,
-    nextAction: formData.get('nextAction') as string,
-  }
+  try {
+    const user = await requireAuth()
+    const rawData = {
+      title: formData.get('title') as string,
+      company: formData.get('company') as string,
+      url: (formData.get('url') as string) || '',
+      location: (formData.get('location') as string) || undefined,
+      source: (formData.get('source') as string) || 'MANUAL',
+      status: (formData.get('status') as string) || 'SAVED',
+      priority: (formData.get('priority') as string) || 'B',
+      notes: (formData.get('notes') as string) || undefined,
+      salary: (formData.get('salary') as string) || undefined,
+      contactName: (formData.get('contactName') as string) || undefined,
+      contactEmail: (formData.get('contactEmail') as string) || '',
+      nextAction: (formData.get('nextAction') as string) || undefined,
+    }
 
-  const validated = createJobSchema.parse(rawData)
+    const validated = createJobSchema.parse(rawData)
 
   const job = await prisma.job.create({
     data: {
@@ -50,9 +51,16 @@ export async function createJob(formData: FormData) {
     },
   })
 
-  revalidatePath('/jobs')
-  revalidatePath(`/jobs/${job.id}`)
-  return { success: true, jobId: job.id }
+    revalidatePath('/jobs')
+    revalidatePath(`/jobs/${job.id}`)
+    return { success: true, jobId: job.id }
+  } catch (error) {
+    console.error('Error creating job:', error)
+    if (error instanceof Error) {
+      throw new Error(`Failed to create job: ${error.message}`)
+    }
+    throw new Error('Failed to create job: Unknown error')
+  }
 }
 
 export async function updateJob(id: string, formData: FormData) {

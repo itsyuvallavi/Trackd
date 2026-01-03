@@ -18,9 +18,14 @@
 import { prisma } from '../lib/prisma'
 import { createEmailService } from '../lib/email-service'
 import { EmailClassifier, EmailType, ClassifiedEmail } from '../lib/email-classifier'
+import { AIClassifier } from '../lib/ai-email-classifier'
+import { AIJobMatcher } from '../lib/ai-job-matcher'
 import { NotificationService } from '../lib/notification-service'
 import { EmailSyncLogger, SyncPhase } from '../lib/email-sync-logger'
 import { JobStatus, ActivityType } from '@prisma/client'
+
+// Feature flag: Use AI classifier if enabled
+const USE_AI_CLASSIFIER = process.env.ENABLE_AI_CLASSIFICATION === 'true'
 
 // ============================================================================
 // Configuration
@@ -330,7 +335,14 @@ async function runLiveTest(config: TestConfig) {
   // -------------------------------------------------------------------------
   subHeader('🔍 Step 5: Processing Emails')
 
-  const classifier = new EmailClassifier()
+  const USE_AI_MATCHING = process.env.ENABLE_AI_MATCHING === 'true'
+  
+  console.log(`Using ${USE_AI_CLASSIFIER ? colorize('AI', 'cyan') : colorize('keyword-based', 'yellow')} classifier`)
+  console.log(`Using ${USE_AI_MATCHING ? colorize('AI', 'cyan') : colorize('keyword-based', 'yellow')} matcher`)
+  
+  const classifier = USE_AI_CLASSIFIER ? new AIClassifier() : new EmailClassifier()
+  const keywordClassifier = new EmailClassifier() // Keep for matchToJob method (fallback)
+  const aiMatcher = USE_AI_MATCHING ? new AIJobMatcher() : null
   const notificationService = new NotificationService()
   const logger = new EmailSyncLogger(profile.id, false)
   const results: TestResult[] = []
@@ -355,12 +367,41 @@ async function runLiveTest(config: TestConfig) {
     console.log(`  From: ${colorize(email.from, 'gray')}`)
     console.log(`  Date: ${colorize(formatDate(email.date), 'gray')}`)
 
-    // Classify
-    const classified = classifier.classify(email)
+    // Classify (AI is async, keyword-based is sync)
+    const classified = USE_AI_CLASSIFIER
+      ? await (classifier as AIClassifier).classify(email)
+      : (classifier as EmailClassifier).classify(email)
 
     console.log(`  Type: ${formatEmailType(classified.type)} (${classified.confidence}% confidence)`)
-    if (classified.metadata.keywords.length > 0) {
+    
+    // Show AI-specific info or keywords
+    if (USE_AI_CLASSIFIER && 'reasoning' in classified.metadata) {
+      const reasoning = (classified.metadata as { reasoning?: string }).reasoning
+      console.log(`  Reasoning: ${colorize(reasoning || 'N/A', 'gray')}`)
+      if ('shouldProcess' in classified.metadata) {
+        const shouldProcess = (classified.metadata as { shouldProcess?: boolean }).shouldProcess
+        console.log(`  Should Process: ${shouldProcess ? colorize('true', 'green') : colorize('false', 'red')}`)
+      }
+    } else if ('keywords' in classified.metadata && classified.metadata.keywords.length > 0) {
       console.log(`  Keywords: ${colorize(classified.metadata.keywords.slice(0, 3).join(', '), 'gray')}`)
+    }
+
+    // Check if AI says we should skip
+    if (USE_AI_CLASSIFIER && 'shouldProcess' in classified.metadata && classified.metadata.shouldProcess === false) {
+      stats.skippedOther++
+      console.log(colorize('  → SKIPPED (AI determined not job-related)', 'gray'))
+      results.push({
+        email: { subject: email.subject, from: email.from, date: email.date },
+        classification: {
+          type: classified.type,
+          confidence: classified.confidence,
+          keywords: 'keywords' in classified.metadata ? classified.metadata.keywords : [],
+        },
+        extraction: { company: null, title: null, location: null },
+        matching: { result: 'none', reason: 'Skipped - AI shouldProcess=false' },
+        action: 'skipped',
+      })
+      continue
     }
 
     // Check if skipped
@@ -372,7 +413,7 @@ async function runLiveTest(config: TestConfig) {
         classification: {
           type: classified.type,
           confidence: classified.confidence,
-          keywords: classified.metadata.keywords,
+          keywords: 'keywords' in classified.metadata ? classified.metadata.keywords : [],
         },
         extraction: { company: null, title: null, location: null },
         matching: { result: 'none', reason: 'Skipped - OTHER type' },
@@ -405,11 +446,16 @@ async function runLiveTest(config: TestConfig) {
       console.log(`  Suggested Status: ${formatStatus(classified.suggestedStatus)}`)
     }
 
-    // Match to jobs
-    const matchResult = classifier.matchToJob(classified, jobs, {
-      from: email.from,
-      subject: email.subject,
-    })
+    // Match to jobs using AI or keyword-based matching
+    const matchResult = USE_AI_MATCHING && aiMatcher
+      ? await aiMatcher.matchToJob(classified, jobs, {
+          from: email.from,
+          subject: email.subject,
+        })
+      : keywordClassifier.matchToJob(classified, jobs, {
+          from: email.from,
+          subject: email.subject,
+        })
 
     console.log(`  Match: ${formatMatchResult(matchResult.confidence)} - ${matchResult.reason}`)
 

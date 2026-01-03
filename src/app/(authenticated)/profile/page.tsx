@@ -1,5 +1,4 @@
-import { Sidebar } from '@/components/layout/Sidebar'
-import { SimpleTopBar } from '@/components/layout/simple-top-bar'
+import { AppShell } from '@/components/layout/app-shell'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { updateProfile } from './actions'
@@ -31,14 +30,9 @@ export default async function ProfilePage() {
   })
 
   return (
-    <div className="size-full flex">
-      <Sidebar />
-      <SimpleTopBar showEmailNotification={!emailIntegration} />
-      <div
-        className="flex-1 flex flex-col relative z-10"
-        style={{ marginLeft: '4rem' }}
-      >
-        <div className="flex-1 overflow-auto pt-[88px]">
+    <AppShell showEmailNotification={!emailIntegration}>
+      <div className="flex-1 overflow-auto">
+        <div className="max-w-2xl mx-auto px-4 md:px-8 py-4 md:py-10">
           <div className="max-w-2xl mx-auto px-8 py-10">
           <h1 className="text-2xl font-semibold mb-2">Profile</h1>
           <p className="text-sm text-muted-foreground mb-8">
@@ -98,7 +92,7 @@ export default async function ProfilePage() {
           </div>
         </div>
       </div>
-    </div>
+    </AppShell>
   )
 }
 

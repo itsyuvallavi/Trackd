@@ -63,9 +63,9 @@ export function UserProfileMenu() {
       {/* Profile Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="size-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-base font-semibold transition-all duration-200 hover:shadow-[0_0_20px_rgba(139,92,246,0.5)] hover:scale-105"
+        className="size-9 md:size-10 rounded-md bg-primary text-primary-foreground flex items-center justify-center transition-colors hover:bg-primary/90"
       >
-        {initials}
+        <User className="size-4 md:size-4.5" />
       </button>
 
       {isOpen && (

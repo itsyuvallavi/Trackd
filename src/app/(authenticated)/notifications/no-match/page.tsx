@@ -1,7 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
-import { Sidebar } from '@/components/layout/Sidebar'
-import { SimpleTopBar } from '@/components/layout/simple-top-bar'
+import { AppShell } from '@/components/layout/app-shell'
 import { NoMatchJobCreator } from '@/components/notifications/no-match-job-creator'
 import { notFound } from 'next/navigation'
 
@@ -109,27 +108,20 @@ export default async function NoMatchPage({
   }
 
   return (
-    <div className="size-full flex">
-      <Sidebar />
-      <SimpleTopBar />
-      <div
-        className="flex-1 flex flex-col relative z-10"
-        style={{ marginLeft: '4rem' }}
-      >
-        <div className="flex-1 overflow-auto pt-[88px]">
-          <div className="max-w-4xl mx-auto px-8 py-6">
-            <NoMatchJobCreator
-              notificationId={notification.id}
-              emailSubject={metadata.emailSubject}
-              emailFrom={metadata.emailFrom}
-              emailDate={metadata.emailDate}
-              company={metadata.company}
-              title={metadata.title}
-              emailTextBody={metadata.emailTextBody}
-            />
-          </div>
+    <AppShell>
+      <div className="flex-1 overflow-auto">
+        <div className="max-w-4xl mx-auto px-4 md:px-8 py-4 md:py-6">
+          <NoMatchJobCreator
+            notificationId={notification.id}
+            emailSubject={metadata.emailSubject}
+            emailFrom={metadata.emailFrom}
+            emailDate={metadata.emailDate}
+            company={metadata.company}
+            title={metadata.title}
+            emailTextBody={metadata.emailTextBody}
+          />
         </div>
       </div>
-    </div>
+    </AppShell>
   )
 }
