@@ -1,5 +1,7 @@
+import { redirect } from 'next/navigation'
 import { CheckSquare } from 'lucide-react'
 import { LoginForm } from '@/components/auth/login-form'
+import { getCurrentUser } from '@/lib/auth'
 import Image from 'next/image'
 
 interface HomePageProps {
@@ -7,6 +9,14 @@ interface HomePageProps {
 }
 
 export default async function Home({ searchParams }: HomePageProps) {
+  // Check if user is already authenticated
+  const user = await getCurrentUser()
+  
+  // If authenticated, redirect to /jobs
+  if (user) {
+    redirect('/jobs')
+  }
+
   const resolvedSearchParams = (await searchParams) ?? {}
   const next = resolvedSearchParams.next ?? '/jobs'
 
