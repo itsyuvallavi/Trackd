@@ -235,7 +235,7 @@ export function EditJobModal({ job, isOpen, onClose }: EditJobModalProps) {
           <div className="flex justify-between pt-4">
             <Button
               type="button"
-              variant="danger"
+              variant="destructive"
               onClick={handleDelete}
               disabled={isPending}
             >

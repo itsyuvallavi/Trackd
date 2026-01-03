@@ -214,7 +214,7 @@ export function AmbiguousMatchResolver({
                   onClick={() => handleSelectJob(job.id)}
                   disabled={isProcessing}
                   className="shrink-0"
-                  variant={selectedJobId === job.id ? 'primary' : 'outline'}
+                  variant={selectedJobId === job.id ? 'default' : 'outline'}
                 >
                   {selectedJobId === job.id && isProcessing
                     ? 'Processing...'

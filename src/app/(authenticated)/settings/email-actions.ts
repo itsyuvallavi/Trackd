@@ -6,7 +6,7 @@ import { createEmailService } from '@/lib/email-service'
 import { EmailClassifier, EmailType } from '@/lib/email-classifier'
 import { AIClassifier } from '@/lib/ai-email-classifier'
 import { AIJobMatcher } from '@/lib/ai-job-matcher'
-import { ActivityType, JobStatus } from '@prisma/client'
+import { ActivityType, JobStatus, Prisma } from '@prisma/client'
 import { requireAuth } from '@/lib/auth'
 import { NotificationService } from '@/lib/notification-service'
 import { ExtractedEntities } from '@/lib/ai/types'
@@ -210,7 +210,7 @@ export async function syncEmails() {
                   fromStatus: oldStatus,
                   toStatus: classified.suggestedStatus,
                   description: `Email detected: ${email.subject}`,
-                  metadata: activityMetadata,
+                  metadata: activityMetadata as Prisma.InputJsonValue,
                 },
               })
 
