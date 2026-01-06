@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth'
 import { AppShell } from '@/components/layout/app-shell'
 import dynamic from 'next/dynamic'
 import { JobStatus } from '@prisma/client'
+import { getEmailIntegration } from '@/lib/cached-queries'
 
 // Lazy load KanbanBoard since it's a heavy component with drag-and-drop
 const KanbanBoard = dynamic(() => import('@/components/board/kanban-board').then(mod => ({ default: mod.KanbanBoard })), {
@@ -23,16 +24,20 @@ const COLUMNS: { status: JobStatus; label: string; color: string }[] = [
 export default async function BoardPage() {
   const user = await requireAuth()
 
-  const jobs = await prisma.job.findMany({
-    where: { userId: user.id },
-    include: {
-      activities: {
-        orderBy: { createdAt: 'desc' },
-        take: 1,
+  // Fetch jobs and email integration in parallel
+  const [jobs, emailIntegration] = await Promise.all([
+    prisma.job.findMany({
+      where: { userId: user.id },
+      include: {
+        activities: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
-    },
-    orderBy: { updatedAt: 'desc' },
-  })
+      orderBy: { updatedAt: 'desc' },
+    }),
+    getEmailIntegration(user.id),
+  ])
 
   // Group jobs by status
   const jobsByStatus = COLUMNS.reduce((acc, column) => {
@@ -42,10 +47,6 @@ export default async function BoardPage() {
 
   const totalJobs = jobs.length
   const activeJobs = jobs.filter(j => ['SAVED', 'APPLIED', 'INTERVIEW', 'OFFER'].includes(j.status)).length
-
-  const emailIntegration = await prisma.emailIntegration.findUnique({
-    where: { userId: user.id },
-  })
 
   return (
     <AppShell showEmailNotification={!emailIntegration}>

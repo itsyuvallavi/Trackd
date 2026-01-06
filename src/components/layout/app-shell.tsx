@@ -1,7 +1,6 @@
 'use client'
 
 import { SimpleTopBar } from './simple-top-bar'
-import { BottomTabBar } from './bottom-tab-bar'
 import { LeftSidebar } from './left-sidebar'
 import { FloatingFeedbackButton } from '@/components/feedback/floating-feedback-button'
 import { NotificationsBell } from './notifications-bell'

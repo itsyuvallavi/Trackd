@@ -13,10 +13,10 @@ function createPrismaClient() {
   if (!globalForPrisma.pool) {
     globalForPrisma.pool = new Pool({
       connectionString,
-      max: 10, // Increased from 5 for production use
-      min: 2,  // Keep minimum connections warm
-      idleTimeoutMillis: 30000, // Close idle connections after 30s
-      connectionTimeoutMillis: 5000, // Timeout if can't acquire connection in 5s
+      max: 5, // Reduced to avoid hitting Supabase session mode limits
+      min: 1, // Keep one connection warm
+      idleTimeoutMillis: 10000, // Close idle connections after 10s to free up pool
+      connectionTimeoutMillis: 10000, // Wait up to 10s for a connection
     })
   }
 
@@ -24,7 +24,7 @@ function createPrismaClient() {
 
   return new PrismaClient({
     adapter,
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   })
 }
 

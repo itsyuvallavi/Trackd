@@ -7,16 +7,22 @@ import { EmailIntegrationForm } from '@/components/email/email-integration-form'
 import { ExtensionKeySection } from '@/components/email/extension-key-section'
 import { SyncHistory } from '@/components/email/sync-history'
 import Link from 'next/link'
+import { getUserProfile, getEmailIntegration, getExtensionKey } from '@/lib/cached-queries'
 
 export const revalidate = 300 // Revalidate every 5 minutes (profile changes less frequently)
 
 export default async function ProfilePage() {
   const user = await requireAuth()
 
-  let profile = await prisma.profile.findUnique({
-    where: { id: user.id },
-  })
+  // Fetch all data in parallel using cached queries
+  const [profileData, emailIntegration, extensionKey] = await Promise.all([
+    getUserProfile(user.id),
+    getEmailIntegration(user.id),
+    getExtensionKey(user.id),
+  ])
 
+  // Create profile if it doesn't exist
+  let profile = profileData
   if (!profile) {
     profile = await prisma.profile.create({
       data: {
@@ -29,18 +35,6 @@ export default async function ProfilePage() {
       },
     })
   }
-
-  const emailIntegration = await prisma.emailIntegration.findUnique({
-    where: { userId: user.id },
-  })
-
-  const extensionKey = await prisma.extensionKey.findUnique({
-    where: { userId: user.id },
-    select: {
-      keyPrefix: true,
-      lastUsedAt: true,
-    }
-  })
 
   return (
     <AppShell showEmailNotification={!emailIntegration}>

@@ -30,11 +30,16 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
+    // Only fetch on mount - no polling to reduce server load
     fetchNotifications()
-    // Refresh notifications every 30 seconds
-    const interval = setInterval(fetchNotifications, 30000)
-    return () => clearInterval(interval)
   }, [])
+
+  // Refresh when dropdown is opened
+  useEffect(() => {
+    if (isOpen) {
+      fetchNotifications()
+    }
+  }, [isOpen])
 
   const fetchNotifications = async () => {
     try {

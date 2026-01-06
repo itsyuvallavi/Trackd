@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Public_Sans } from "next/font/google";
 import "./globals.css";
 import { SpeedInsights } from "@vercel/speed-insights/next"
+import { SWRProvider } from "@/lib/swr-config"
 
 const publicSans = Public_Sans({subsets:['latin'],variable:'--font-sans'});
 
@@ -45,7 +46,9 @@ export default function RootLayout({children}: Readonly<{children: React.ReactNo
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <SWRProvider>
+          {children}
+        </SWRProvider>
         <SpeedInsights/>
       </body>
     </html>
