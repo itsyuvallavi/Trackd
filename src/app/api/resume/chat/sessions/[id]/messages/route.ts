@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { ResumeChatManager } from '@/lib/resume/resume-chat-manager'
@@ -169,7 +170,7 @@ export async function POST(
           where: { id: sessionId },
           data: { 
             improvedResumeText: improvedResume,
-            parsedResumeData: null, // Clear cache to force re-parsing of new version
+            parsedResumeData: Prisma.JsonNull, // Clear cache to force re-parsing of new version
           },
         })
         

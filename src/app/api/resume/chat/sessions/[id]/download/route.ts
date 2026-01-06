@@ -44,7 +44,7 @@ export async function GET(
     let resumeData: ResumeData
     if (session.parsedResumeData && typeof session.parsedResumeData === 'object') {
       console.log('[Download] Using cached parsed resume data')
-      resumeData = session.parsedResumeData as ResumeData
+      resumeData = session.parsedResumeData as unknown as ResumeData
     } else {
       console.log('[Download] Parsing resume text (this may take 20-30 seconds)...')
       
@@ -57,7 +57,6 @@ export async function GET(
         { role: 'user', content: parsePrompt }
       ], {
         temperature: 0.1,
-        responseFormat: { type: 'json_object' },
       })
 
       const jsonContent = response.data.choices[0]?.message?.content || '{}'
@@ -77,7 +76,7 @@ export async function GET(
         try {
           await prisma.resumeSession.update({
             where: { id: sessionId },
-            data: { parsedResumeData: resumeData },
+            data: { parsedResumeData: resumeData as any },
           })
           console.log('[Download] Cached parsed data for future use')
         } catch (cacheError) {
