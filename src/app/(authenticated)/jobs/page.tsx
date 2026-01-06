@@ -124,7 +124,7 @@ export default async function JobsPage() {
       notifications={notifications}
       showEmailNotification={!emailIntegration}
     >
-      <div className="w-full flex justify-center px-4 md:px-8 py-4 md:py-6">
+      <div className="w-full flex justify-center px-3 md:px-8 py-3 md:py-6 pb-16 md:pb-6 min-h-0">
         <div className="w-full max-w-[1160px]">
           <JobsPageContent jobs={jobs} />
         </div>

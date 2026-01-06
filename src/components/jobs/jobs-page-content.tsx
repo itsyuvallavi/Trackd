@@ -229,37 +229,40 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
           ) : (
             <>
               {/* Mobile: Card View */}
-              <div className="md:hidden space-y-2">
-                {filteredJobs.map((job) => (
-                  <JobCardMobile key={job.id} job={job} />
+              <div className="md:hidden space-y-3">
+                {filteredJobs.map((job, index) => (
+                  <JobCardMobile key={job.id} job={job} index={index} />
                 ))}
               </div>
 
               {/* Desktop: Table View */}
               <div className="hidden md:block border border-border bg-card overflow-hidden">
-                <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent border-b border-border">
-                    {visibleColumns.has('role') && (
-                      <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5" style={{ width: '250px', minWidth: '250px', maxWidth: '250px' }}>
-                        Role
-                      </TableHead>
-                    )}
-                    {visibleColumns.has('company') && (
-                      <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5" style={{ width: '180px', minWidth: '180px', maxWidth: '180px' }}>
-                        Company
-                      </TableHead>
-                    )}
-                    <TableHead 
-                      className={cn(
-                        "text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5",
-                        (!isHydrated || visibleColumns.has('source')) ? "" : "hidden"
+                {!isHydrated ? (
+                  <div className="p-8 text-center text-muted-foreground text-sm">
+                    Loading...
+                  </div>
+                ) : (
+                  <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent border-b border-border">
+                      {visibleColumns.has('role') && (
+                        <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5" style={{ width: '250px', minWidth: '250px', maxWidth: '250px' }}>
+                          Role
+                        </TableHead>
                       )}
-                      style={{ width: '120px', minWidth: '120px', maxWidth: '120px' }}
-                      suppressHydrationWarning
-                    >
-                      Source
-                    </TableHead>
+                      {visibleColumns.has('company') && (
+                        <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5" style={{ width: '180px', minWidth: '180px', maxWidth: '180px' }}>
+                          Company
+                        </TableHead>
+                      )}
+                      {visibleColumns.has('source') && (
+                        <TableHead 
+                          className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5"
+                          style={{ width: '120px', minWidth: '120px', maxWidth: '120px' }}
+                        >
+                          Source
+                        </TableHead>
+                      )}
                     {visibleColumns.has('location') && (
                       <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5 text-center" style={{ width: '150px', minWidth: '150px', maxWidth: '150px' }}>
                         Location
@@ -315,16 +318,14 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                           {job.company}
                         </TableCell>
                       )}
-                      <TableCell 
-                        className={cn(
-                          "text-xs text-muted-foreground py-1.5",
-                          (!isHydrated || visibleColumns.has('source')) ? "" : "hidden"
-                        )}
-                        style={{ width: '120px', minWidth: '120px', maxWidth: '120px' }}
-                        suppressHydrationWarning
-                      >
-                        {job.source}
-                      </TableCell>
+                      {visibleColumns.has('source') && (
+                        <TableCell 
+                          className="text-xs text-muted-foreground py-1.5"
+                          style={{ width: '120px', minWidth: '120px', maxWidth: '120px' }}
+                        >
+                          {job.source}
+                        </TableCell>
+                      )}
                       {visibleColumns.has('location') && (
                         <TableCell className="text-xs text-muted-foreground text-center py-1.5" style={{ width: '150px', minWidth: '150px', maxWidth: '150px' }}>
                           {job.location || '-'}
@@ -362,6 +363,7 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                   ))}
                 </TableBody>
               </Table>
+                )}
               </div>
             </>
           )}

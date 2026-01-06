@@ -90,8 +90,8 @@ export default function NewUrlPage() {
     <AppShell>
       <div className="flex-1 overflow-auto">
         <div className="max-w-3xl mx-auto px-4 md:px-8 py-4 md:py-8">
-          <div className="mb-6 md:mb-8">
-            <h1 className="text-2xl md:text-3xl font-bold mb-2">Add Job from URL</h1>
+          <div className="mb-6">
+            <h1 className="text-2xl font-semibold mb-2">Add Job from URL</h1>
             <p className="text-sm text-muted-foreground">
               Paste a job URL and we&apos;ll try to extract the details automatically.
             </p>

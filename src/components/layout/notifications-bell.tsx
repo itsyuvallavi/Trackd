@@ -103,10 +103,10 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
         <Button
           variant="ghost"
           size="sm"
-          className="size-9 p-0 text-muted-foreground hover:text-primary hover:bg-primary-lightest transition-all duration-200 relative"
+          className="w-10 h-10 p-0 text-muted-foreground hover:text-primary hover:bg-primary-lightest transition-all duration-200 relative"
           onClick={() => setIsOpen((prev) => !prev)}
         >
-          <Bell className="size-5" />
+          <Bell className="size-5" strokeWidth={2} />
           {showRedDot && (
             <span className="absolute -top-0.5 -right-0.5 inline-flex h-2.5 w-2.5 rounded-full bg-error ring-2 ring-card" />
           )}
@@ -114,11 +114,11 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
       </Tooltip>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-96 rounded-lg border border-border bg-card shadow-lg z-30 py-2">
-          <div className="px-3 py-2 border-b border-border flex items-center justify-between">
-            <span className="text-sm font-semibold text-foreground">Notifications</span>
+        <div className="fixed md:absolute right-4 md:right-0 top-[72px] md:top-auto md:mt-2 w-[calc(100vw-2rem)] max-w-96 rounded-lg border border-border bg-card shadow-lg z-30 py-2">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <span className="text-base font-semibold text-foreground">Notifications</span>
             {unreadCount > 0 && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-error-bg text-error-text">
+              <span className="text-sm px-2.5 py-1 rounded-full bg-error-bg text-error-text">
                 {unreadCount} new
               </span>
             )}
@@ -134,15 +134,15 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
                 {showEmailNotification && (
                   <Link
                     href="/onboarding?step=email"
-                    className="flex items-start gap-3 px-3 py-3 hover:bg-primary-lightest transition-colors text-sm border-b border-border"
+                    className="flex items-start gap-4 px-4 py-4 hover:bg-primary-lightest transition-colors text-base border-b border-border"
                     onClick={() => setIsOpen(false)}
                   >
                     <div className="mt-0.5">
-                      <Mail className="size-4 text-primary" />
+                      <Mail className="size-5 text-primary" />
                     </div>
                     <div className="flex-1">
                       <p className="font-medium text-foreground">Set up email sync</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="text-sm text-muted-foreground mt-1">
                         Connect your email to automatically track application updates.
                       </p>
                     </div>

@@ -1,5 +1,6 @@
 'use client'
 
+import { motion } from 'framer-motion'
 import { Briefcase, Link as LinkIcon, Edit3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -11,11 +12,21 @@ interface EmptyStateProps {
 export function EmptyState({ onManualAdd, onUrlAdd }: EmptyStateProps) {
   return (
     <div className="flex items-center justify-center min-h-[500px]">
-      <div className="text-center max-w-md px-6">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="text-center max-w-md px-6"
+      >
         {/* Icon */}
-        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-6">
+        <motion.div
+          initial={{ scale: 0.8 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.1, type: 'spring', stiffness: 200 }}
+          className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-6"
+        >
           <Briefcase className="size-10 text-primary" strokeWidth={1.5} />
-        </div>
+        </motion.div>
 
         {/* Heading */}
         <h2 className="text-2xl font-bold text-foreground mb-3">
@@ -31,7 +42,12 @@ export function EmptyState({ onManualAdd, onUrlAdd }: EmptyStateProps) {
         {/* Action Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           {/* From URL Card */}
-          <button
+          <motion.button
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={onUrlAdd}
             className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-border hover:border-primary hover:bg-accent transition-all duration-200 group"
           >
@@ -44,10 +60,15 @@ export function EmptyState({ onManualAdd, onUrlAdd }: EmptyStateProps) {
                 Paste a job link to auto-fill details
               </div>
             </div>
-          </button>
+          </motion.button>
 
           {/* Manual Entry Card */}
-          <button
+          <motion.button
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={onManualAdd}
             className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-border hover:border-primary hover:bg-accent transition-all duration-200 group"
           >
@@ -60,14 +81,19 @@ export function EmptyState({ onManualAdd, onUrlAdd }: EmptyStateProps) {
                 Enter job details manually
               </div>
             </div>
-          </button>
+          </motion.button>
         </div>
 
         {/* Additional Help Text */}
-        <p className="text-xs text-muted-foreground">
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="text-xs text-muted-foreground"
+        >
           You can also use our Chrome extension to save jobs while browsing
-        </p>
-      </div>
+        </motion.p>
+      </motion.div>
     </div>
   )
 }

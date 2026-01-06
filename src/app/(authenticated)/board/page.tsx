@@ -51,9 +51,9 @@ export default async function BoardPage() {
     <AppShell showEmailNotification={!emailIntegration}>
       <div className="flex-1 overflow-auto">
         <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-4 md:py-6">
-          <div className="mb-6 md:mb-8">
-            <h1 className="text-2xl md:text-3xl font-bold">Board</h1>
-            <p className="text-foreground/60 mt-1 text-sm md:text-base">
+          <div className="mb-6">
+            <h1 className="text-2xl font-semibold mb-2">Board</h1>
+            <p className="text-sm text-muted-foreground">
               {totalJobs} total jobs • {activeJobs} active
             </p>
           </div>

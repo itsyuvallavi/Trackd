@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { createJob } from '@/app/(authenticated)/jobs/actions'
 import { Button } from '@/components/ui/button'
 import { SOURCE_LABELS, STATUS_LABELS, PRIORITY_LABELS } from '@/lib/constants'
@@ -31,11 +32,29 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
     })
   }
 
-  if (!isOpen) return null
-
   return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-2xl rounded-lg bg-card border border-border p-6 shadow-2xl max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom-4 duration-300">
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={onClose}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97, y: 10 }}
+              transition={{ 
+                duration: 0.2,
+                ease: [0.16, 1, 0.3, 1]
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-2xl rounded-lg bg-card border border-border p-6 shadow-2xl max-h-[90vh] overflow-y-auto md:max-w-2xl"
+            >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-bold">Add New Job</h2>
               <button
@@ -242,7 +261,10 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
                 </Button>
               </div>
             </form>
-          </div>
-        </div>
+            </motion.div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   )
 }

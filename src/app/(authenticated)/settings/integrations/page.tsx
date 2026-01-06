@@ -24,32 +24,35 @@ export default async function IntegrationsPage() {
     <AppShell showEmailNotification={!integration}>
       <div className="flex-1 overflow-auto">
         <div className="max-w-4xl mx-auto px-4 md:px-8 py-4 md:py-6">
-          <div className="mb-6 md:mb-8">
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl md:text-3xl font-bold">Email Integration</h1>
-            {integration && integration.isActive && (
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                <span className="text-sm text-foreground/60">Connected</span>
-              </div>
-            )}
-          </div>
-          {integration && integration.isActive && (
-            <div className="text-sm text-foreground/60 mt-1 ml-5 space-y-1">
-              <p>{integration.email}</p>
-              {integration.autoSyncEnabled && (
-                <p className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                  Auto-sync: Every {integration.autoSyncFrequency} minutes
-                </p>
+          <div className="mb-6">
+            <div className="flex items-center gap-3 mb-2">
+              <h1 className="text-2xl font-semibold">Email Integration</h1>
+              {integration && integration.isActive && (
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                  <span className="text-sm text-foreground/60">Connected</span>
+                </div>
               )}
             </div>
-          )}
-          {integration?.lastError && (
-            <p className="text-sm text-red-600 dark:text-red-400 mt-2">
-              Error: {integration.lastError}
+            <p className="text-sm text-muted-foreground mb-6">
+              Manage your email integration and extension settings.
             </p>
-          )}
+            {integration && integration.isActive && (
+              <div className="text-sm text-foreground/60 mb-4 space-y-1">
+                <p>{integration.email}</p>
+                {integration.autoSyncEnabled && (
+                  <p className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                    Auto-sync: Every {integration.autoSyncFrequency} minutes
+                  </p>
+                )}
+              </div>
+            )}
+            {integration?.lastError && (
+              <p className="text-sm text-red-600 dark:text-red-400 mb-4">
+                Error: {integration.lastError}
+              </p>
+            )}
         </div>
 
         <div className="space-y-6">

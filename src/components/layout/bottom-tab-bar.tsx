@@ -1,42 +1,89 @@
 'use client'
 
+import { useState, memo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { FolderOpen, Settings } from 'lucide-react'
+import { Briefcase, FileText, Plus, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { QuickAddBar } from '@/components/jobs/quick-add-bar'
 
 const navItems = [
-  { href: '/jobs', icon: FolderOpen, label: 'Jobs' },
-  { href: '/settings/integrations', icon: Settings, label: 'Settings' },
+  { href: '/jobs', icon: Briefcase, label: 'Jobs' },
+  { href: '/resume-advisor', icon: FileText, label: 'Resume' },
 ]
 
-export function BottomTabBar() {
+export const BottomTabBar = memo(function BottomTabBar() {
   const pathname = usePathname()
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false)
+
+  const isActive = (href: string) => {
+    return pathname === href || pathname.startsWith(href + '/')
+  }
+
+  const isProfileActive = pathname === '/profile' || pathname.startsWith('/profile/') || pathname.startsWith('/settings/')
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 md:hidden safe-area-bottom">
-      <div className="flex items-center justify-around h-16 px-2">
-        {navItems.map((item) => {
-          const Icon = item.icon
-          const isActive =
-            pathname === item.href ||
-            (item.href === '/settings/integrations' && pathname.startsWith('/settings'))
+    <>
+      <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] safe-area-bottom md:hidden">
+        <div className="relative flex items-center gap-1.5 bg-background/95 dark:bg-background/95 backdrop-blur-md border border-border rounded-full px-3 py-3 shadow-lg w-fit">
+          {/* Plus Button - Left */}
+          <button
+            onClick={() => setIsQuickAddOpen(true)}
+            className="flex items-center justify-center w-10 h-10 rounded-full bg-foreground text-background hover:opacity-90 transition-opacity shrink-0"
+            aria-label="Quick add job"
+          >
+            <Plus className="size-5" strokeWidth={2.5} />
+          </button>
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'flex flex-col items-center justify-center gap-1 min-w-[64px] min-h-[44px] px-3 py-2 rounded-lg transition-colors',
-                isActive ? 'text-primary' : 'text-muted-foreground'
-              )}
-            >
-              <Icon className="size-5" />
-              <span className="text-xs font-medium">{item.label}</span>
-            </Link>
-          )
-        })}
-      </div>
-    </nav>
+          <div className="w-px h-7 bg-border mx-1 shrink-0" />
+
+          {/* Navigation Items - Center */}
+          {navItems.map((item) => {
+            const Icon = item.icon
+            const active = isActive(item.href)
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "relative flex items-center justify-center gap-2 px-4 py-2.5 rounded-full transition-all duration-200 w-[90px]",
+                  active 
+                    ? "bg-foreground text-background" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
+              >
+                <Icon 
+                  className="size-5 shrink-0" 
+                  strokeWidth={active ? 2.5 : 2}
+                />
+                <span className={cn(
+                  "text-xs font-medium transition-opacity whitespace-nowrap",
+                  active ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
+                )}>
+                  {item.label}
+                </span>
+              </Link>
+            )
+          })}
+          
+          <div className="w-px h-7 bg-border mx-1 shrink-0" />
+          
+          {/* Profile Button - Right */}
+          <Link
+            href="/profile"
+            className="flex items-center justify-center w-10 h-10 rounded-full bg-foreground text-background hover:opacity-90 transition-opacity shrink-0"
+            aria-label="Profile"
+          >
+            <User className="size-5" strokeWidth={isProfileActive ? 2.5 : 2} />
+          </Link>
+        </div>
+      </nav>
+
+      <QuickAddBar 
+        isOpen={isQuickAddOpen} 
+        onClose={() => setIsQuickAddOpen(false)} 
+      />
+    </>
   )
-}
+})

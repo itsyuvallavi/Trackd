@@ -343,3 +343,42 @@ model ResumeMessage {
   
   @@index([sessionId, timestamp])
 }
+
+enum FeedbackType {
+  ERROR
+  BUG
+  FEATURE_REQUEST
+  OTHER
+}
+
+enum FeedbackSource {
+  WEB
+  EXTENSION
+}
+
+enum FeedbackStatus {
+  NEW
+  REVIEWED
+  RESOLVED
+}
+
+model Feedback {
+  id          String         @id @default(cuid())
+  userId      String?        // Optional - for authenticated users
+  userEmail   String?        // Optional - for extension users or anonymous
+  type        FeedbackType
+  source      FeedbackSource
+  title       String
+  description String
+  url         String?        // Page/context where issue occurred
+  userAgent   String?        // Browser info
+  metadata    Json?          // Additional context
+  status      FeedbackStatus @default(NEW)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([source])
+}

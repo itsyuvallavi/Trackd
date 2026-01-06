@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
 import { JobStatus } from '@prisma/client'
 import { STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
 import { updateJobStatus } from '@/app/(authenticated)/jobs/actions'
@@ -68,36 +69,51 @@ export function StatusDropdown({ jobId, currentStatus }: StatusDropdownProps) {
         </svg>
       </button>
 
-      {isOpen && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setIsOpen(false)}
-          />
-          <div 
-            ref={dropdownRef}
-            className="fixed z-50 w-40 rounded-md bg-background border border-foreground/20 shadow-lg"
-            style={{ top: `${position.top}px`, left: `${position.left}px` }}
-          >
-            <div className="py-1">
-              {statusOptions.map((status) => (
-                <button
-                  key={status}
-                  onClick={() => handleStatusChange(status)}
-                  className={cn(
-                    'block w-full px-4 py-2 text-left text-sm hover:bg-foreground/5',
-                    status === currentStatus && 'bg-foreground/10'
-                  )}
-                >
-                  <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', STATUS_COLORS[status])}>
-                    {STATUS_LABELS[status]}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 z-40"
+              onClick={() => setIsOpen(false)}
+            />
+            <motion.div
+              ref={dropdownRef}
+              initial={{ opacity: 0, scale: 0.95, y: -10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: -5 }}
+              transition={{ 
+                duration: 0.15,
+                ease: [0.16, 1, 0.3, 1]
+              }}
+              className="fixed z-50 w-40 rounded-md bg-background border border-foreground/20 shadow-lg"
+              style={{ top: `${position.top}px`, left: `${position.left}px` }}
+            >
+              <div className="py-1">
+                {statusOptions.map((status) => (
+                  <motion.button
+                    key={status}
+                    whileHover={{ backgroundColor: 'rgba(0, 0, 0, 0.05)' }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => handleStatusChange(status)}
+                    className={cn(
+                      'block w-full px-4 py-2 text-left text-sm',
+                      status === currentStatus && 'bg-foreground/10'
+                    )}
+                  >
+                    <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', STATUS_COLORS[status])}>
+                      {STATUS_LABELS[status]}
+                    </span>
+                  </motion.button>
+                ))}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

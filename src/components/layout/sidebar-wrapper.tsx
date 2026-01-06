@@ -43,7 +43,7 @@ export function SidebarWrapper({
   notifications,
   showEmailNotification 
 }: SidebarWrapperProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
     <AppShell 

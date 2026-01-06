@@ -1,13 +1,20 @@
 'use client'
 
 import { useState } from 'react'
-import { Search, Download } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Search, Download, ChevronDown } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/tooltip'
 import { AddJobDropdown } from '@/components/jobs/add-job-dropdown'
 import { ColumnVisibilitySettings, type ColumnKey } from '@/components/jobs/column-visibility-settings'
 import { cn } from '@/lib/utils'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 interface DateRange {
   from: Date | null
@@ -65,65 +72,108 @@ export function ApplicationsHeader({
   return (
     <>
       {/* Title Section */}
-      <div className="mb-4">
-        <h1 className="text-xl md:text-2xl font-semibold">Applications</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">{totalJobs} total applications</p>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold mb-2">Applications</h1>
+        <p className="text-sm text-muted-foreground">{totalJobs} total applications</p>
       </div>
 
-      {/* Tabs */}
-      <div className="mb-4 border-b border-border overflow-x-auto scrollbar-hide">
-        <div className="flex items-center justify-between gap-3 min-w-max md:min-w-0">
-          <div className="flex gap-3 md:gap-4">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => onStatusChange(tab.id)}
-                className={cn(
-                  'pb-2 px-1 text-xs font-medium transition-colors relative whitespace-nowrap',
-                  'flex items-center gap-1.5',
-                  activeStatus === tab.id
-                    ? 'text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <span>{tab.label}</span>
-                <span className={cn(
-                  "px-1.5 py-0.5 rounded text-xs font-medium",
-                  activeStatus === tab.id
-                    ? "bg-foreground/10 text-foreground"
-                    : "bg-muted text-muted-foreground"
-                )}>{tab.count}</span>
-                {activeStatus === tab.id && (
-                  <div className="absolute bottom-0 left-0 right-0 h-px bg-foreground" />
-                )}
-              </button>
-            ))}
-          </div>
+      {/* Mobile: Dropdown, Desktop: Tabs */}
+      <div className="mb-3">
+        {/* Mobile Dropdown */}
+        <div className="md:hidden">
+          <DropdownMenu>
+            <DropdownMenuTrigger className="w-full h-9 px-3 py-2 text-sm border border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 rounded-md flex items-center justify-between transition-colors">
+              <span className="flex items-center gap-2">
+                {tabs.find(t => t.id === activeStatus)?.label || 'All Status'}
+                <span className="px-1.5 py-0.5 rounded text-xs bg-muted text-muted-foreground">
+                  {tabs.find(t => t.id === activeStatus)?.count || 0}
+                </span>
+              </span>
+              <ChevronDown className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[200px]">
+              {tabs.map((tab) => (
+                <DropdownMenuItem
+                  key={tab.id}
+                  onClick={() => onStatusChange(tab.id)}
+                  className={cn(
+                    'flex items-center justify-between',
+                    activeStatus === tab.id && 'bg-accent'
+                  )}
+                >
+                  <span>{tab.label}</span>
+                  <span className="px-1.5 py-0.5 rounded text-xs bg-muted text-muted-foreground">
+                    {tab.count}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
-          {/* Action Buttons */}
-          <div className="hidden md:flex items-center gap-1.5">
-            <AddJobDropdown
-              onManualAdd={onManualAdd}
-              onUrlAdd={onUrlAdd}
-            />
-            <Tooltip content="Export jobs">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <Download className="size-3.5" />
-              </Button>
-            </Tooltip>
+        {/* Desktop Tabs */}
+        <div className="hidden md:block border-b border-border">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex gap-4">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => onStatusChange(tab.id)}
+                  className={cn(
+                    'pb-2 px-1 text-xs font-medium transition-colors relative whitespace-nowrap',
+                    'flex items-center gap-1.5 min-h-[44px]',
+                    activeStatus === tab.id
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <span>{tab.label}</span>
+                  <span className={cn(
+                    "px-1.5 py-0.5 rounded text-xs font-medium shrink-0",
+                    activeStatus === tab.id
+                      ? "bg-foreground/10 text-foreground"
+                      : "bg-muted text-muted-foreground"
+                  )}>{tab.count}</span>
+                  {activeStatus === tab.id && (
+                    <motion.div
+                      layoutId="activeTabIndicator"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground"
+                      transition={{
+                        type: 'spring',
+                        stiffness: 400,
+                        damping: 25,
+                      }}
+                    />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-1.5">
+              <AddJobDropdown
+                onManualAdd={onManualAdd}
+                onUrlAdd={onUrlAdd}
+              />
+              <Tooltip content="Export jobs">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <Download className="size-3.5" />
+                </Button>
+              </Tooltip>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Search and Filters Row */}
-      <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+      <div className="mb-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         {/* Search */}
         <div className="w-full md:flex-1 md:max-w-sm relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
           <Input
             type="search"
             placeholder="Search applications..."
@@ -132,24 +182,16 @@ export function ApplicationsHeader({
               setLocalSearch(e.target.value)
               onSearchChange(e.target.value)
             }}
-            className="pl-8 h-8 text-sm bg-background border-border"
+            className="pl-8 h-9 md:h-8 text-sm bg-background border-border focus:ring-2 focus:ring-primary/20"
           />
         </div>
 
         {/* Filters Row */}
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+        <div className="hidden md:flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
           <ColumnVisibilitySettings
             visibleColumns={visibleColumns}
             onColumnsChange={onColumnsChange}
           />
-
-          {/* Add button visible on mobile */}
-          <div className="md:hidden">
-            <AddJobDropdown
-              onManualAdd={onManualAdd}
-              onUrlAdd={onUrlAdd}
-            />
-          </div>
         </div>
       </div>
     </>

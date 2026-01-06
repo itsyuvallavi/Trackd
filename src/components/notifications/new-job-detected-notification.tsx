@@ -74,35 +74,35 @@ export function NewJobDetectedNotification({
 
   return (
     <div
-      className={`flex items-start gap-3 px-3 py-3 hover:bg-primary-lightest transition-colors text-sm border-b border-border last:border-0 ${
+      className={`flex items-start gap-4 px-4 py-4 hover:bg-primary-lightest transition-colors text-base border-b border-border last:border-0 ${
         !notification.isRead ? 'bg-primary-lightest/30' : ''
       }`}
     >
       <div className="mt-0.5 shrink-0">
-        <Sparkles className="size-4 text-primary" />
+        <Sparkles className="size-5 text-primary" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="font-medium text-foreground">{notification.title}</p>
-        <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-line">
+        <p className="text-sm text-muted-foreground mt-1 whitespace-pre-line">
           {notification.message}
         </p>
-        <div className="flex items-center gap-2 mt-2">
+        <div className="flex items-center gap-2 mt-3">
           <button
             onClick={handleCreateJob}
-            className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-md hover:bg-primary-hover transition-colors font-medium"
+            className="text-sm bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary-hover transition-colors font-medium"
           >
             Create Job
           </button>
         </div>
       </div>
-      <div className="flex gap-1 shrink-0">
+      <div className="flex gap-1.5 shrink-0">
         {!notification.isRead && (
           <button
             onClick={() => onMarkAsRead(notification.id)}
             className="text-muted-foreground hover:text-foreground transition-colors"
             title="Mark as read"
           >
-            <CheckCircle2 className="size-4" />
+            <CheckCircle2 className="size-5" />
           </button>
         )}
         <button
@@ -110,7 +110,7 @@ export function NewJobDetectedNotification({
           className="text-muted-foreground hover:text-foreground transition-colors"
           title="Dismiss"
         >
-          <X className="size-4" />
+          <X className="size-5" />
         </button>
       </div>
     </div>

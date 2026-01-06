@@ -46,7 +46,7 @@ export function PageWithSidebar({
   sidebarOpen: controlledSidebarOpen,
   onSidebarToggle
 }: PageWithSidebarProps) {
-  const [internalSidebarOpen, setInternalSidebarOpen] = useState(true)
+  const [internalSidebarOpen, setInternalSidebarOpen] = useState(false)
   
   // Use controlled state if provided, otherwise use internal state
   const sidebarOpen = controlledSidebarOpen ?? internalSidebarOpen

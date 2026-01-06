@@ -42,9 +42,9 @@ export function ResumeAdvisorContent() {
   if (!sessionId) {
     return (
       <div>
-        <div className="mb-4">
-          <h1 className="text-xl md:text-2xl font-semibold">Resume Advisor</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Get AI-powered feedback and suggestions to improve your resume</p>
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold mb-2">Resume Advisor</h1>
+          <p className="text-sm text-muted-foreground">Get AI-powered feedback on your resume</p>
         </div>
         
         <ResumeUpload onResumeUploaded={handleResumeUploaded} />
@@ -56,9 +56,9 @@ export function ResumeAdvisorContent() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Resume Advisor</h1>
-          <p className="text-muted-foreground">
-            Chat with AI to improve your resume
+          <h1 className="text-2xl font-semibold mb-2">Resume Advisor</h1>
+          <p className="text-sm text-muted-foreground">
+            Chat with AI about your resume
           </p>
         </div>
         <button

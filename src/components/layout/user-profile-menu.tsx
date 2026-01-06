@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Settings, LogOut } from 'lucide-react'
+import { User, Settings, LogOut, MessageSquare } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { FeedbackModal } from '@/components/feedback/feedback-modal'
 
 export function UserProfileMenu() {
   const [isOpen, setIsOpen] = useState(false)
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false)
   const [initials, setInitials] = useState<string>('..')
   const [displayName, setDisplayName] = useState<string>('Loading...')
   const [email, setEmail] = useState<string>('')
@@ -128,6 +130,17 @@ export function UserProfileMenu() {
                 <Settings className="size-4" />
                 Settings
               </Link>
+
+              <button
+                onClick={() => {
+                  setIsOpen(false)
+                  setFeedbackModalOpen(true)
+                }}
+                className="flex items-center gap-3 px-4 py-2 text-sm text-foreground hover:bg-accent transition-colors w-full text-left"
+              >
+                <MessageSquare className="size-4" />
+                Report Issue
+              </button>
             </div>
 
             {/* Logout */}
@@ -143,6 +156,11 @@ export function UserProfileMenu() {
           </div>
         </>
       )}
+      <FeedbackModal
+        open={feedbackModalOpen}
+        onOpenChange={setFeedbackModalOpen}
+        currentUrl={typeof window !== 'undefined' ? window.location.href : undefined}
+      />
     </div>
   )
 }

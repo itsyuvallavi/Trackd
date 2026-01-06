@@ -61,11 +61,43 @@ export function JobDetailView({ job }: JobDetailViewProps) {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-16 md:pb-0">
       {/* Header */}
-      <div className="border-b border-border bg-card/50 backdrop-blur-sm">
-        <div className="max-w-5xl mx-auto px-6 py-6">
-          <div className="flex items-start justify-between gap-6">
+      <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-[56px] md:top-[64px] z-10">
+        <div className="max-w-5xl mx-auto px-3 md:px-6 py-3 md:py-6">
+          {/* Mobile: Stacked layout */}
+          <div className="md:hidden space-y-3">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/jobs')}
+                className="hover:bg-accent shrink-0 p-2"
+              >
+                <ArrowLeft className="size-4" />
+              </Button>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-lg font-bold break-words line-clamp-2">{job.title}</h1>
+                <p className="text-sm text-muted-foreground mt-0.5">{job.company}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <StatusDropdown jobId={job.id} currentStatus={job.status} />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditModalOpen(true)}
+                disabled={isPending}
+                className="flex-1"
+              >
+                <Edit className="size-4 mr-2" />
+                Edit
+              </Button>
+            </div>
+          </div>
+
+          {/* Desktop: Original layout */}
+          <div className="hidden md:flex items-start justify-between gap-6">
             <div className="flex items-start gap-4 flex-1 min-w-0">
               <Button
                 variant="ghost"
@@ -98,14 +130,14 @@ export function JobDetailView({ job }: JobDetailViewProps) {
       </div>
 
       {/* Content */}
-      <div className="max-w-5xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="max-w-5xl mx-auto px-3 md:px-6 py-4 md:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
           {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4 md:space-y-6">
             {/* Key Information */}
-            <div className="bg-card border border-border rounded-lg p-6">
-              <h2 className="text-lg font-semibold mb-4">Details</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-card border border-border rounded-lg p-4 md:p-6">
+              <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">Details</h2>
+              <div className="grid grid-cols-1 gap-3 md:gap-4">
                 {job.location && (
                   <div className="flex items-start gap-3">
                     <MapPin className="size-5 text-muted-foreground mt-0.5 shrink-0" />
@@ -170,10 +202,10 @@ export function JobDetailView({ job }: JobDetailViewProps) {
             </div>
 
             {/* Notes - Always visible and editable */}
-            <div className="bg-card border border-border rounded-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold flex items-center gap-2">
-                  <StickyNote className="size-5" />
+            <div className="bg-card border border-border rounded-lg p-4 md:p-6">
+              <div className="flex items-center justify-between mb-3 md:mb-4">
+                <h2 className="text-base md:text-lg font-semibold flex items-center gap-2">
+                  <StickyNote className="size-4 md:size-5" />
                   Notes
                 </h2>
                 {!isEditingNotes && (
@@ -184,7 +216,8 @@ export function JobDetailView({ job }: JobDetailViewProps) {
                     className="text-xs"
                   >
                     <Edit className="size-3 mr-1" />
-                    {notes ? 'Edit' : 'Add Notes'}
+                    <span className="hidden sm:inline">{notes ? 'Edit' : 'Add Notes'}</span>
+                    <span className="sm:hidden">{notes ? 'Edit' : 'Add'}</span>
                   </Button>
                 )}
               </div>
@@ -241,32 +274,32 @@ export function JobDetailView({ job }: JobDetailViewProps) {
 
             {/* Next Action */}
             {job.nextAction && (
-              <div className="bg-card border border-border rounded-lg p-6 border-orange-500/20 bg-orange-500/5">
+              <div className="bg-card border border-border rounded-lg p-4 md:p-6 border-orange-500/20 bg-orange-500/5">
                 <div className="flex items-start gap-3">
-                  <Target className="size-5 text-orange-600 dark:text-orange-400 mt-0.5 shrink-0" />
+                  <Target className="size-4 md:size-5 text-orange-600 dark:text-orange-400 mt-0.5 shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <h2 className="text-lg font-semibold mb-2">Next Action</h2>
-                    <p className="text-orange-600 dark:text-orange-400 break-words">{job.nextAction}</p>
+                    <h2 className="text-base md:text-lg font-semibold mb-2">Next Action</h2>
+                    <p className="text-sm md:text-base text-orange-600 dark:text-orange-400 break-words">{job.nextAction}</p>
                   </div>
                 </div>
               </div>
             )}
 
             {/* Activity Timeline */}
-            <div className="bg-card border border-border rounded-lg p-6">
-              <h2 className="text-lg font-semibold mb-4">Activity Timeline</h2>
+            <div className="bg-card border border-border rounded-lg p-4 md:p-6">
+              <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">Activity Timeline</h2>
               <JobTimeline activities={job.activities} />
             </div>
           </div>
 
           {/* Sidebar */}
-          <div className="space-y-6">
+          <div className="space-y-4 md:space-y-6">
             {/* Quick Actions */}
-            <div className="bg-card border border-border rounded-lg p-6">
-              <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
+            <div className="bg-card border border-border rounded-lg p-4 md:p-6">
+              <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">Quick Actions</h2>
               <div className="space-y-2">
                 {job.url && (
-                  <a href={job.url} target="_blank" rel="noopener noreferrer">
+                  <a href={job.url} target="_blank" rel="noopener noreferrer" className="block">
                     <Button
                       variant="outline"
                       className="w-full justify-start"
@@ -289,26 +322,26 @@ export function JobDetailView({ job }: JobDetailViewProps) {
 
             {/* Contact Information */}
             {(job.contactName || job.contactEmail) && (
-              <div className="bg-card border border-border rounded-lg p-6">
-                <h2 className="text-lg font-semibold mb-4">Contact</h2>
+              <div className="bg-card border border-border rounded-lg p-4 md:p-6">
+                <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">Contact</h2>
                 <div className="space-y-3">
                   {job.contactName && (
                     <div className="flex items-start gap-3">
-                      <User className="size-5 text-muted-foreground mt-0.5" />
-                      <div>
-                        <p className="text-sm text-muted-foreground">Name</p>
-                        <p className="font-medium">{job.contactName}</p>
+                      <User className="size-4 md:size-5 text-muted-foreground mt-0.5 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs md:text-sm text-muted-foreground">Name</p>
+                        <p className="text-sm md:text-base font-medium break-words">{job.contactName}</p>
                       </div>
                     </div>
                   )}
                   {job.contactEmail && (
                     <div className="flex items-start gap-3">
-                      <Mail className="size-5 text-muted-foreground mt-0.5" />
-                      <div>
-                        <p className="text-sm text-muted-foreground">Email</p>
+                      <Mail className="size-4 md:size-5 text-muted-foreground mt-0.5 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs md:text-sm text-muted-foreground">Email</p>
                         <a
                           href={`mailto:${job.contactEmail}`}
-                          className="font-medium text-blue-600 dark:text-blue-400 hover:underline break-all"
+                          className="text-sm md:text-base font-medium text-blue-600 dark:text-blue-400 hover:underline break-all"
                         >
                           {job.contactEmail}
                         </a>
@@ -320,9 +353,9 @@ export function JobDetailView({ job }: JobDetailViewProps) {
             )}
 
             {/* Metadata */}
-            <div className="bg-card border border-border rounded-lg p-6">
-              <h2 className="text-lg font-semibold mb-4">Metadata</h2>
-              <div className="space-y-2 text-sm">
+            <div className="bg-card border border-border rounded-lg p-4 md:p-6">
+              <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">Metadata</h2>
+              <div className="space-y-2 text-xs md:text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Created</span>
                   <span className="font-medium">{formatDate(job.createdAt)}</span>

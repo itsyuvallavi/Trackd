@@ -3,6 +3,10 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { updateProfile } from './actions'
 import { ThemeSelector } from '@/components/profile/theme-selector'
+import { EmailIntegrationForm } from '@/components/email/email-integration-form'
+import { ExtensionKeySection } from '@/components/email/extension-key-section'
+import { SyncHistory } from '@/components/email/sync-history'
+import Link from 'next/link'
 
 export const revalidate = 300 // Revalidate every 5 minutes (profile changes less frequently)
 
@@ -30,64 +34,73 @@ export default async function ProfilePage() {
     where: { userId: user.id },
   })
 
+  const extensionKey = await prisma.extensionKey.findUnique({
+    where: { userId: user.id },
+    select: {
+      keyPrefix: true,
+      lastUsedAt: true,
+    }
+  })
+
   return (
     <AppShell showEmailNotification={!emailIntegration}>
       <div className="flex-1 overflow-auto">
         <div className="max-w-2xl mx-auto px-4 md:px-8 py-4 md:py-10">
-          <div className="max-w-2xl mx-auto px-8 py-10">
-          <h1 className="text-2xl font-semibold mb-2">Profile</h1>
-          <p className="text-sm text-muted-foreground mb-8">
-            Manage your basic account details.
-          </p>
+          {/* Profile Section */}
+          <div className="mb-8">
+            <h1 className="text-2xl font-semibold mb-2">Profile</h1>
+            <p className="text-sm text-muted-foreground mb-6">
+              Manage your basic account details.
+            </p>
 
-                 <div className="rounded-xl border border-border bg-card/80 backdrop-blur px-6 py-6 space-y-6 shadow-sm">
-                   <div>
-                     <p className="text-xs font-medium text-muted-foreground uppercase mb-1">
-                       Email
-                     </p>
-                     <p className="text-sm text-foreground">{profile.email}</p>
-                     <p className="text-xs text-muted-foreground mt-1">
-                       Email is managed via Supabase Auth (Google or email/password).
-                     </p>
-                   </div>
-
-                   <div>
-                     <p className="text-xs font-medium text-muted-foreground uppercase mb-2">
-                       Theme
-                     </p>
-                     <ThemeSelector />
-                   </div>
-
-                   <form action={updateProfile} className="space-y-5">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-foreground">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  defaultValue={profile.name ?? ''}
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  placeholder="Your name"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-foreground">
-                  Avatar URL
-                </label>
-                <input
-                  type="url"
-                  name="avatarUrl"
-                  defaultValue={profile.avatarUrl ?? ''}
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  placeholder="https://example.com/avatar.jpg"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Optional. If set, this can be used to show your avatar in the
-                  header.
+            <div className="rounded-xl border border-border bg-card/80 backdrop-blur px-6 py-6 space-y-6 shadow-sm">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase mb-1">
+                  Email
+                </p>
+                <p className="text-sm text-foreground">{profile.email}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Email is managed via Supabase Auth (Google or email/password).
                 </p>
               </div>
+
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase mb-2">
+                  Theme
+                </p>
+                <ThemeSelector />
+              </div>
+
+              <form action={updateProfile} className="space-y-5">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-foreground">
+                    Name
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    defaultValue={profile.name ?? ''}
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="Your name"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-foreground">
+                    Avatar URL
+                  </label>
+                  <input
+                    type="url"
+                    name="avatarUrl"
+                    defaultValue={profile.avatarUrl ?? ''}
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="https://example.com/avatar.jpg"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Optional. If set, this can be used to show your avatar in the
+                    header.
+                  </p>
+                </div>
 
                 <button
                   type="submit"
@@ -97,6 +110,71 @@ export default async function ProfilePage() {
                 </button>
               </form>
             </div>
+          </div>
+
+          {/* Settings Section - Visible on mobile, hidden on desktop (use desktop link instead) */}
+          <div className="md:hidden">
+            <div className="mb-6">
+              <h2 className="text-2xl font-semibold mb-2">Settings</h2>
+              <p className="text-sm text-muted-foreground mb-6">
+                Manage your email integration and extension settings.
+              </p>
+            </div>
+
+            <div className="space-y-6">
+              {/* Email Integration Section */}
+              <div className="border border-foreground/20 rounded-lg p-6 bg-card">
+                <div className="mb-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="text-lg font-semibold">Email Integration</h3>
+                    {emailIntegration && emailIntegration.isActive && (
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        <span className="text-sm text-foreground/60">Connected</span>
+                      </div>
+                    )}
+                  </div>
+                  {emailIntegration && emailIntegration.isActive && (
+                    <div className="text-sm text-foreground/60 space-y-1">
+                      <p>{emailIntegration.email}</p>
+                      {emailIntegration.autoSyncEnabled && (
+                        <p className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                          Auto-sync: Every {emailIntegration.autoSyncFrequency} minutes
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {emailIntegration?.lastError && (
+                    <p className="text-sm text-red-600 dark:text-red-400 mt-2">
+                      Error: {emailIntegration.lastError}
+                    </p>
+                  )}
+                </div>
+                <EmailIntegrationForm integration={emailIntegration} />
+              </div>
+
+              {/* Chrome Extension Section */}
+              <ExtensionKeySection
+                initialData={extensionKey ? {
+                  keyPrefix: extensionKey.keyPrefix,
+                  lastUsedAt: extensionKey.lastUsedAt?.toISOString() || null
+                } : null}
+              />
+
+              {/* Sync History Section */}
+              <SyncHistory />
+            </div>
+          </div>
+
+          {/* Desktop: Link to full settings page */}
+          <div className="hidden md:block mt-8">
+            <Link
+              href="/settings/integrations"
+              className="text-sm text-primary hover:underline"
+            >
+              View all settings →
+            </Link>
           </div>
         </div>
       </div>
