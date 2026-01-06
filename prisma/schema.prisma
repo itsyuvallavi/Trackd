@@ -91,6 +91,7 @@ model Job {
 
   // Relations
   activities  Activity[]
+  interviewSessions InterviewSession[]
 
   // Optional: link to Profile when we start using it
   // (no foreign key yet to avoid breaking existing data)
@@ -232,4 +233,113 @@ model EmailSyncLog {
   
   @@index([userId, createdAt])
   @@index([userId, success])
+}
+
+enum InterviewType {
+  TECHNICAL
+  GENERAL
+  MIXED
+}
+
+enum InterviewSessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+model InterviewSession {
+  id          String   @id @default(cuid())
+  userId      String
+  jobId       String?  // Optional: link to specific job
+  
+  type        InterviewType @default(MIXED)
+  status      InterviewSessionStatus @default(IN_PROGRESS)
+  
+  // Session metadata
+  startedAt   DateTime @default(now())
+  completedAt  DateTime?
+  duration    Int?     // Duration in seconds
+  
+  // AI-generated content
+  summary     String?  // Post-session summary
+  strengths   String[] @default([]) // Identified strengths
+  improvements String[] @default([]) // Areas for improvement
+  tips        String[] @default([]) // Personalized tips
+  
+  // Relations
+  messages    InterviewMessage[]
+  job         Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([userId, createdAt])
+  @@index([userId, status])
+  @@index([jobId])
+}
+
+model InterviewMessage {
+  id          String   @id @default(cuid())
+  sessionId   String
+  
+  role        String   // "user" | "assistant" | "system"
+  content     String   // Message text
+  audioUrl    String?  // Optional: store audio file URL if needed
+  
+  // Timing metadata
+  timestamp   DateTime @default(now())
+  duration    Int?     // For user messages: speaking duration in ms
+  
+  // AI analysis (for assistant messages)
+  questionType String? // "technical" | "behavioral" | "general"
+  feedback    Json?    // Real-time feedback metadata
+  
+  // Relations
+  session     InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  @@index([sessionId, timestamp])
+}
+
+model ResumeSession {
+  id                String   @id @default(cuid())
+  userId            String
+  
+  // File storage (Supabase Storage)
+  resumeFileUrl     String   // Supabase Storage URL
+  resumeFileName    String   // Original filename
+  resumeFileType    String   // "application/pdf", "text/plain", etc.
+  
+  // Optional: Keep for backwards compatibility or quick access
+  resumeText        String?  // Optional: extracted text if needed
+  
+  improvedResumeText String?  // AI-improved version
+  parsedResumeData   Json?    // Cached parsed resume data (JSON) for fast PDF generation
+  
+  // OpenAI Assistants API state
+  openaiFileId      String?  // OpenAI file ID after upload
+  openaiAssistantId String?  // OpenAI assistant ID
+  openaiThreadId    String?  // OpenAI thread ID for conversation
+  
+  // Relations
+  messages          ResumeMessage[]
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([userId, createdAt])
+}
+
+model ResumeMessage {
+  id          String   @id @default(cuid())
+  sessionId   String
+  
+  role        String   // "user" | "assistant"
+  content     String   // Message text
+  
+  timestamp   DateTime @default(now())
+  
+  // Relations
+  session     ResumeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  @@index([sessionId, timestamp])
 }

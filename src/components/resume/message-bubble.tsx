@@ -1,0 +1,81 @@
+'use client'
+
+import { ResumeMessage } from '@/lib/resume/types'
+import { format } from 'date-fns'
+import { cn } from '@/lib/utils'
+import { User, Bot } from 'lucide-react'
+import { ResumePreviewCard } from './resume-preview-card'
+
+interface MessageBubbleProps {
+  message: ResumeMessage
+  sessionId?: string
+  showResumeCard?: boolean
+}
+
+export function MessageBubble({ message, sessionId, showResumeCard }: MessageBubbleProps) {
+  const isUser = message.role === 'user'
+
+  // Clean message content - remove fake sandbox links
+  const cleanContent = message.content
+    .replace(/\[View Resume\]\(sandbox:[^)]+\)/gi, '')
+    .replace(/\[Download PDF\]\(sandbox:[^)]+\)/gi, '')
+    .replace(/### \[View Resume\]\(sandbox:[^)]+\)/gi, '')
+    .replace(/### \[Download PDF\]\(sandbox:[^)]+\)/gi, '')
+    .replace(/sandbox:\/[^\s)]+/gi, '')
+    .trim()
+
+  return (
+    <div
+      className={cn(
+        'flex gap-3 mb-4',
+        isUser ? 'flex-row-reverse' : 'flex-row'
+      )}
+    >
+      {/* Avatar */}
+      <div
+        className={cn(
+          'size-8 rounded-full flex items-center justify-center shrink-0',
+          isUser
+            ? 'bg-primary text-primary-foreground'
+            : 'bg-muted text-muted-foreground'
+        )}
+      >
+        {isUser ? (
+          <User className="size-4" />
+        ) : (
+          <Bot className="size-4" />
+        )}
+      </div>
+
+      {/* Message Content */}
+      <div
+        className={cn(
+          'flex flex-col gap-1 max-w-[85%]',
+          isUser ? 'items-end' : 'items-start'
+        )}
+      >
+        <div
+          className={cn(
+            'rounded-2xl px-4 py-3 shadow-sm',
+            isUser
+              ? 'bg-primary text-primary-foreground rounded-br-sm'
+              : 'bg-muted/50 text-foreground border border-border/50 rounded-bl-sm'
+          )}
+        >
+          <p className="text-sm leading-relaxed whitespace-pre-wrap">{cleanContent}</p>
+        </div>
+
+        {/* Resume Preview Card - shown after AI confirms generation */}
+        {showResumeCard && sessionId && !isUser && (
+          <ResumePreviewCard sessionId={sessionId} />
+        )}
+
+        {/* Metadata */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>{format(new Date(message.timestamp), 'HH:mm')}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+

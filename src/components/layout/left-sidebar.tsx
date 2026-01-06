@@ -7,7 +7,8 @@ import {
   Calendar, 
   Search, 
   MessageSquare,
-  CheckSquare
+  CheckSquare,
+  FileText
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -25,9 +26,15 @@ const navItems: NavItem[] = [
     icon: Briefcase,
   },
   {
+    name: 'Resume Advisor',
+    href: '/resume-advisor',
+    icon: FileText,
+  },
+  {
     name: 'Calendar',
     href: '/calendar',
     icon: Calendar,
+    disabled: true,
   },
   {
     name: 'Job Search',
@@ -39,6 +46,7 @@ const navItems: NavItem[] = [
     name: 'Interview Prep',
     href: '/interview-prep',
     icon: MessageSquare,
+    disabled: true,
   },
 ]
 
