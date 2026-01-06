@@ -74,7 +74,6 @@ export class ConversationManager {
       const response = await this.client.chatCompletion(messages, {
         temperature: 0.8, // Higher temperature for more natural conversation
         maxTokens: 500,
-        responseFormat: { type: 'json_object' },
       })
 
       if (!response.data.choices[0]?.message?.content) {
@@ -137,7 +136,6 @@ export class ConversationManager {
       const response = await this.client.chatCompletion(messages, {
         temperature: 0.7,
         maxTokens: 400,
-        responseFormat: { type: 'json_object' },
       })
 
       if (!response.data.choices[0]?.message?.content) {
@@ -195,7 +193,6 @@ export class ConversationManager {
       const response = await this.client.chatCompletion(messagesArray, {
         temperature: 0.7,
         maxTokens: 1500,
-        responseFormat: { type: 'json_object' },
       })
 
       if (!response.data.choices[0]?.message?.content) {
