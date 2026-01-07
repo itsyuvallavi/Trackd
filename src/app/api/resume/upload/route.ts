@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { getAIClient } from '@/lib/ai/client'
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 /**
  * POST /api/resume/upload
@@ -10,6 +11,31 @@ import { getAIClient } from '@/lib/ai/client'
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth()
+    
+    // Check upload rate limit (defense in depth - middleware also checks)
+    const rateLimitResult = checkRateLimit(
+      `upload:${user.id}`,
+      RATE_LIMITS.upload.limit,
+      RATE_LIMITS.upload.window
+    )
+    
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { 
+          error: 'Rate limit exceeded',
+          message: 'Too many file uploads. Please try again later.',
+        },
+        { 
+          status: 429,
+          headers: {
+            'X-RateLimit-Limit': RATE_LIMITS.upload.limit.toString(),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': rateLimitResult.resetAt.toString(),
+            'Retry-After': Math.ceil((rateLimitResult.resetAt - Date.now()) / 1000).toString(),
+          },
+        }
+      )
+    }
     const formData = await request.formData()
     const file = formData.get('file') as File | null
 

@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { JobSource, JobStatus, ActivityType } from '@prisma/client'
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 export async function POST(request: Request) {
   try {
@@ -20,13 +21,71 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Invalid extension key' }, { status: 401 })
     }
 
+    // Check extension rate limit (defense in depth - middleware also checks)
+    const rateLimitResult = checkRateLimit(
+      `extension:key:${key}`,
+      RATE_LIMITS.extension.limit,
+      RATE_LIMITS.extension.window
+    )
+    
+    if (!rateLimitResult.allowed) {
+      return Response.json(
+        { 
+          error: 'Rate limit exceeded',
+          message: 'Too many requests from extension. Please try again later.',
+        },
+        { 
+          status: 429,
+          headers: {
+            'X-RateLimit-Limit': RATE_LIMITS.extension.limit.toString(),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': rateLimitResult.resetAt.toString(),
+            'Retry-After': Math.ceil((rateLimitResult.resetAt - Date.now()) / 1000).toString(),
+          },
+        }
+      )
+    }
+
     const userId = extensionKey.userId
     const jobData = await request.json()
 
-    // Validate required fields
-    if (!jobData.company || !jobData.title) {
+    // Validate and sanitize input with length limits
+    if (!jobData.company || typeof jobData.company !== 'string') {
       return Response.json(
-        { error: 'Company and title are required' },
+        { error: 'Company is required' },
+        { status: 400 }
+      )
+    }
+
+    if (!jobData.title || typeof jobData.title !== 'string') {
+      return Response.json(
+        { error: 'Title is required' },
+        { status: 400 }
+      )
+    }
+
+    // Sanitize and limit field lengths to prevent abuse
+    const company = jobData.company.trim().slice(0, 200)
+    const title = jobData.title.trim().slice(0, 300)
+    const location = jobData.location ? String(jobData.location).trim().slice(0, 200) : null
+    const url = jobData.url ? String(jobData.url).trim().slice(0, 2048) : null
+    const salary = jobData.salary ? String(jobData.salary).trim().slice(0, 100) : null
+
+    // Validate URL format if provided
+    if (url) {
+      try {
+        const urlObj = new URL(url)
+        if (!['http:', 'https:'].includes(urlObj.protocol)) {
+          return Response.json({ error: 'Invalid URL protocol' }, { status: 400 })
+        }
+      } catch {
+        return Response.json({ error: 'Invalid URL format' }, { status: 400 })
+      }
+    }
+
+    if (company.length === 0 || title.length === 0) {
+      return Response.json(
+        { error: 'Company and title cannot be empty' },
         { status: 400 }
       )
     }
@@ -38,8 +97,8 @@ export async function POST(request: Request) {
     const duplicate = await prisma.job.findFirst({
       where: {
         userId,
-        company: { equals: jobData.company, mode: 'insensitive' },
-        title: { equals: jobData.title, mode: 'insensitive' },
+        company: { equals: company, mode: 'insensitive' },
+        title: { equals: title, mode: 'insensitive' },
         createdAt: { gte: thirtyDaysAgo }
       }
     })
@@ -73,12 +132,12 @@ export async function POST(request: Request) {
     const job = await prisma.job.create({
       data: {
         userId,
-        company: jobData.company,
-        title: jobData.title,
-        location: jobData.location || null,
-        url: jobData.url || null,
+        company,
+        title,
+        location,
+        url,
         source,
-        salary: jobData.salary || null,
+        salary,
         status: JobStatus.APPLIED,
         appliedAt: new Date(), // Set applied date since status is APPLIED
       }

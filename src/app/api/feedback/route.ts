@@ -18,6 +18,14 @@ export async function POST(request: Request) {
       )
     }
 
+    // Validate input types
+    if (typeof title !== 'string' || typeof description !== 'string') {
+      return Response.json(
+        { error: 'Title and description must be strings' },
+        { status: 400 }
+      )
+    }
+
     // Validate type enum - accept string values that match enum
     const validTypes = Object.values(FeedbackType) as string[]
     if (!validTypes.includes(type)) {
@@ -27,9 +35,33 @@ export async function POST(request: Request) {
       )
     }
 
+    // Sanitize and limit field lengths to prevent abuse
+    const sanitizedTitle = title.trim().slice(0, 200)
+    const sanitizedDescription = description.trim().slice(0, 5000)
+    const sanitizedUrl = url ? String(url).trim().slice(0, 2048) : null
+
+    if (sanitizedTitle.length === 0 || sanitizedDescription.length === 0) {
+      return Response.json(
+        { error: 'Title and description cannot be empty' },
+        { status: 400 }
+      )
+    }
+
+    // Validate URL format if provided
+    if (sanitizedUrl) {
+      try {
+        const urlObj = new URL(sanitizedUrl)
+        if (!['http:', 'https:'].includes(urlObj.protocol)) {
+          return Response.json({ error: 'Invalid URL protocol' }, { status: 400 })
+        }
+      } catch {
+        return Response.json({ error: 'Invalid URL format' }, { status: 400 })
+      }
+    }
+
     // Get user agent and referer from headers
-    const userAgent = request.headers.get('user-agent') || null
-    const referer = request.headers.get('referer') || url || null
+    const userAgent = request.headers.get('user-agent')?.slice(0, 500) || null
+    const referer = request.headers.get('referer')?.slice(0, 2048) || sanitizedUrl || null
 
     // Create feedback
     const feedback = await prisma.feedback.create({
@@ -38,8 +70,8 @@ export async function POST(request: Request) {
         userEmail: user.email || null,
         type: type as FeedbackType,
         source: FeedbackSource.WEB,
-        title: title.trim(),
-        description: description.trim(),
+        title: sanitizedTitle,
+        description: sanitizedDescription,
         url: referer,
         userAgent,
       },

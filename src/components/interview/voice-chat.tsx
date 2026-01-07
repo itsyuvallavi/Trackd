@@ -196,3 +196,6 @@ export function VoiceChat({ sessionId, onSummaryGenerated }: VoiceChatProps) {
   )
 }
 
+
+
+

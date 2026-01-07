@@ -3,12 +3,13 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { ResumeChatManager } from '@/lib/resume/resume-chat-manager'
+import { withTimeout } from '@/lib/with-timeout'
 
 /**
  * GET /api/resume/chat/sessions/[id]/messages
  * Get messages for a resume session
  */
-export async function GET(
+async function handleGetMessages(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -57,7 +58,7 @@ export async function GET(
  * POST /api/resume/chat/sessions/[id]/messages
  * Send a message and get AI response
  */
-export async function POST(
+async function handlePostMessage(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -70,9 +71,19 @@ export async function POST(
       content: string
     }
 
-    if (!content || !content.trim()) {
+    if (!content || typeof content !== 'string') {
       return NextResponse.json(
-        { error: 'Message content is required' },
+        { error: 'Message content is required and must be a string' },
+        { status: 400 }
+      )
+    }
+
+    // Sanitize and limit message length (max 10KB to prevent abuse)
+    const sanitizedContent = content.trim().slice(0, 10000)
+    
+    if (sanitizedContent.length === 0) {
+      return NextResponse.json(
+        { error: 'Message content cannot be empty' },
         { status: 400 }
       )
     }
@@ -97,7 +108,7 @@ export async function POST(
       data: {
         sessionId,
         role: 'user',
-        content: content.trim(),
+        content: sanitizedContent,
       },
     })
 
@@ -140,7 +151,7 @@ export async function POST(
     }
 
     // Check if user is asking for PDF/resume generation
-    const userMessageLower = content.toLowerCase().trim()
+    const userMessageLower = sanitizedContent.toLowerCase().trim()
     
     // Detect various ways user might request resume generation
     const isAffirmativeResponse = /^(yes|yeah|yep|sure|ok|okay|please|definitely|absolutely|go ahead|do it|let's do it|sounds good|that would be great|i'd like that|generate|create)/.test(userMessageLower)
@@ -213,4 +224,8 @@ export async function POST(
     )
   }
 }
+
+// Export with timeout wrappers (60 seconds for AI responses)
+export const GET = withTimeout(handleGetMessages, 30000)
+export const POST = withTimeout(handlePostMessage, 60000)
 

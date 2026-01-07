@@ -1,5 +1,6 @@
 import { createHash } from 'crypto'
 import { prisma } from '@/lib/prisma'
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 export async function POST(request: Request) {
   try {
@@ -7,6 +8,31 @@ export async function POST(request: Request) {
 
     if (!key?.startsWith('tk_')) {
       return Response.json({ error: 'Invalid key format' }, { status: 400 })
+    }
+
+    // Check extension rate limit (defense in depth - middleware also checks)
+    const rateLimitResult = checkRateLimit(
+      `extension:key:${key}`,
+      RATE_LIMITS.extension.limit,
+      RATE_LIMITS.extension.window
+    )
+    
+    if (!rateLimitResult.allowed) {
+      return Response.json(
+        { 
+          error: 'Rate limit exceeded',
+          message: 'Too many validation requests. Please try again later.',
+        },
+        { 
+          status: 429,
+          headers: {
+            'X-RateLimit-Limit': RATE_LIMITS.extension.limit.toString(),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': rateLimitResult.resetAt.toString(),
+            'Retry-After': Math.ceil((rateLimitResult.resetAt - Date.now()) / 1000).toString(),
+          },
+        }
+      )
     }
 
     const keyHash = createHash('sha256').update(key).digest('hex')

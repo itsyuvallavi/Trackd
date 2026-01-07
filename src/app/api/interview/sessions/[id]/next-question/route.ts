@@ -3,12 +3,13 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { ConversationManager } from '@/lib/interview/conversation-manager'
 import { InterviewMessage } from '@/lib/interview/types'
+import { withTimeout } from '@/lib/with-timeout'
 
 /**
  * POST /api/interview/sessions/[id]/next-question
  * Generate next question for the interview
  */
-export async function POST(
+async function handleNextQuestion(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -110,4 +111,7 @@ export async function POST(
     )
   }
 }
+
+// Export with timeout wrapper (60 seconds for AI generation)
+export const POST = withTimeout(handleNextQuestion, 60000)
 
