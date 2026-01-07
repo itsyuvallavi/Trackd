@@ -13,8 +13,8 @@ function createPrismaClient() {
   if (!globalForPrisma.pool) {
     globalForPrisma.pool = new Pool({
       connectionString,
-      max: 5, // Reduced to avoid hitting Supabase session mode limits
-      min: 1, // Keep one connection warm
+      max: 10, // Increased from 5 to handle more concurrent requests and improve TTFB
+      min: 2, // Keep two connections warm for faster response times
       idleTimeoutMillis: 10000, // Close idle connections after 10s to free up pool
       connectionTimeoutMillis: 10000, // Wait up to 10s for a connection
     })

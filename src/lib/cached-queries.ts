@@ -93,3 +93,36 @@ export const getRecentActivities = cache(async (userId: string, limit = 50) => {
   })
 })
 
+/**
+ * Cached query for user jobs
+ * This is the most frequently accessed data, so caching significantly improves TTFB
+ */
+export const getUserJobs = cache(async (userId: string, limit = 100) => {
+  return prisma.job.findMany({
+    where: { userId },
+    select: {
+      id: true,
+      title: true,
+      company: true,
+      location: true,
+      status: true,
+      priority: true,
+      source: true,
+      url: true,
+      savedAt: true,
+      appliedAt: true,
+      interviewAt: true,
+      nextAction: true,
+      tags: true,
+      notes: true,
+      salary: true,
+      contactName: true,
+      contactEmail: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: { savedAt: 'desc' },
+    take: limit,
+  })
+})
+
