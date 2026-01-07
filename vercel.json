@@ -4,17 +4,5 @@
       "path": "/api/cron/sync-emails",
       "schedule": "0 8 * * *"
     }
-  ],
-  "drains": [
-    {
-      "source": "speed-insights",
-      "destination": {
-        "url": "https://trackd-eight.vercel.app/api/analytics/performance",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json"
-        }
-      }
-    }
   ]
 }
