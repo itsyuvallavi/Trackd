@@ -7,7 +7,7 @@ const protectedRoutes = ['/jobs', '/board', '/today', '/settings', '/onboarding'
 // Routes that should redirect to /jobs if already logged in
 const authRoutes = ['/login', '/signup']
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { supabaseResponse, user } = await updateSession(request)
   const path = request.nextUrl.pathname
 

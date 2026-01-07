@@ -382,3 +382,43 @@ model Feedback {
   @@index([createdAt])
   @@index([source])
 }
+
+model PerformanceMetric {
+  id          String   @id @default(cuid())
+  
+  // Core Web Vitals
+  lcp         Float?   // Largest Contentful Paint (ms)
+  fcp         Float?   // First Contentful Paint (ms)
+  fid         Float?   // First Input Delay (ms)
+  cls         Float?   // Cumulative Layout Shift (score)
+  ttfb        Float?   // Time to First Byte (ms)
+  inp         Float?   // Interaction to Next Paint (ms)
+  
+  // Route/page information
+  route       String?  // e.g., "/jobs", "/board"
+  pathname    String?  // Full pathname
+  search      String?  // Query parameters
+  
+  // User/environment info
+  country     String?  // ISO country code
+  region      String?  // Region/state
+  city        String?  // City
+  deviceType  String?  // "mobile", "desktop", "tablet"
+  browser     String?  // Browser name
+  os          String?  // Operating system
+  
+  // Network/connection
+  connectionType String? // "4g", "wifi", "3g", etc.
+  effectiveType  String? // Network quality
+  
+  // Additional metadata
+  metadata    Json?    // Store full payload for future analysis
+  userAgent   String?  // Full user agent string
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([route, createdAt])
+  @@index([deviceType, createdAt])
+  @@index([country, createdAt])
+  @@index([createdAt])
+}

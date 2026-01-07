@@ -17,7 +17,8 @@
     "test:sync": "vitest run src/__tests__/sync-flow.test.ts",
     "debug:sync": "bun run src/scripts/debug-email-sync.ts",
     "test:live": "bun run src/scripts/test-email-sync-live.ts",
-    "test:live:run": "bun run src/scripts/test-email-sync-live.ts --live"
+    "test:live:run": "bun run src/scripts/test-email-sync-live.ts --live",
+    "analyze:performance": "bun run scripts/analyze-performance.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.0.0",
