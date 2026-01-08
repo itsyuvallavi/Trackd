@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireAuth } from '@/lib/auth'
+import { getCurrentUser } from '@/lib/auth'
 
 /**
  * GET /api/notifications
@@ -8,7 +8,13 @@ import { requireAuth } from '@/lib/auth'
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireAuth()
+    const user = await getCurrentUser()
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     const searchParams = request.nextUrl.searchParams
     const unreadOnly = searchParams.get('unreadOnly') === 'true'
     const limit = parseInt(searchParams.get('limit') || '50')

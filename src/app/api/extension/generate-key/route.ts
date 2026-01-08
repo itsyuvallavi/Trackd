@@ -1,12 +1,18 @@
 import { nanoid } from 'nanoid'
 import { createHash } from 'crypto'
 import { prisma } from '@/lib/prisma'
-import { requireAuth } from '@/lib/auth'
+import { getCurrentUser } from '@/lib/auth'
 
 // GET: Fetch current extension key info (without the full key)
 export async function GET() {
   try {
-    const user = await requireAuth()
+    const user = await getCurrentUser()
+    if (!user) {
+      return Response.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     const userId = user.id
 
     const extensionKey = await prisma.extensionKey.findUnique({
@@ -37,7 +43,13 @@ export async function GET() {
 // POST: Generate new extension key
 export async function POST() {
   try {
-    const user = await requireAuth() // Get authenticated user from Supabase
+    const user = await getCurrentUser()
+    if (!user) {
+      return Response.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     const userId = user.id
 
     // Generate new key: tk_ + 32 random chars

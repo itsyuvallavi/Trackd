@@ -53,14 +53,20 @@ export async function GET(request: NextRequest) {
   // Get base URL from environment variable or request origin
   // In production, NEXT_PUBLIC_APP_URL MUST be set to your production domain (e.g., https://trackd.app)
   // In development, it falls back to request origin (e.g., http://localhost:3001)
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
+  let baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
+  
+  // Ensure baseUrl has a protocol (add https:// if missing)
+  if (baseUrl && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    baseUrl = `https://${baseUrl}`
+    console.log('[OAuth] Added https:// protocol to baseUrl:', baseUrl)
+  }
+  
   const callbackUrl = `${baseUrl}/api/auth/email/oauth/callback`
   
   // Log the callback URL for debugging (helpful to verify it matches OAuth app settings)
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[OAuth] Callback URL:', callbackUrl)
-    console.log('[OAuth] Base URL source:', process.env.NEXT_PUBLIC_APP_URL ? 'NEXT_PUBLIC_APP_URL env var' : 'request.nextUrl.origin')
-  }
+  console.log('[OAuth] Callback URL:', callbackUrl)
+  console.log('[OAuth] Base URL source:', process.env.NEXT_PUBLIC_APP_URL ? `NEXT_PUBLIC_APP_URL env var: ${process.env.NEXT_PUBLIC_APP_URL}` : `request.nextUrl.origin: ${request.nextUrl.origin}`)
+  console.log('[OAuth] Request origin:', request.nextUrl.origin)
 
   // For Google (Gmail)
   if (provider === 'google') {

@@ -10,6 +10,9 @@
   ],
   "host_permissions": [
     "http://localhost:3000/*",
+    "http://localhost:3001/*",
+    "https://trackd-eight.vercel.app/*",
+    "https://trackd.app/*",
     "https://www.linkedin.com/*",
     "https://linkedin.com/*",
     "https://www.indeed.com/*",
@@ -24,8 +27,7 @@
     "https://4dayweek.io/*",
     "https://www.4dayweek.io/*",
     "https://remoterocketship.com/*",
-    "https://www.remoterocketship.com/*",
-    "https://trackd.app/*"
+    "https://www.remoterocketship.com/*"
   ],
   "action": {
     "default_popup": "popup.html",

@@ -22,7 +22,14 @@ export async function GET(request: NextRequest) {
   // Get base URL from environment variable or request origin
   // In production, NEXT_PUBLIC_APP_URL MUST be set to your production domain (e.g., https://trackd.app)
   // In development, it falls back to request origin (e.g., http://localhost:3001)
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
+  let baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
+  
+  // Ensure baseUrl has a protocol (add https:// if missing)
+  if (baseUrl && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    baseUrl = `https://${baseUrl}`
+    console.log('[OAuth Callback] Added https:// protocol to baseUrl:', baseUrl)
+  }
+  
   const callbackUrl = `${baseUrl}/api/auth/email/oauth/callback`
   
   // Log the callback URL for debugging (helpful to verify it matches OAuth app settings)

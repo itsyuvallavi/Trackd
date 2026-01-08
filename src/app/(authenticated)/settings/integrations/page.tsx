@@ -4,6 +4,7 @@ import { ExtensionKeySection } from '@/components/email/extension-key-section'
 import { SyncHistory } from '@/components/email/sync-history'
 import { AppShell } from '@/components/layout/app-shell'
 import { requireAuth } from '@/lib/auth'
+import { OAuthCallbackHandler } from '@/components/email/oauth-callback-handler'
 
 export default async function IntegrationsPage() {
   const user = await requireAuth()
@@ -22,6 +23,7 @@ export default async function IntegrationsPage() {
 
   return (
     <AppShell showEmailNotification={!integration}>
+      <OAuthCallbackHandler />
       <div className="flex-1 overflow-auto">
         <div className="max-w-4xl mx-auto px-4 md:px-8 py-4 md:py-6">
           <div className="mb-6">
