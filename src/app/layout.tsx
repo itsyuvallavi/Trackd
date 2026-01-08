@@ -19,8 +19,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Job Tracker - Never Lose Track of an Opportunity",
-  description: "A low-friction job application tracker that automatically stays up to date by combining job URL capture with email-based status detection.",
+  title: "Trackd - AI-Powered Job Application Tracker",
+  description: "An AI-powered job application tracker with automatic email sync, browser extension for one-click job saving, AI interview prep, and resume advisor.",
+  icons: {
+    icon: '/favicon.png',
+    apple: '/logo.png',
+  },
 };
 
 export default function RootLayout({children}: Readonly<{children: React.ReactNode;}>) 

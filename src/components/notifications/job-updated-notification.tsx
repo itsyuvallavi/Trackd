@@ -37,36 +37,36 @@ export function JobUpdatedNotification({
 
   return (
     <div
-      className={`flex items-start gap-4 px-4 py-4 hover:bg-primary-lightest transition-colors text-base border-b border-border last:border-0 ${
+      className={`flex items-start gap-3 px-3 py-2.5 hover:bg-primary-lightest transition-colors border-b border-border last:border-0 ${
         !notification.isRead ? 'bg-primary-lightest/30' : ''
       }`}
     >
       <div className="mt-0.5 shrink-0">
-        <CheckCircle2 className="size-5 text-success" />
+        <CheckCircle2 className="size-4 text-success" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="font-medium text-foreground">{notification.title}</p>
-        <p className="text-sm text-muted-foreground mt-1 whitespace-pre-line">
+        <p className="text-xs font-medium text-foreground">{notification.title}</p>
+        <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-line">
           {notification.message}
         </p>
         {notification.actionUrl && (
           <Link
             href={notification.actionUrl}
-            className="text-sm text-primary hover:underline mt-1.5 inline-block"
+            className="text-xs text-primary hover:underline mt-1 inline-block"
             onClick={handleActionClick}
           >
             View job →
           </Link>
         )}
       </div>
-      <div className="flex gap-1.5 shrink-0">
+      <div className="flex gap-1 shrink-0">
         {!notification.isRead && (
           <button
             onClick={() => onMarkAsRead(notification.id)}
             className="text-muted-foreground hover:text-foreground transition-colors"
             title="Mark as read"
           >
-            <CheckCircle2 className="size-5" />
+            <CheckCircle2 className="size-4" />
           </button>
         )}
         <button
@@ -74,7 +74,7 @@ export function JobUpdatedNotification({
           className="text-muted-foreground hover:text-foreground transition-colors"
           title="Dismiss"
         >
-          <X className="size-5" />
+          <X className="size-4" />
         </button>
       </div>
     </div>

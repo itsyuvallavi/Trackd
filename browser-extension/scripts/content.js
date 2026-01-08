@@ -542,10 +542,23 @@ function extractUniversal() {
 }
 
 function createExtractorWrapper(extractorName, displayName) {
-  return function() {
+  return async function() {
+    console.log(`[Trackd Router] Looking for ${displayName} extractor: ${extractorName}`)
     const extractor = window.TrackdExtractors?.[extractorName]
+    console.log(`[Trackd Router] Extractor found:`, typeof extractor)
+    
     if (typeof extractor === 'function') {
-      return extractor()
+      try {
+        // Handle both sync and async extractors
+        console.log(`[Trackd Router] Calling ${displayName} extractor...`)
+        const result = extractor()
+        const finalResult = result instanceof Promise ? await result : result
+        console.log(`[Trackd Router] ${displayName} extractor returned:`, JSON.stringify(finalResult))
+        return finalResult
+      } catch (err) {
+        console.error(`[Trackd Router] ${displayName} extractor threw error:`, err)
+        return createEmptyData()
+      }
     }
     console.error(`[Trackd Router] ${displayName} extractor module not loaded!`)
     return createEmptyData()
@@ -566,7 +579,7 @@ const EXTRACTOR_ROUTES = [
   { hostname: 'remoterocketship.com', extractor: extractFromRemoteRocketship, name: 'RemoteRocketship' }
 ]
 
-function extractJobData() {
+async function extractJobData() {
   console.log('%c[Trackd Router] ===== NEW VERSION LOADED =====', 'color: green; font-weight: bold; font-size: 14px;')
   const hostname = window.location.hostname.toLowerCase()
 
@@ -574,7 +587,7 @@ function extractJobData() {
     if (hostname.includes(route.hostname)) {
       console.log(`[Trackd Router] Routing to ${route.name} extractor`)
       try {
-        return route.extractor()
+        return await route.extractor()
       } catch (error) {
         console.error(`[Trackd Router] ${route.name} extractor failed:`, error)
         break
@@ -594,8 +607,29 @@ function extractJobData() {
 // Listen for messages from the popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'extractJobData') {
-    const jobData = extractJobData()
-    sendResponse(jobData)
+    const debugInfo = {
+      documentTitle: document.title,
+      url: window.location.href,
+      hostname: window.location.hostname,
+      hasTrackdExtractors: !!window.TrackdExtractors,
+      extractorNames: window.TrackdExtractors ? Object.keys(window.TrackdExtractors) : []
+    }
+    console.log('[Trackd Content] Received request, debug info:', debugInfo)
+    
+    // Handle async extraction
+    extractJobData().then(jobData => {
+      console.log('[Trackd Content] Extraction complete:', JSON.stringify(jobData))
+      // Add debug info to response for popup logging
+      jobData._debug = debugInfo
+      sendResponse(jobData)
+    }).catch(error => {
+      console.error('[Trackd Content] Extraction error:', error)
+      const emptyData = createEmptyData()
+      emptyData._debug = { ...debugInfo, error: error.message }
+      sendResponse(emptyData)
+    })
+    // Return true to indicate we will send a response asynchronously
+    return true
   }
   return true
 })

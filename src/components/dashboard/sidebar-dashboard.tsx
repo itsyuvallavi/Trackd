@@ -50,7 +50,7 @@ export function SidebarDashboard({ activities, notifications, onClose, isCollaps
   const filteredActivities = activities
 
   return (
-    <div className="w-[266px] border-l border-border bg-card flex flex-col fixed right-0 top-[80px] bottom-0 h-[calc(100vh-80px)] slide-in-from-right-full duration-300">
+    <div className="w-[266px] border-l border-border bg-card flex flex-col fixed right-0 top-[64px] bottom-0 h-[calc(100vh-64px)] z-30 slide-in-from-right-full duration-300">
       {/* Header with Toggle */}
       <div className="bg-card border-b border-border px-3 py-2.5 flex items-center justify-between z-10 shrink-0">
         <div className="flex items-center gap-1 bg-muted rounded-md p-0.5">

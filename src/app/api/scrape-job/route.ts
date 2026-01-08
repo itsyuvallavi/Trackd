@@ -50,6 +50,15 @@ async function handleScrapeJob(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Internal URLs are not allowed' }, { status: 400 })
     }
 
+    // LinkedIn requires JavaScript execution and authentication - server-side scraping won't work
+    if (hostname.includes('linkedin.com')) {
+      return NextResponse.json({ 
+        error: 'LinkedIn jobs cannot be imported via URL. Please navigate to the LinkedIn job page and use the extension\'s automatic extraction instead.',
+        success: false,
+        requiresClientSide: true
+      }, { status: 400 })
+    }
+
     // Fetch the page with timeout and size limits
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout

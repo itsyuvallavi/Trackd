@@ -37,6 +37,7 @@ async function fetchWithTimeout(url, options = {}, timeout = 10000) {
 
 // DOM Elements
 const connectView = document.getElementById('connectView')
+const loadingView = document.getElementById('loadingView')
 const jobView = document.getElementById('jobView')
 const noJobView = document.getElementById('noJobView')
 const successView = document.getElementById('successView')
@@ -75,12 +76,15 @@ async function init() {
     getKeyLink.href = `${API_URL}/settings/integrations`
   }
 
+  // Loading view is shown by default in HTML, check connection status
   const data = await chrome.storage.local.get(['extensionKey', 'userEmail'])
 
   if (data.extensionKey) {
+    // User is connected - show loading while extracting
     showConnectedState(data.userEmail)
     await loadJobData()
   } else {
+    // User not connected - show connect view
     showConnectView()
   }
 }
@@ -88,6 +92,7 @@ async function init() {
 // Views
 function showConnectView() {
   connectView.classList.remove('hidden')
+  loadingView.classList.add('hidden')
   jobView.classList.add('hidden')
   noJobView.classList.add('hidden')
   successView.classList.add('hidden')
@@ -100,10 +105,25 @@ function showConnectedState(email) {
   connectionStatus.textContent = email ? `Connected as ${email}` : 'Connected'
   connectionStatus.classList.add('connected')
   footer.classList.remove('hidden')
+  // Hide connect view immediately
+  connectView.classList.add('hidden')
+}
+
+function showLoadingState() {
+  connectView.classList.add('hidden')
+  loadingView.classList.remove('hidden')
+  jobView.classList.add('hidden')
+  noJobView.classList.add('hidden')
+  successView.classList.add('hidden')
+}
+
+function hideLoadingState() {
+  loadingView.classList.add('hidden')
 }
 
 function showJobView() {
   connectView.classList.add('hidden')
+  loadingView.classList.add('hidden')
   jobView.classList.remove('hidden')
   noJobView.classList.add('hidden')
   successView.classList.add('hidden')
@@ -111,6 +131,7 @@ function showJobView() {
 
 function showNoJobView() {
   connectView.classList.add('hidden')
+  loadingView.classList.add('hidden')
   jobView.classList.add('hidden')
   noJobView.classList.remove('hidden')
   successView.classList.add('hidden')
@@ -118,6 +139,7 @@ function showNoJobView() {
 
 function showSuccessView(company, title) {
   connectView.classList.add('hidden')
+  loadingView.classList.add('hidden')
   jobView.classList.add('hidden')
   noJobView.classList.add('hidden')
   successView.classList.remove('hidden')
@@ -224,8 +246,8 @@ async function loadJobData() {
         })
         console.log('[Trackd] Content scripts injected')
         
-        // Wait a moment for the scripts to initialize
-        await new Promise(resolve => setTimeout(resolve, 200))
+        // Wait for scripts to initialize (LinkedIn needs more time as it's a SPA)
+        await new Promise(resolve => setTimeout(resolve, 500))
         
         // Now send message to extract job data
         const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractJobData' })
@@ -237,7 +259,23 @@ async function loadJobData() {
       showNoJobView()
       return
     }
-    console.log('[Trackd] Extracted job data:', jobData)
+    
+    // Detailed logging to debug extraction issues
+    console.log('[Trackd] Extracted job data:', JSON.stringify(jobData, null, 2))
+    console.log('[Trackd] Title:', jobData?.title, '| Company:', jobData?.company)
+    console.log('[Trackd] URL:', jobData?.url)
+    
+    // Log debug info from content script
+    if (jobData?._debug) {
+      console.log('[Trackd] Debug info from page:')
+      console.log('  - Document title:', jobData._debug.documentTitle)
+      console.log('  - Hostname:', jobData._debug.hostname)
+      console.log('  - Has extractors:', jobData._debug.hasTrackdExtractors)
+      console.log('  - Extractor names:', jobData._debug.extractorNames)
+      if (jobData._debug.error) {
+        console.log('  - Error:', jobData._debug.error)
+      }
+    }
 
     // Check if we got valid job data - require at least title (company can be filled manually)
     if (jobData && jobData.title) {
@@ -364,10 +402,17 @@ importUrlBtn?.addEventListener('click', async () => {
   }
   
   // Validate URL
+  let parsedUrl
   try {
-    new URL(url)
+    parsedUrl = new URL(url)
   } catch {
     showMessage('error', 'Invalid URL format')
+    return
+  }
+
+  // Check for LinkedIn - warn user that URL import doesn't work for LinkedIn
+  if (parsedUrl.hostname.includes('linkedin.com')) {
+    showMessage('error', 'LinkedIn jobs cannot be imported via URL. Please navigate to the LinkedIn job page directly and the extension will extract it automatically.')
     return
   }
   
@@ -397,6 +442,11 @@ importUrlBtn?.addEventListener('click', async () => {
     const response = await res.json()
 
     if (!res.ok || !response.success) {
+      // Special handling for LinkedIn or sites that require client-side extraction
+      if (response.requiresClientSide) {
+        showMessage('error', response.error)
+        return
+      }
       throw new Error(response.error || 'Could not extract job data from this URL')
     }
     

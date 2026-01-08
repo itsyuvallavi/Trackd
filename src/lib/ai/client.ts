@@ -9,17 +9,18 @@
  */
 
 import OpenAI from 'openai'
-import { getAIConfig, calculateCost } from './config'
+import { getAIConfig, getResumeAIConfig, calculateCost } from './config'
+import { AIConfig } from './types'
 import { AIResponse, AIError } from './types'
 
 export class AIClient {
   private client: OpenAI
-  private config: ReturnType<typeof getAIConfig>
+  private config: AIConfig
   private requestCount: number = 0
   private totalCost: number = 0
 
-  constructor() {
-    this.config = getAIConfig()
+  constructor(config?: AIConfig) {
+    this.config = config || getAIConfig()
     this.client = new OpenAI({
       apiKey: this.config.apiKey,
       timeout: this.config.timeout,
@@ -35,6 +36,8 @@ export class AIClient {
     options?: {
       temperature?: number
       maxTokens?: number
+      model?: string // Allow overriding model per request
+      responseFormat?: 'json_object' | 'text' // Allow choosing response format
     }
   ): Promise<AIResponse<OpenAI.Chat.Completions.ChatCompletion>> {
     const startTime = Date.now()
@@ -43,16 +46,18 @@ export class AIClient {
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
       try {
         const response = await this.client.chat.completions.create({
-          model: this.config.model,
+          model: options?.model ?? this.config.model,
           messages,
           temperature: options?.temperature ?? this.config.temperature,
           max_tokens: options?.maxTokens,
-          response_format: { type: 'json_object' }, // Force JSON response
+          response_format: options?.responseFormat === 'text' 
+            ? undefined 
+            : { type: 'json_object' }, // Default to JSON, allow text for resume generation
         })
 
         const usage = response.usage
         const cost = usage
-          ? calculateCost(usage.prompt_tokens, usage.completion_tokens)
+          ? calculateCost(options?.model ?? this.config.model, usage.prompt_tokens, usage.completion_tokens)
           : 0
 
         this.requestCount++
@@ -374,16 +379,27 @@ export class AIClient {
   }
 }
 
-// Singleton instance
+// Singleton instances
 let aiClientInstance: AIClient | null = null
+let resumeAIClientInstance: AIClient | null = null
 
 /**
- * Get or create the AI client singleton
+ * Get or create the AI client singleton (default: gpt-4o-mini for email sync, interview prep)
  */
 export function getAIClient(): AIClient {
   if (!aiClientInstance) {
     aiClientInstance = new AIClient()
   }
   return aiClientInstance
+}
+
+/**
+ * Get or create the resume AI client singleton (gpt-4o for more robust resume analysis)
+ */
+export function getResumeAIClient(): AIClient {
+  if (!resumeAIClientInstance) {
+    resumeAIClientInstance = new AIClient(getResumeAIConfig())
+  }
+  return resumeAIClientInstance
 }
 

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { ResumeChatManager } from '@/lib/resume/resume-chat-manager'
+import { parseResumeText } from '@/lib/resume/resume-template'
+import { getResumeAIClient } from '@/lib/ai/client'
 import { withTimeout } from '@/lib/with-timeout'
 
 /**
@@ -174,20 +175,33 @@ async function handlePostMessage(
         
         const improvedResume = await manager.generateImprovedResume(conversationHistory)
         console.log('[Messages API] Improved resume generated, length:', improvedResume.length)
-        console.log('[Messages API] First 300 chars:', improvedResume.substring(0, 300))
         
-        // Save improved resume and clear cached parsed data so it re-parses the new version
+        // PRE-PARSE the resume data NOW (not at preview time)
+        // This is the key performance optimization - parsing happens during generation
+        console.log('[Messages API] Pre-parsing resume data for faster preview...')
+        let parsedResumeData = null
+        try {
+          const aiClient = getResumeAIClient()
+          parsedResumeData = await parseResumeText(improvedResume, aiClient)
+          console.log('[Messages API] Resume pre-parsed successfully')
+        } catch (parseError) {
+          // Log but don't fail - preview will parse on-demand if needed
+          console.error('[Messages API] Pre-parsing failed (non-fatal):', parseError)
+        }
+        
+        // Save improved resume WITH pre-parsed data
         await prisma.resumeSession.update({
           where: { id: sessionId },
           data: { 
             improvedResumeText: improvedResume,
-            parsedResumeData: Prisma.JsonNull, // Clear cache to force re-parsing of new version
+            // Cast to any for Prisma JSON field compatibility
+            parsedResumeData: parsedResumeData ? (parsedResumeData as any) : undefined,
           },
         })
         
-        console.log('[Messages API] Improved resume saved to database and cache cleared')
+        console.log('[Messages API] Improved resume saved with pre-parsed data')
         resumeGenerated = true
-        additionalContext = `The user requested a generated resume. The improved resume has been created and saved to the database successfully. Tell them it's ready and they can use the "View Resume" and "Download PDF" buttons that will appear below to preview and download their polished resume. IMPORTANT: DO NOT output the resume text in your response - the system handles displaying it through the preview buttons. Just acknowledge that it's ready.`
+        additionalContext = `The user requested a generated resume. The improved resume has been created and saved successfully. Tell them it's ready and they can use the "View Resume" and "Download PDF" buttons that will appear below to preview and download their polished resume. IMPORTANT: DO NOT output the resume text in your response - the system handles displaying it through the preview buttons. Just acknowledge that it's ready.`
       } catch (error) {
         console.error('Error generating resume:', error)
         additionalContext = `There was an issue generating the resume. Apologize briefly and ask them to try again.`
@@ -225,7 +239,6 @@ async function handlePostMessage(
   }
 }
 
-// Export with timeout wrappers (60 seconds for AI responses)
+// Export with timeout wrappers (90 seconds for AI responses - includes pre-parsing)
 export const GET = withTimeout(handleGetMessages, 30000)
-export const POST = withTimeout(handlePostMessage, 60000)
-
+export const POST = withTimeout(handlePostMessage, 90000)

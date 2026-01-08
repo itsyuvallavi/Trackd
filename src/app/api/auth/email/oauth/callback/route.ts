@@ -1,23 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { EmailProvider } from '@prisma/client'
+import { requireAuth } from '@/lib/auth'
 
 /**
  * OAuth callback handler for email integration
  * Exchanges authorization code for access tokens and stores them
  */
 export async function GET(request: NextRequest) {
+  // Require authentication
+  const user = await requireAuth()
+  if (!user) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
   const searchParams = request.nextUrl.searchParams
   const code = searchParams.get('code')
   const error = searchParams.get('error')
   const stateParam = searchParams.get('state')
 
   // Get base URL from environment variable or request origin
-  // In production, NEXT_PUBLIC_APP_URL should be set in Vercel environment variables
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
-    (process.env.NODE_ENV === 'production' 
-      ? request.nextUrl.origin 
-      : 'http://localhost:3000')
+  // In production, NEXT_PUBLIC_APP_URL MUST be set to your production domain (e.g., https://trackd.app)
+  // In development, it falls back to request origin (e.g., http://localhost:3001)
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
+  const callbackUrl = `${baseUrl}/api/auth/email/oauth/callback`
+  
+  // Log the callback URL for debugging (helpful to verify it matches OAuth app settings)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[OAuth Callback] Received callback URL:', callbackUrl)
+    console.log('[OAuth Callback] Base URL source:', process.env.NEXT_PUBLIC_APP_URL ? 'NEXT_PUBLIC_APP_URL env var' : 'request.nextUrl.origin')
+    console.log('[OAuth Callback] Request origin:', request.nextUrl.origin)
+  }
   
   // Helper to create absolute redirect URLs
   const createRedirectUrl = (path: string, params?: Record<string, string>) => {
@@ -51,80 +64,167 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const { provider, redirectTo, userId } = state
-  const callbackUrl = `${baseUrl}/api/auth/email/oauth/callback`
+  const { provider, redirectTo, userId: stateUserId } = state
+  
+  // Verify that the userId in state matches the authenticated user
+  // This prevents users from connecting OAuth to other users' accounts
+  if (stateUserId !== user.id) {
+    console.error('OAuth state userId mismatch:', { stateUserId, authenticatedUserId: user.id })
+    return NextResponse.redirect(
+      createRedirectUrl('/settings/integrations', { error: 'Authentication mismatch' })
+    )
+  }
+  
+  const userId = user.id
 
   try {
     if (provider === 'google') {
+      // Validate required environment variables
+      const googleClientId = process.env.GOOGLE_CLIENT_ID
+      const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
+      
+      if (!googleClientId || !googleClientSecret) {
+        console.error('Missing Google OAuth credentials:', { 
+          hasClientId: !!googleClientId, 
+          hasClientSecret: !!googleClientSecret 
+        })
+        return NextResponse.redirect(
+          createRedirectUrl('/settings/integrations', { error: 'Google OAuth is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your environment variables.' })
+        )
+      }
+
       // Exchange code for tokens
+      // IMPORTANT: The redirect_uri MUST match exactly what was used in the authorization request
+      // and what's registered in your Google OAuth app settings
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[OAuth Callback] Using redirect_uri for token exchange:', callbackUrl)
+      }
+      
       const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           code,
-          client_id: process.env.GOOGLE_CLIENT_ID || '',
-          client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
+          client_id: googleClientId,
+          client_secret: googleClientSecret,
           redirect_uri: callbackUrl,
           grant_type: 'authorization_code',
         }),
       })
 
       if (!tokenResponse.ok) {
-        const error = await tokenResponse.text()
-        console.error('Google token exchange failed:', error)
+        const errorText = await tokenResponse.text()
+        let errorMessage = 'Failed to exchange authorization code'
+        try {
+          const errorJson = JSON.parse(errorText)
+          errorMessage = errorJson.error_description || errorJson.error || errorMessage
+          console.error('Google token exchange failed:', errorJson)
+        } catch {
+          console.error('Google token exchange failed:', errorText)
+        }
         return NextResponse.redirect(
-          createRedirectUrl('/settings/integrations', { error: 'Failed to exchange authorization code' })
+          createRedirectUrl('/settings/integrations', { error: errorMessage })
         )
       }
 
       const tokens = await tokenResponse.json()
 
+      if (!tokens.access_token) {
+        console.error('No access token in Google OAuth response:', tokens)
+        return NextResponse.redirect(
+          createRedirectUrl('/settings/integrations', { error: 'Failed to obtain access token' })
+        )
+      }
+
       // Get user email from Google API
       const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
         headers: { Authorization: `Bearer ${tokens.access_token}` },
       })
+
+      if (!userInfoResponse.ok) {
+        const errorText = await userInfoResponse.text()
+        console.error('Failed to fetch user info from Google:', errorText)
+        return NextResponse.redirect(
+          createRedirectUrl('/settings/integrations', { error: 'Failed to fetch user information' })
+        )
+      }
+
       const userInfo = await userInfoResponse.json()
 
+      if (!userInfo.email) {
+        console.error('No email in Google user info:', userInfo)
+        return NextResponse.redirect(
+          createRedirectUrl('/settings/integrations', { error: 'Failed to get email address from Google' })
+        )
+      }
+
       // Store integration
-      await prisma.emailIntegration.upsert({
-        where: { userId },
-        create: {
-          userId,
-          provider: EmailProvider.GMAIL_OAUTH,
-          email: userInfo.email,
-          accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
-          tokenExpiry: tokens.expires_in
-            ? new Date(Date.now() + tokens.expires_in * 1000)
-            : null,
-          isActive: true,
-        },
-        update: {
-          provider: EmailProvider.GMAIL_OAUTH,
-          email: userInfo.email,
-          accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
-          tokenExpiry: tokens.expires_in
-            ? new Date(Date.now() + tokens.expires_in * 1000)
-            : null,
-          isActive: true,
-          lastError: null,
-        },
-      })
+      try {
+        await prisma.emailIntegration.upsert({
+          where: { userId },
+          create: {
+            userId,
+            provider: EmailProvider.GMAIL_OAUTH,
+            email: userInfo.email,
+            accessToken: tokens.access_token,
+            refreshToken: tokens.refresh_token || null,
+            tokenExpiry: tokens.expires_in
+              ? new Date(Date.now() + tokens.expires_in * 1000)
+              : null,
+            isActive: true,
+          },
+          update: {
+            provider: EmailProvider.GMAIL_OAUTH,
+            email: userInfo.email,
+            accessToken: tokens.access_token,
+            refreshToken: tokens.refresh_token || null,
+            tokenExpiry: tokens.expires_in
+              ? new Date(Date.now() + tokens.expires_in * 1000)
+              : null,
+            isActive: true,
+            lastError: null,
+          },
+        })
+      } catch (dbError) {
+        console.error('Database error storing email integration:', dbError)
+        return NextResponse.redirect(
+          createRedirectUrl('/settings/integrations', { error: 'Failed to save email integration' })
+        )
+      }
 
       const finalRedirect = redirectTo ? createRedirectUrl(redirectTo, { success: 'google_connected' }) : createRedirectUrl('/settings/integrations', { success: 'google_connected' })
       return NextResponse.redirect(finalRedirect)
     }
 
     if (provider === 'microsoft') {
+      // Validate required environment variables
+      const microsoftClientId = process.env.MICROSOFT_CLIENT_ID
+      const microsoftClientSecret = process.env.MICROSOFT_CLIENT_SECRET
+      
+      if (!microsoftClientId || !microsoftClientSecret) {
+        console.error('Missing Microsoft OAuth credentials:', { 
+          hasClientId: !!microsoftClientId, 
+          hasClientSecret: !!microsoftClientSecret 
+        })
+        return NextResponse.redirect(
+          createRedirectUrl('/settings/integrations', { error: 'Microsoft OAuth is not configured. Please set MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET in your environment variables.' })
+        )
+      }
+      
       // Exchange code for tokens
+      // IMPORTANT: The redirect_uri MUST match exactly what was used in the authorization request
+      // and what's registered in your Microsoft Azure app settings
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[OAuth Callback] Using redirect_uri for token exchange:', callbackUrl)
+      }
+      
       const tokenResponse = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           code,
-          client_id: process.env.MICROSOFT_CLIENT_ID || '',
-          client_secret: process.env.MICROSOFT_CLIENT_SECRET || '',
+          client_id: microsoftClientId,
+          client_secret: microsoftClientSecret,
           redirect_uri: callbackUrl,
           grant_type: 'authorization_code',
         }),

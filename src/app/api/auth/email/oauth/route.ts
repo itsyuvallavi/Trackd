@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { requireAuth } from '@/lib/auth'
 
 /**
  * Initiate OAuth flow for Google or Microsoft email integration
  * This creates an OAuth URL and redirects the user to authorize email access
  */
 export async function GET(request: NextRequest) {
+  // Require authentication
+  const user = await requireAuth()
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
   // Get client IP for rate limiting (ip property only available in middleware)
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 
     request.headers.get('x-real-ip') || 
@@ -45,12 +51,16 @@ export async function GET(request: NextRequest) {
   }
 
   // Get base URL from environment variable or request origin
-  // In production, NEXT_PUBLIC_APP_URL should be set in Vercel environment variables
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
-    (process.env.NODE_ENV === 'production' 
-      ? request.nextUrl.origin 
-      : 'http://localhost:3000')
+  // In production, NEXT_PUBLIC_APP_URL MUST be set to your production domain (e.g., https://trackd.app)
+  // In development, it falls back to request origin (e.g., http://localhost:3001)
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
   const callbackUrl = `${baseUrl}/api/auth/email/oauth/callback`
+  
+  // Log the callback URL for debugging (helpful to verify it matches OAuth app settings)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[OAuth] Callback URL:', callbackUrl)
+    console.log('[OAuth] Base URL source:', process.env.NEXT_PUBLIC_APP_URL ? 'NEXT_PUBLIC_APP_URL env var' : 'request.nextUrl.origin')
+  }
 
   // For Google (Gmail)
   if (provider === 'google') {
@@ -73,7 +83,7 @@ export async function GET(request: NextRequest) {
     authUrl.searchParams.set('prompt', 'consent')
     authUrl.searchParams.set(
       'state',
-      JSON.stringify({ provider: 'google', redirectTo, userId: 'temp-user' }),
+      JSON.stringify({ provider: 'google', redirectTo, userId: user.id }),
     )
 
     return NextResponse.redirect(authUrl.toString())
@@ -98,7 +108,7 @@ export async function GET(request: NextRequest) {
     authUrl.searchParams.set('scope', 'https://graph.microsoft.com/Mail.Read offline_access')
     authUrl.searchParams.set(
       'state',
-      JSON.stringify({ provider: 'microsoft', redirectTo, userId: 'temp-user' }),
+      JSON.stringify({ provider: 'microsoft', redirectTo, userId: user.id }),
     )
 
     return NextResponse.redirect(authUrl.toString())

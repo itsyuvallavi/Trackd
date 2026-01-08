@@ -29,6 +29,8 @@
     .logo {
       font-weight: 600;
       font-size: 14px;
+      display: flex;
+      align-items: center;
     }
 
     .status {
@@ -203,12 +205,23 @@
 </head>
 <body>
   <div class="header">
-    <span class="logo">Trackd</span>
+    <div class="logo">
+      <img src="icons/icon32.png" alt="Trackd" width="20" height="20" style="vertical-align: middle; margin-right: 6px; border-radius: 4px;">
+      <span>Trackd</span>
+    </div>
     <span id="connectionStatus" class="status">Not connected</span>
   </div>
 
-  <!-- Connect Form -->
-  <div id="connectView" class="content">
+  <!-- Loading View - shown by default to avoid flash -->
+  <div id="loadingView" class="content">
+    <div style="text-align: center; padding: 24px 16px; color: #a3a3a3;">
+      <div class="spinner" style="width: 24px; height: 24px; margin: 0 auto 12px; border-width: 3px;"></div>
+      <p>Loading...</p>
+    </div>
+  </div>
+
+  <!-- Connect Form - hidden by default -->
+  <div id="connectView" class="content hidden">
     <h3 style="margin-bottom: 12px;">🔗 Connect to Trackd</h3>
     <div class="field">
       <label>Paste your extension key:</label>
