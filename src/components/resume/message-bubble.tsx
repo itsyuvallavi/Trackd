@@ -10,9 +10,10 @@ interface MessageBubbleProps {
   message: ResumeMessage
   sessionId?: string
   showResumeCard?: boolean
+  isNewMessage?: boolean
 }
 
-export function MessageBubble({ message, sessionId, showResumeCard }: MessageBubbleProps) {
+export function MessageBubble({ message, sessionId, showResumeCard, isNewMessage = false }: MessageBubbleProps) {
   const isUser = message.role === 'user'
 
   // Clean message content - remove fake sandbox links
@@ -27,8 +28,9 @@ export function MessageBubble({ message, sessionId, showResumeCard }: MessageBub
   return (
     <div
       className={cn(
-        'flex gap-3 mb-4',
-        isUser ? 'flex-row-reverse' : 'flex-row'
+        'flex gap-3 mb-3',
+        isUser ? 'flex-row-reverse' : 'flex-row',
+        isNewMessage && !isUser && 'animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out'
       )}
     >
       {/* Avatar */}

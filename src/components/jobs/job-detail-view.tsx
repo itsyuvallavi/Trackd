@@ -23,7 +23,8 @@ import {
   StickyNote,
   Save,
 } from 'lucide-react'
-import { formatDate, formatRelativeTime } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
+import { useRelativeTime } from '@/hooks/use-relative-time'
 import { STATUS_COLORS, STATUS_LABELS, SOURCE_LABELS, PRIORITY_LABELS } from '@/lib/constants'
 import { updateJobNotes } from '@/app/(authenticated)/jobs/actions'
 
@@ -38,6 +39,8 @@ export function JobDetailView({ job }: JobDetailViewProps) {
   const [notes, setNotes] = useState(job.notes || '')
   const [isEditingNotes, setIsEditingNotes] = useState(false)
   const [isSavingNotes, setIsSavingNotes] = useState(false)
+  const savedAtRelative = useRelativeTime(job.savedAt)
+  const updatedAtRelative = useRelativeTime(job.updatedAt)
 
   const statusColorClass = STATUS_COLORS[job.status]
 
@@ -61,77 +64,75 @@ export function JobDetailView({ job }: JobDetailViewProps) {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-16 md:pb-0">
-      {/* Header */}
-      <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-[56px] md:top-[64px] z-10">
-        <div className="max-w-5xl mx-auto px-3 md:px-6 py-3 md:py-6">
-          {/* Mobile: Stacked layout */}
-          <div className="md:hidden space-y-3">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push('/jobs')}
-                className="hover:bg-accent shrink-0 p-2"
-              >
-                <ArrowLeft className="size-4" />
-              </Button>
-              <div className="flex-1 min-w-0">
-                <h1 className="text-lg font-bold break-words line-clamp-2">{job.title}</h1>
-                <p className="text-sm text-muted-foreground mt-0.5">{job.company}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <StatusDropdown jobId={job.id} currentStatus={job.status} />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsEditModalOpen(true)}
-                disabled={isPending}
-                className="flex-1"
-              >
-                <Edit className="size-4 mr-2" />
-                Edit
-              </Button>
+    <div className="w-full bg-background">
+      {/* Header - Matches /jobs page title position */}
+      <div className="mb-6 border-b border-border pb-4 md:pb-6">
+        {/* Mobile: Stacked layout */}
+        <div className="md:hidden space-y-3">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push('/jobs')}
+              className="hover:bg-accent shrink-0 p-2"
+            >
+              <ArrowLeft className="size-4" />
+            </Button>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-lg font-bold break-words line-clamp-2">{job.title}</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">{job.company}</p>
             </div>
           </div>
+          <div className="flex items-center gap-2">
+            <StatusDropdown jobId={job.id} currentStatus={job.status} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditModalOpen(true)}
+              disabled={isPending}
+              className="flex-1"
+            >
+              <Edit className="size-4 mr-2" />
+              Edit
+            </Button>
+          </div>
+        </div>
 
-          {/* Desktop: Original layout */}
-          <div className="hidden md:flex items-start justify-between gap-6">
-            <div className="flex items-start gap-4 flex-1 min-w-0">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push('/jobs')}
-                className="hover:bg-accent shrink-0"
-              >
-                <ArrowLeft className="size-4 mr-2" />
-                Back
-              </Button>
-              <div className="flex-1 min-w-0">
-                <h1 className="text-2xl font-bold mb-2 break-words">{job.title}</h1>
-                <p className="text-lg text-muted-foreground">{job.company}</p>
-              </div>
+        {/* Desktop: Original layout */}
+        <div className="hidden md:flex items-start justify-between gap-6">
+          <div className="flex items-start gap-4 flex-1 min-w-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push('/jobs')}
+              className="hover:bg-accent shrink-0"
+            >
+              <ArrowLeft className="size-4 mr-2" />
+              Back
+            </Button>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl font-semibold mb-2 break-words">{job.title}</h1>
+              <p className="text-sm text-muted-foreground">{job.company}</p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <StatusDropdown jobId={job.id} currentStatus={job.status} />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsEditModalOpen(true)}
-                disabled={isPending}
-              >
-                <Edit className="size-4 mr-2" />
-                Edit
-              </Button>
-            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <StatusDropdown jobId={job.id} currentStatus={job.status} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditModalOpen(true)}
+              disabled={isPending}
+            >
+              <Edit className="size-4 mr-2" />
+              Edit
+            </Button>
           </div>
         </div>
       </div>
 
       {/* Content */}
-      <div className="max-w-5xl mx-auto px-3 md:px-6 py-4 md:py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
+      <div className="w-full">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-4 md:space-y-6">
             {/* Key Information */}
@@ -193,8 +194,8 @@ export function JobDetailView({ job }: JobDetailViewProps) {
                   <div>
                     <p className="text-sm text-muted-foreground">Saved</p>
                     <p className="font-medium">{formatDate(job.savedAt)}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {formatRelativeTime(job.savedAt)}
+                    <p className="text-xs text-muted-foreground mt-0.5" suppressHydrationWarning>
+                      {savedAtRelative}
                     </p>
                   </div>
                 </div>
@@ -362,7 +363,7 @@ export function JobDetailView({ job }: JobDetailViewProps) {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Last Updated</span>
-                  <span className="font-medium">{formatRelativeTime(job.updatedAt)}</span>
+                  <span className="font-medium" suppressHydrationWarning>{updatedAtRelative}</span>
                 </div>
               </div>
             </div>

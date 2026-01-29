@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { format } from 'date-fns'
 import { Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -145,7 +146,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
             {/* Month/Year Header */}
             <div className="mb-4 text-center">
               <h3 className="text-base font-bold text-foreground">
-                {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                {format(new Date(), 'MMMM yyyy')}
               </h3>
               <p className="text-xs text-muted-foreground mt-1.5">
                 {selectingFrom ? 'Select start date' : 'Select end date'}

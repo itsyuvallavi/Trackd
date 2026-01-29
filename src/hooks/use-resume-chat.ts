@@ -13,6 +13,7 @@ export function useResumeChat({ sessionId }: UseResumeChatOptions) {
   const [resumeReadyMessageId, setResumeReadyMessageId] = useState<string | null>(null)
 
   const loadMessages = useCallback(async () => {
+    if (!sessionId) return
     try {
       const response = await fetch(`/api/resume/chat/sessions/${sessionId}/messages`)
       if (response.ok) {
@@ -36,6 +37,7 @@ export function useResumeChat({ sessionId }: UseResumeChatOptions) {
   }, [sessionId])
 
   const sendMessage = useCallback(async (content: string) => {
+    if (!sessionId) return
     setIsLoading(true)
     
     // Optimistically add user message

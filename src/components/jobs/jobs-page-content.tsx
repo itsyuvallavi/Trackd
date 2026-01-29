@@ -229,7 +229,7 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
           ) : (
             <>
               {/* Mobile: Card View */}
-              <div className="md:hidden space-y-3">
+              <div className="md:hidden space-y-2">
                 {filteredJobs.map((job, index) => (
                   <JobCardMobile key={job.id} job={job} index={index} />
                 ))}

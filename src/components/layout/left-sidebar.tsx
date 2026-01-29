@@ -34,7 +34,6 @@ const navItems: NavItem[] = [
     name: 'Calendar',
     href: '/calendar',
     icon: Calendar,
-    disabled: true,
   },
   {
     name: 'Job Search',

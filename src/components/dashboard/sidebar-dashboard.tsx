@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { ActivityFeed } from './activity-feed'
 import { NotificationsFeed } from './notifications-feed'
 import { ActivityType, JobStatus, NotificationType } from '@prisma/client'
-import { Bell, Activity, X } from 'lucide-react'
+import { Bell, Activity, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -37,22 +37,76 @@ interface SidebarDashboardProps {
   activities: Activity[]
   notifications: Notification[]
   onClose?: () => void
+  onExpand?: () => void
   isCollapsible?: boolean
+  isCollapsed?: boolean
 }
 
 type ViewMode = 'changes' | 'notifications'
 
-export function SidebarDashboard({ activities, notifications, onClose, isCollapsible = false }: SidebarDashboardProps) {
+export function SidebarDashboard({ activities, notifications, onClose, onExpand, isCollapsible = true, isCollapsed: externalIsCollapsed }: SidebarDashboardProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('changes')
+  const [internalIsCollapsed, setInternalIsCollapsed] = useState(false)
+  
+  // Use external collapsed state if provided, otherwise use internal state
+  const isCollapsed = externalIsCollapsed ?? internalIsCollapsed
 
   // Show all activities in the Changes view
   // Previously filtered to only STATUS_CHANGE and job additions, but now showing all
   const filteredActivities = activities
 
+  const handleCollapse = () => {
+    if (externalIsCollapsed !== undefined) {
+      // Controlled component - call onClose
+      onClose?.()
+    } else {
+      // Uncontrolled component - use internal state
+      setInternalIsCollapsed(true)
+      onClose?.()
+    }
+  }
+
+  const handleExpand = () => {
+    if (externalIsCollapsed !== undefined) {
+      // Controlled component - call onExpand
+      onExpand?.()
+    } else {
+      // Uncontrolled component - use internal state
+      setInternalIsCollapsed(false)
+      onExpand?.()
+    }
+  }
+
+  if (isCollapsed) {
+    return (
+      <div className={cn(
+        'w-8 border-l border-border bg-card flex flex-col fixed right-0 top-[64px] bottom-0 h-[calc(100vh-64px)] z-30',
+        'transition-all duration-500 ease-out',
+        'animate-in slide-in-from-right-full'
+      )}>
+        <div className="bg-card border-b border-border px-2 pt-6 pb-2.5 flex items-center justify-center shrink-0">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="h-6 w-6 rotate-180 transition-transform duration-500 ease-out"
+            onClick={handleExpand}
+            aria-label="Expand dashboard"
+          >
+            <ChevronRight className="size-3.5" />
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="w-[266px] border-l border-border bg-card flex flex-col fixed right-0 top-[64px] bottom-0 h-[calc(100vh-64px)] z-30 slide-in-from-right-full duration-300">
+    <div className={cn(
+      'w-[266px] border-l border-border bg-card flex flex-col fixed right-0 top-[64px] bottom-0 h-[calc(100vh-64px)] z-30',
+      'transition-all duration-500 ease-out',
+      'animate-in slide-in-from-right-full'
+    )}>
       {/* Header with Toggle */}
-      <div className="bg-card border-b border-border px-3 py-2.5 flex items-center justify-between z-10 shrink-0">
+      <div className="bg-card border-b border-border px-3 pt-6 pb-2.5 flex items-center justify-between z-10 shrink-0">
         <div className="flex items-center gap-1 bg-muted rounded-md p-0.5">
           <Button
             variant="ghost"
@@ -92,18 +146,18 @@ export function SidebarDashboard({ activities, notifications, onClose, isCollaps
             <Button
               variant="ghost"
               size="icon-sm"
-              className="h-6 w-6"
-              onClick={onClose}
-              aria-label="Close dashboard"
+              className="h-6 w-6 transition-transform duration-500 ease-out"
+              onClick={handleCollapse}
+              aria-label="Minimize dashboard"
             >
-              <X className="size-3.5" />
+              <ChevronRight className="size-3.5" />
             </Button>
           )}
         </div>
       </div>
 
-      {/* Content Area - Scrollable */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Content Area - Independently scrollable */}
+      <div className="flex-1 overflow-y-auto overscroll-contain animate-in fade-in duration-500 delay-100 ease-out">
         {viewMode === 'changes' ? (
           <ActivityFeed activities={filteredActivities} isCollapsible={false} />
         ) : (

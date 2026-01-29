@@ -9,13 +9,7 @@ export default async function ResumeAdvisorPage() {
 
   return (
     <AppShell>
-      <div className="flex-1 overflow-auto">
-        <div className="w-full flex justify-center px-4 md:px-8 py-4 md:py-6">
-          <div className="w-full max-w-[1200px]">
-            <ResumeAdvisorContent />
-          </div>
-        </div>
-      </div>
+      <ResumeAdvisorContent />
     </AppShell>
   )
 }

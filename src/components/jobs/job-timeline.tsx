@@ -103,7 +103,7 @@ export function JobTimeline({ activities }: JobTimelineProps) {
                       </span>
                     )}
                   </div>
-                  <div className="text-[10px] md:text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                  <div className="text-[10px] md:text-xs text-muted-foreground whitespace-nowrap shrink-0" suppressHydrationWarning>
                     {formatRelativeTime(activity.createdAt)}
                   </div>
                 </div>

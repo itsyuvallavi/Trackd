@@ -152,12 +152,19 @@ export class EmailService {
                     return
                   }
 
-                  messages.push(this.parsedMailToEmailMessage(parsed))
+                  const emailMessage = this.parsedMailToEmailMessage(parsed)
+                  // Filter by exact timestamp since IMAP SINCE only supports date, not time
+                  // Only include emails that are actually after the syncSince timestamp
+                  if (emailMessage.date >= since) {
+                    messages.push(emailMessage)
+                  } else {
+                    console.log(`Filtered out email "${emailMessage.subject}" - date ${emailMessage.date.toISOString()} is before syncSince ${since.toISOString()}`)
+                  }
                   pendingMessages--
 
                   // Check if all messages are processed
                   if (pendingMessages === 0) {
-                    console.log(`Successfully parsed ${messages.length} emails`)
+                    console.log(`Successfully parsed ${messages.length} emails (after filtering by timestamp)`)
                     tryResolve()
                   }
                 })

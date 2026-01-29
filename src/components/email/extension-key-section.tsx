@@ -193,7 +193,7 @@ export function ExtensionKeySection({ initialData }: ExtensionKeySectionProps) {
           </div>
 
           {lastUsedAt && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground" suppressHydrationWarning>
               Last used: {new Date(lastUsedAt).toLocaleString()}
             </p>
           )}

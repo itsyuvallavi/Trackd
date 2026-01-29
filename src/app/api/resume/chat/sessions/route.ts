@@ -126,8 +126,22 @@ export async function GET(request: NextRequest) {
       where: {
         userId: user.id,
       },
+      include: {
+        messages: {
+          orderBy: {
+            timestamp: 'asc',
+          },
+          take: 5, // Get first few messages for summary
+          select: {
+            id: true,
+            role: true,
+            content: true,
+            timestamp: true,
+          },
+        },
+      },
       orderBy: {
-        createdAt: 'desc',
+        updatedAt: 'desc',
       },
       take: 20,
     })

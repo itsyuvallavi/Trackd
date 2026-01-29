@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Job } from '@prisma/client'
 import { updateJob, deleteJob } from '@/app/(authenticated)/jobs/actions'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { JobSource, JobStatus, JobPriority } from '@prisma/client'
 import { SOURCE_LABELS, STATUS_LABELS, PRIORITY_LABELS } from '@/lib/constants'
 
@@ -52,10 +53,14 @@ export function EditJobModal({ job, isOpen, onClose }: EditJobModalProps) {
     })
   }
 
+  const [source, setSource] = useState<JobSource>(job.source)
+  const [priority, setPriority] = useState<JobPriority>(job.priority)
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-2xl rounded-lg bg-background border border-foreground/20 p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
+      <div className="w-full max-w-2xl rounded-lg bg-background border border-foreground/20 shadow-xl max-h-[90vh] flex flex-col">
+        {/* Header - Fixed */}
+        <div className="flex items-center justify-between p-6 border-b border-border shrink-0">
           <h2 className="text-2xl font-bold">Edit Job</h2>
           <button
             onClick={onClose}
@@ -68,13 +73,18 @@ export function EditJobModal({ job, isOpen, onClose }: EditJobModalProps) {
           </button>
         </div>
 
-        {error && (
-          <div className="mb-4 rounded-md bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-800 dark:text-red-200">
-            {error}
-          </div>
-        )}
+        {/* Content - Scrollable */}
+        <div className="p-6 overflow-y-auto flex-1 min-h-0">
+          {error && (
+            <div className="mb-4 rounded-md bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-800 dark:text-red-200">
+              {error}
+            </div>
+          )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+          <form id="edit-job-form" onSubmit={handleSubmit} className="space-y-4">
+            {/* Hidden inputs for Select values */}
+            <input type="hidden" name="source" value={source} />
+            <input type="hidden" name="priority" value={priority} />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label htmlFor="edit-title" className="block text-sm font-medium mb-1">
@@ -134,36 +144,36 @@ export function EditJobModal({ job, isOpen, onClose }: EditJobModalProps) {
               <label htmlFor="edit-source" className="block text-sm font-medium mb-1">
                 Source
               </label>
-              <select
-                id="edit-source"
-                name="source"
-                defaultValue={job.source}
-                className="w-full rounded-md border border-foreground/20 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/50"
-              >
-                {Object.entries(SOURCE_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+              <Select value={source} onValueChange={(value) => setSource(value as JobSource)}>
+                <SelectTrigger id="edit-source" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(SOURCE_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
               <label htmlFor="edit-priority" className="block text-sm font-medium mb-1">
                 Priority
               </label>
-              <select
-                id="edit-priority"
-                name="priority"
-                defaultValue={job.priority}
-                className="w-full rounded-md border border-foreground/20 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/50"
-              >
-                {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+              <Select value={priority} onValueChange={(value) => setPriority(value as JobPriority)}>
+                <SelectTrigger id="edit-priority" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
@@ -232,7 +242,12 @@ export function EditJobModal({ job, isOpen, onClose }: EditJobModalProps) {
             />
           </div>
 
-          <div className="flex justify-between pt-4">
+          </form>
+        </div>
+
+        {/* Footer - Fixed */}
+        <div className="p-6 border-t border-border shrink-0">
+          <div className="flex justify-between">
             <Button
               type="button"
               variant="destructive"
@@ -250,12 +265,12 @@ export function EditJobModal({ job, isOpen, onClose }: EditJobModalProps) {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={isPending}>
+              <Button type="submit" form="edit-job-form" disabled={isPending}>
                 {isPending ? 'Saving...' : 'Save Changes'}
               </Button>
             </div>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   )

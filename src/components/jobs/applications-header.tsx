@@ -72,13 +72,13 @@ export function ApplicationsHeader({
   return (
     <>
       {/* Title Section */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold mb-2">Applications</h1>
-        <p className="text-sm text-muted-foreground">{totalJobs} total applications</p>
+      <div className="mb-4">
+        <h1 className="text-xl md:text-2xl font-semibold">Applications</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">{totalJobs} total applications</p>
       </div>
 
       {/* Mobile: Dropdown, Desktop: Tabs */}
-      <div className="mb-3">
+      <div className="mb-4">
         {/* Mobile Dropdown */}
         <div className="md:hidden">
           <DropdownMenu>
@@ -170,7 +170,7 @@ export function ApplicationsHeader({
       </div>
 
       {/* Search and Filters Row */}
-      <div className="mb-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+      <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         {/* Search */}
         <div className="w-full md:flex-1 md:max-w-sm relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
@@ -182,7 +182,7 @@ export function ApplicationsHeader({
               setLocalSearch(e.target.value)
               onSearchChange(e.target.value)
             }}
-            className="pl-8 h-9 md:h-8 text-sm bg-background border-border focus:ring-2 focus:ring-primary/20"
+            className="pl-8 h-8 text-sm bg-background border-border focus:ring-2 focus:ring-primary/20"
           />
         </div>
 

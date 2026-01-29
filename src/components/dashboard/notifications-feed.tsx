@@ -158,24 +158,40 @@ export function NotificationsFeed({ notifications }: NotificationsFeedProps) {
   return (
     <div className="p-3 space-y-2">
       {filteredNotifications.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
+        <div className="text-center py-8 text-muted-foreground animate-in fade-in duration-500 delay-150 ease-out">
           <p className="text-sm">No notifications</p>
           <p className="text-xs mt-1">You&apos;re all caught up</p>
         </div>
       ) : (
-        filteredNotifications.map((notification) => {
+        filteredNotifications.map((notification, index) => {
           const jobInfo = getJobInfo(notification)
+          // Staggered animation - icons appear first, then content (same as chat history)
+          const iconDelay = 250 + (index * 60) // Icons appear first (250ms base + stagger)
+          const contentDelay = 400 + (index * 60) // Content appears after icons
+
           return (
             <Link
               key={notification.id}
               href={notification.actionUrl || '#'}
               className={cn(
                 'block p-2.5 rounded-lg border border-border hover:bg-accent/50 transition-colors group',
+                'animate-in fade-in duration-500 ease-out',
                 !notification.isRead && 'bg-primary-lightest/30 border-primary/20'
               )}
+              style={{
+                animationDelay: `${contentDelay}ms`
+              }}
             >
               <div className="flex items-start gap-2">
-                <div className={cn('mt-0.5 shrink-0', getNotificationColor(notification.type, notification.isRead))}>
+                <div 
+                  className={cn(
+                    'mt-0.5 shrink-0 animate-in fade-in zoom-in-50 duration-500 ease-out',
+                    getNotificationColor(notification.type, notification.isRead)
+                  )}
+                  style={{
+                    animationDelay: `${iconDelay}ms`
+                  }}
+                >
                   {getNotificationIcon(notification.type)}
                 </div>
                 <div className="flex-1 min-w-0">

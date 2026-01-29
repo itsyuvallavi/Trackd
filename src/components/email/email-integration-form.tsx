@@ -216,7 +216,7 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
                   {isSyncing ? 'Syncing...' : 'Sync Now'}
                 </Button>
                 {integration.lastSyncedAt && (
-                  <span className="text-sm text-foreground/60">
+                  <span className="text-sm text-foreground/60" suppressHydrationWarning>
                     Last synced: {new Date(integration.lastSyncedAt).toLocaleString()}
                   </span>
                 )}
@@ -460,7 +460,7 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
             {integration.lastSyncedAt && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground pt-2 border-t border-border">
                 <Clock className="size-4" />
-                <span>
+                <span suppressHydrationWarning>
                   Last synced: {new Date(integration.lastSyncedAt).toLocaleString()}
                 </span>
               </div>
@@ -468,7 +468,7 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
             {autoSyncEnabled && integration.nextSyncAt && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="size-4" />
-                <span>
+                <span suppressHydrationWarning>
                   Next sync: {new Date(integration.nextSyncAt).toLocaleString()}
                 </span>
               </div>

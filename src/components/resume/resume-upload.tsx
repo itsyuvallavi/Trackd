@@ -84,7 +84,7 @@ export function ResumeUpload({ onResumeUploaded }: ResumeUploadProps) {
   return (
     <div
       className={cn(
-        'bg-background border border-border rounded-lg shadow-sm p-8 md:p-12 text-center transition-colors',
+        'bg-background border border-border rounded-lg shadow-sm p-6 text-center transition-colors',
         dragActive
           ? 'border-primary bg-primary/5'
           : 'hover:border-primary/50',
@@ -104,37 +104,29 @@ export function ResumeUpload({ onResumeUploaded }: ResumeUploadProps) {
       />
       
       {isUploading ? (
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="size-12 text-primary animate-spin" />
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="size-8 text-primary animate-spin" />
           <p className="text-sm text-muted-foreground">Uploading file...</p>
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-4">
-          {/* Large Upload Icon */}
-          <Upload className="size-16 md:size-20 text-foreground/60" />
-          
-          {/* Title */}
-          <p className="text-base md:text-lg font-semibold text-foreground">
+        <div className="flex flex-col items-center gap-3">
+          <Upload className="size-10 text-foreground/60" />
+          <p className="text-sm font-medium text-foreground">
             Upload your resume
           </p>
-          
-          {/* Subtitle */}
-          <p className="text-sm text-muted-foreground max-w-md">
+          <p className="text-xs text-muted-foreground max-w-sm">
             Drag and drop a file here, or click to browse
           </p>
-          
-          {/* Choose File Button */}
           <Button
             onClick={() => fileInputRef.current?.click()}
             variant="outline"
-            className="mt-2"
+            size="sm"
+            className="mt-1"
           >
-            <FileText className="size-4 mr-2" />
+            <FileText className="size-3 mr-2" />
             Choose File
           </Button>
-          
-          {/* Supported Formats */}
-          <p className="text-xs text-muted-foreground mt-4">
+          <p className="text-xs text-muted-foreground mt-2">
             Supports: TXT, PDF, DOC, DOCX
           </p>
         </div>

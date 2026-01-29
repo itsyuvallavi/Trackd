@@ -19,16 +19,51 @@ export function StatusDropdown({ jobId, currentStatus }: StatusDropdownProps) {
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
-  const [position, setPosition] = useState({ top: 0, left: 0 })
+  const [position, setPosition] = useState({ top: 0, left: 0, placement: 'bottom' as 'top' | 'bottom' })
   const buttonRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (isOpen && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect()
+      const buttonRect = buttonRef.current.getBoundingClientRect()
+      const dropdownHeight = 240 // Approximate height of dropdown with all options
+      const spacing = 4 // Gap between button and dropdown
+      const viewportPadding = 16 // Padding from viewport edges
+      
+      // Check vertical boundaries
+      const spaceBelow = window.innerHeight - buttonRect.bottom - spacing - viewportPadding
+      const spaceAbove = buttonRect.top - spacing - viewportPadding
+      
+      // Flip to top if not enough space below, but enough space above
+      const buffer = 50
+      const shouldPlaceOnTop = spaceBelow < dropdownHeight + buffer && spaceAbove > dropdownHeight + buffer
+      
+      let top: number
+      let placement: 'top' | 'bottom'
+      
+      if (shouldPlaceOnTop) {
+        // Position above the button
+        const availableSpaceAbove = spaceAbove
+        top = buttonRect.top - Math.min(dropdownHeight, availableSpaceAbove) - spacing
+        if (top < viewportPadding) {
+          top = viewportPadding
+        }
+        placement = 'top'
+      } else {
+        // Position below the button (default)
+        top = buttonRect.bottom + spacing
+        // Ensure it doesn't go below viewport
+        const availableSpaceBelow = window.innerHeight - top - viewportPadding
+        if (availableSpaceBelow < dropdownHeight) {
+          top = window.innerHeight - Math.min(dropdownHeight, availableSpaceBelow) - viewportPadding
+        }
+        placement = 'bottom'
+      }
+      
       setPosition({
-        top: rect.bottom + 4,
-        left: rect.left,
+        top,
+        left: Math.max(viewportPadding, buttonRect.left),
+        placement,
       })
     }
   }, [isOpen])
@@ -82,15 +117,21 @@ export function StatusDropdown({ jobId, currentStatus }: StatusDropdownProps) {
             />
             <motion.div
               ref={dropdownRef}
-              initial={{ opacity: 0, scale: 0.95, y: -10 }}
+              initial={{ opacity: 0, scale: 0.95, y: position.placement === 'top' ? 10 : -10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: -5 }}
+              exit={{ opacity: 0, scale: 0.95, y: position.placement === 'top' ? 10 : -5 }}
               transition={{ 
                 duration: 0.15,
                 ease: [0.16, 1, 0.3, 1]
               }}
-              className="fixed z-50 w-40 rounded-md bg-background border border-foreground/20 shadow-lg"
-              style={{ top: `${position.top}px`, left: `${position.left}px` }}
+              className="fixed z-50 w-40 rounded-md bg-background border border-foreground/20 shadow-lg overflow-y-auto"
+              style={{ 
+                top: `${position.top}px`, 
+                left: `${position.left}px`,
+                maxHeight: position.placement === 'top' 
+                  ? `${Math.max(200, position.top - 16)}px` 
+                  : `${Math.max(200, window.innerHeight - position.top - 16)}px`
+              }}
             >
               <div className="py-1">
                 {statusOptions.map((status) => (

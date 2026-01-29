@@ -1,5 +1,5 @@
 import { requireAuth } from '@/lib/auth'
-import { JobsPageContent } from '@/components/jobs/jobs-page-content'
+import { JobsPageWrapper } from '@/components/jobs/jobs-page-wrapper'
 import { AppShell } from '@/components/layout/app-shell'
 import { getEmailIntegration, getUserJobs } from '@/lib/cached-queries'
 import { Suspense } from 'react'
@@ -20,13 +20,7 @@ export default async function JobsPage() {
   return (
     <AppShell showEmailNotification={!emailIntegration}>
       <Suspense fallback={<JobsListSkeleton />}>
-        <div className="flex-1 overflow-auto">
-          <div className="w-full flex justify-center px-3 md:px-8 py-3 md:py-6 pb-16 md:pb-6 min-h-0">
-            <div className="w-full max-w-[1160px]">
-              <JobsPageContent jobs={jobs} />
-            </div>
-          </div>
-        </div>
+        <JobsPageWrapper jobs={jobs} />
       </Suspense>
     </AppShell>
   )

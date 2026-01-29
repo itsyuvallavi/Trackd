@@ -6,6 +6,7 @@ import { AIJobMatcher } from '@/lib/ai-job-matcher'
 import { ActivityType, JobStatus } from '@prisma/client'
 import { NotificationService } from '@/lib/notification-service'
 import { createHash } from 'crypto'
+import { parseInterviewDateTime } from '@/lib/utils/interview-date-parser'
 
 // Feature flags
 const USE_AI_CLASSIFIER = process.env.ENABLE_AI_CLASSIFICATION === 'true'
@@ -232,11 +233,48 @@ export async function syncEmailsForUser(userId: string) {
             if (shouldUpdate) {
               const oldStatus = job?.status || null
               
+              // Verify job still exists before updating (it might have been deleted)
+              if (!job) {
+                console.log(`Warning: Job ${matchResult.jobId} no longer exists, skipping update`)
+                continue
+              }
+              
+              // Parse interview date/time if this is an interview invite
+              let interviewAt: Date | null = null
+              if (classified.type === EmailType.INTERVIEW_INVITE && 
+                  'extractedEntities' in classified.metadata && 
+                  classified.metadata.extractedEntities) {
+                const extracted = classified.metadata.extractedEntities as {
+                  interviewDate?: string | null
+                  interviewTime?: string | null
+                }
+                interviewAt = parseInterviewDateTime(extracted.interviewDate, extracted.interviewTime)
+                
+                if (interviewAt) {
+                  console.log(`Setting interviewAt to ${interviewAt.toISOString()} for job ${matchResult.jobId}`)
+                } else if (extracted.interviewDate || extracted.interviewTime) {
+                  console.log(`Could not parse interview date/time from email for job ${matchResult.jobId} (date: ${extracted.interviewDate}, time: ${extracted.interviewTime})`)
+                }
+              }
+
               // Update job status
-              await prisma.job.update({
-                where: { id: matchResult.jobId },
-                data: { status: classified.suggestedStatus },
-              })
+              try {
+                await prisma.job.update({
+                  where: { id: matchResult.jobId },
+                  data: {
+                    status: classified.suggestedStatus,
+                    // Set interviewAt if we have a valid date/time
+                    ...(interviewAt ? { interviewAt } : {}),
+                  },
+                })
+              } catch (updateError: any) {
+                // Handle case where job was deleted between matching and updating
+                if (updateError?.code === 'P2025') {
+                  console.log(`Warning: Job ${matchResult.jobId} was deleted, skipping update`)
+                  continue
+                }
+                throw updateError // Re-throw other errors
+              }
 
               // Create activity record with AI-extracted metadata
               const activityMetadata: Record<string, unknown> = {

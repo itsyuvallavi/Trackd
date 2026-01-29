@@ -13,6 +13,7 @@ const nextConfig: NextConfig = {
     ],
     formats: ['image/avif', 'image/webp'], // Modern image formats for better performance
     minimumCacheTTL: 60, // Cache images for 60 seconds
+    qualities: [75, 85], // Allow both quality levels
   },
   // Enable experimental features for better performance
   experimental: {

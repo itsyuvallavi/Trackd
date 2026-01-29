@@ -193,7 +193,7 @@ export function AmbiguousMatchResolver({
                           {job.status}
                         </span>
                         {job.appliedAt && (
-                          <span>Applied {new Date(job.appliedAt).toLocaleDateString()}</span>
+                          <span suppressHydrationWarning>Applied {new Date(job.appliedAt).toLocaleDateString()}</span>
                         )}
                       </div>
                     </div>

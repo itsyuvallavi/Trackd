@@ -159,38 +159,58 @@ export function ActivityFeed({ activities, onClose, isCollapsible = false }: Act
   return (
     <div className="p-3 space-y-2">
         {activities.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
+          <div className="text-center py-8 text-muted-foreground animate-in fade-in duration-500 delay-150 ease-out">
             <p className="text-sm">No recent activity</p>
             <p className="text-xs mt-1">Activity will appear here as you use Trackd</p>
           </div>
         ) : (
-          activities.map((activity) => (
-            <Link
-              key={activity.id}
-              href={`/jobs/${activity.job.id}`}
-              className="block p-2.5 rounded-lg border border-border hover:bg-accent/50 transition-colors group"
-            >
-              <div className="flex items-start gap-2">
-                <div className={cn('mt-0.5 shrink-0', getActivityColor(activity.type, activity.description, activity.fromStatus, activity.toStatus))}>
-                  {getActivityIcon(activity.type, activity.description, activity.fromStatus, activity.toStatus)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-1.5 mb-0.5">
-                    <p className="text-xs font-medium text-foreground line-clamp-1 group-hover:text-primary transition-colors">
-                      {activity.job.title}
-                    </p>
-                    <span className="text-[9px] text-muted-foreground shrink-0">
-                      {formatRelativeTime(activity.createdAt)}
-                    </span>
+          activities.map((activity, index) => {
+            // Staggered animation - icons appear first, then content (same as chat history)
+            const iconDelay = 250 + (index * 60) // Icons appear first (250ms base + stagger)
+            const contentDelay = 400 + (index * 60) // Content appears after icons
+
+            return (
+              <Link
+                key={activity.id}
+                href={`/jobs/${activity.job.id}`}
+                className={cn(
+                  'block p-2.5 rounded-lg border border-border hover:bg-accent/50 transition-colors group',
+                  'animate-in fade-in duration-500 ease-out'
+                )}
+                style={{
+                  animationDelay: `${contentDelay}ms`
+                }}
+              >
+                <div className="flex items-start gap-2">
+                  <div 
+                    className={cn(
+                      'mt-0.5 shrink-0 animate-in fade-in zoom-in-50 duration-500 ease-out',
+                      getActivityColor(activity.type, activity.description, activity.fromStatus, activity.toStatus)
+                    )}
+                    style={{
+                      animationDelay: `${iconDelay}ms`
+                    }}
+                  >
+                    {getActivityIcon(activity.type, activity.description, activity.fromStatus, activity.toStatus)}
                   </div>
-                  <p className="text-[10px] text-muted-foreground mb-1 line-clamp-1">
-                    {activity.job.company}
-                  </p>
-                  {formatActivityDescription(activity)}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-1.5 mb-0.5">
+                      <p className="text-xs font-medium text-foreground line-clamp-1 group-hover:text-primary transition-colors">
+                        {activity.job.title}
+                      </p>
+                      <span className="text-[9px] text-muted-foreground shrink-0">
+                        {formatRelativeTime(activity.createdAt)}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mb-1 line-clamp-1">
+                      {activity.job.company}
+                    </p>
+                    {formatActivityDescription(activity)}
+                  </div>
                 </div>
-              </div>
-            </Link>
-          ))
+              </Link>
+            )
+          })
         )}
     </div>
   )

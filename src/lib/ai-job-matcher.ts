@@ -11,6 +11,17 @@ import { getMatchingPrompt, JobCandidate } from './ai/prompts/matching'
 import { MatchResult as AIMatchResult } from './ai/types'
 import { MatchResult } from './email-classifier'
 
+/**
+ * Normalize a string for comparison (lowercase, trim, remove special chars, collapse spaces)
+ */
+function normalizeString(str: string): string {
+  return str
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s]/g, '') // Remove special characters
+    .replace(/\s+/g, ' ') // Collapse multiple spaces to single space
+}
+
 export class AIJobMatcher {
   private client = getAIClient()
 
@@ -49,6 +60,44 @@ export class AIJobMatcher {
             title: classified.jobInfo.title || null,
             location: classified.jobInfo.location || null,
           }
+
+      // SAFETY CHECK: Before calling AI, check if multiple jobs match the same company+title
+      // This prevents the AI from arbitrarily picking one when there are duplicates
+      if (extracted.company && extracted.title) {
+        const normalizedEmailCompany = normalizeString(extracted.company)
+        const normalizedEmailTitle = normalizeString(extracted.title)
+        
+        const exactMatches = jobs.filter(job => {
+          const normalizedJobCompany = normalizeString(job.company)
+          const normalizedJobTitle = normalizeString(job.title)
+          return normalizedJobCompany === normalizedEmailCompany && 
+                 normalizedJobTitle === normalizedEmailTitle
+        })
+        
+        // If we have multiple jobs with the exact same normalized company+title,
+        // this is inherently ambiguous - don't let AI pick one arbitrarily
+        if (exactMatches.length > 1) {
+          return {
+            jobId: null,
+            confidence: 'ambiguous',
+            matchedJobs: exactMatches.map(job => ({
+              id: job.id,
+              title: job.title,
+              company: job.company,
+            })),
+            reason: `Multiple jobs found with same company "${extracted.company}" and title "${extracted.title}" - requires user selection`,
+          }
+        }
+        
+        // If we have exactly one exact match, we can be confident without AI
+        if (exactMatches.length === 1) {
+          return {
+            jobId: exactMatches[0].id,
+            confidence: 'exact',
+            reason: `Exact match: company "${extracted.company}" + title "${extracted.title}"`,
+          }
+        }
+      }
 
       // Prepare job candidates
       const candidates: JobCandidate[] = jobs.map(job => ({
@@ -98,7 +147,78 @@ export class AIJobMatcher {
         }
       }
 
-      // High confidence match
+      // If AI explicitly indicates ambiguous matches, always treat as ambiguous
+      if (aiMatch.requiresUserInput === true || 
+          (aiMatch.alternativeMatches && aiMatch.alternativeMatches.length > 0)) {
+        const allMatches = aiMatch.alternativeMatches || []
+        if (aiMatch.jobId) {
+          // Include the primary match in the list
+          const primaryJob = jobs.find(job => job.id === aiMatch.jobId)
+          if (primaryJob && !allMatches.some(m => m.jobId === aiMatch.jobId)) {
+            allMatches.unshift({
+              jobId: aiMatch.jobId,
+              confidence: aiMatch.confidence,
+              title: primaryJob.title,
+              company: primaryJob.company,
+            })
+          }
+        }
+        return {
+          jobId: null,
+          confidence: 'ambiguous',
+          matchedJobs: allMatches.map(alt => ({
+            id: alt.jobId,
+            title: alt.title,
+            company: alt.company,
+          })),
+          reason: aiMatch.reasoning || 'Multiple possible matches found',
+        }
+      }
+
+      // SAFETY CHECK: After AI returns a match, verify there are no duplicate jobs
+      // with the same normalized (company, title) that could cause confusion
+      // This is a hard safety rule that overrides AI confidence
+      if (aiMatch.jobId && extracted.company && extracted.title) {
+        const matchedJob = jobs.find(job => job.id === aiMatch.jobId)
+        if (matchedJob) {
+          const normalizedEmailCompany = normalizeString(extracted.company)
+          const normalizedEmailTitle = normalizeString(extracted.title)
+          const normalizedMatchedCompany = normalizeString(matchedJob.company)
+          const normalizedMatchedTitle = normalizeString(matchedJob.title)
+          
+          // Check if the matched job has the same normalized (company, title) as the email
+          if (normalizedMatchedCompany === normalizedEmailCompany && 
+              normalizedMatchedTitle === normalizedEmailTitle) {
+            // Now check if there are other jobs with the same normalized (company, title)
+            const siblingJobs = jobs.filter(job => {
+              const normalizedJobCompany = normalizeString(job.company)
+              const normalizedJobTitle = normalizeString(job.title)
+              return normalizedJobCompany === normalizedEmailCompany && 
+                     normalizedJobTitle === normalizedEmailTitle &&
+                     job.id !== aiMatch.jobId // Exclude the matched job itself
+            })
+            
+            // If there are sibling jobs, this is ambiguous - don't auto-update
+            if (siblingJobs.length > 0) {
+              return {
+                jobId: null,
+                confidence: 'ambiguous',
+                matchedJobs: [
+                  matchedJob,
+                  ...siblingJobs
+                ].map(job => ({
+                  id: job.id,
+                  title: job.title,
+                  company: job.company,
+                })),
+                reason: `AI matched job "${matchedJob.title}" at "${matchedJob.company}", but ${siblingJobs.length} other job(s) with identical company and title exist - requires user selection`,
+              }
+            }
+          }
+        }
+      }
+
+      // High confidence match (only if no ambiguity detected)
       if (aiMatch.confidence >= 90) {
         return {
           jobId: aiMatch.jobId,

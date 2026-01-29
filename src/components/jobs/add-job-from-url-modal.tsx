@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { scrapeJobUrl, ScrapedJobData } from '@/app/(authenticated)/jobs/scrape-actions'
 import { createJob } from '@/app/(authenticated)/jobs/actions'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { JobSource, JobStatus, JobPriority } from '@prisma/client'
 import { SOURCE_LABELS, STATUS_LABELS, PRIORITY_LABELS } from '@/lib/constants'
 
@@ -140,8 +141,9 @@ export function AddJobFromUrlModal({ isOpen, onClose }: AddJobFromUrlModalProps)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="w-full max-w-2xl rounded-lg bg-card border border-border p-6 shadow-2xl max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom-4 duration-300">
-        <div className="flex items-center justify-between mb-4">
+      <div className="w-full max-w-2xl rounded-lg bg-card border border-border shadow-2xl max-h-[90vh] flex flex-col animate-in slide-in-from-bottom-4 duration-300">
+        {/* Header - Fixed */}
+        <div className="flex items-center justify-between p-6 border-b border-border shrink-0">
           <h2 className="text-2xl font-bold">Add Job from URL</h2>
           <button
             onClick={onClose}
@@ -152,6 +154,9 @@ export function AddJobFromUrlModal({ isOpen, onClose }: AddJobFromUrlModalProps)
             </svg>
           </button>
         </div>
+        
+        {/* Content - Scrollable */}
+        <div className="p-6 overflow-y-auto flex-1 min-h-0">
 
         {error && (
           <div className="mb-4 rounded-md bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-800 dark:text-red-200">
@@ -206,7 +211,7 @@ export function AddJobFromUrlModal({ isOpen, onClose }: AddJobFromUrlModalProps)
 
         {/* Scraped Data Preview & Edit Form */}
         {scrapedData && Object.keys(scrapedData).length > 0 && (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form id="add-job-url-form" onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="title" className="block text-sm font-medium mb-1">
@@ -253,54 +258,63 @@ export function AddJobFromUrlModal({ isOpen, onClose }: AddJobFromUrlModalProps)
                 <label htmlFor="source" className="block text-sm font-medium mb-1">
                   Source
                 </label>
-                <select
-                  id="source"
+                <Select
                   value={formData.source}
-                  onChange={(e) => setFormData({ ...formData, source: e.target.value as JobSource })}
-                  className="w-full rounded-md border border-foreground/20 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/50"
+                  onValueChange={(value) => setFormData({ ...formData, source: value as JobSource })}
                 >
-                  {Object.entries(SOURCE_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="source" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(SOURCE_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>
                 <label htmlFor="status" className="block text-sm font-medium mb-1">
                   Status
                 </label>
-                <select
-                  id="status"
+                <Select
                   value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as JobStatus })}
-                  className="w-full rounded-md border border-foreground/20 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/50"
+                  onValueChange={(value) => setFormData({ ...formData, status: value as JobStatus })}
                 >
-                  {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="status" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>
                 <label htmlFor="priority" className="block text-sm font-medium mb-1">
                   Priority
                 </label>
-                <select
-                  id="priority"
+                <Select
                   value={formData.priority}
-                  onChange={(e) => setFormData({ ...formData, priority: e.target.value as JobPriority })}
-                  className="w-full rounded-md border border-foreground/20 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/50"
+                  onValueChange={(value) => setFormData({ ...formData, priority: value as JobPriority })}
                 >
-                  {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="priority" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>
@@ -345,7 +359,14 @@ export function AddJobFromUrlModal({ isOpen, onClose }: AddJobFromUrlModalProps)
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-4">
+          </form>
+        )}
+        </div>
+        
+        {/* Footer - Fixed */}
+        {scrapedData && Object.keys(scrapedData).length > 0 && (
+          <div className="p-6 border-t border-border shrink-0">
+            <div className="flex justify-end gap-2">
               <Button
                 type="button"
                 variant="secondary"
@@ -357,11 +378,11 @@ export function AddJobFromUrlModal({ isOpen, onClose }: AddJobFromUrlModalProps)
               <Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isPending}>
+              <Button type="submit" form="add-job-url-form" disabled={isPending}>
                 {isPending ? 'Saving...' : 'Save Job'}
               </Button>
             </div>
-          </form>
+          </div>
         )}
       </div>
     </div>

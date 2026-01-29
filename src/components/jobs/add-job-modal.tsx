@@ -4,6 +4,8 @@ import { useState, useTransition } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createJob } from '@/app/(authenticated)/jobs/actions'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { JobSource, JobStatus, JobPriority } from '@prisma/client'
 import { SOURCE_LABELS, STATUS_LABELS, PRIORITY_LABELS } from '@/lib/constants'
 
 interface AddJobModalProps {
@@ -14,6 +16,9 @@ interface AddJobModalProps {
 export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [source, setSource] = useState<JobSource>('MANUAL')
+  const [status, setStatus] = useState<JobStatus>('SAVED')
+  const [priority, setPriority] = useState<JobPriority>('B')
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -26,6 +31,10 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
         await createJob(formData)
         onClose()
         e.currentTarget.reset()
+        // Reset Select values
+        setSource('MANUAL')
+        setStatus('SAVED')
+        setPriority('B')
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to create job')
       }
@@ -53,9 +62,10 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
                 ease: [0.16, 1, 0.3, 1]
               }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-2xl rounded-lg bg-card border border-border p-6 shadow-2xl max-h-[90vh] overflow-y-auto md:max-w-2xl"
+              className="w-full max-w-2xl rounded-lg bg-card border border-border shadow-2xl max-h-[90vh] flex flex-col md:max-w-2xl"
             >
-            <div className="flex items-center justify-between mb-4">
+            {/* Header - Fixed */}
+            <div className="flex items-center justify-between p-6 border-b border-border shrink-0">
               <h2 className="text-2xl font-bold">Add New Job</h2>
               <button
                 onClick={onClose}
@@ -67,14 +77,21 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
               </button>
             </div>
 
-            {error && (
-              <div className="mb-4 rounded-md bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-800 dark:text-red-200">
-                {error}
-              </div>
-            )}
+            {/* Content - Scrollable */}
+            <div className="p-6 overflow-y-auto flex-1 min-h-0">
+              {error && (
+                <div className="mb-4 rounded-md bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-800 dark:text-red-200">
+                  {error}
+                </div>
+              )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <form id="add-job-form" onSubmit={handleSubmit} className="space-y-4">
+                {/* Hidden inputs for Select values */}
+                <input type="hidden" name="source" value={source} />
+                <input type="hidden" name="status" value={status} />
+                <input type="hidden" name="priority" value={priority} />
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="title" className="block text-sm font-medium mb-1">
                     Job Title <span className="text-red-500">*</span>
@@ -133,52 +150,54 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
                   <label htmlFor="source" className="block text-sm font-medium mb-1">
                     Source
                   </label>
-                  <select
-                    id="source"
-                    name="source"
-                    className="w-full rounded-md border border-foreground/20 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/50"
-                  >
-                    {Object.entries(SOURCE_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={source} onValueChange={(value) => setSource(value as JobSource)}>
+                    <SelectTrigger id="source" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(SOURCE_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div>
                   <label htmlFor="status" className="block text-sm font-medium mb-1">
                     Status
                   </label>
-                  <select
-                    id="status"
-                    name="status"
-                    className="w-full rounded-md border border-foreground/20 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/50"
-                  >
-                    {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={status} onValueChange={(value) => setStatus(value as JobStatus)}>
+                    <SelectTrigger id="status" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div>
                   <label htmlFor="priority" className="block text-sm font-medium mb-1">
                     Priority
                   </label>
-                  <select
-                    id="priority"
-                    name="priority"
-                    defaultValue="B"
-                    className="w-full rounded-md border border-foreground/20 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/50"
-                  >
-                    {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={priority} onValueChange={(value) => setPriority(value as JobPriority)}>
+                    <SelectTrigger id="priority" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div>
@@ -247,7 +266,12 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-4">
+              </form>
+            </div>
+            
+            {/* Footer - Fixed */}
+            <div className="p-6 border-t border-border shrink-0">
+              <div className="flex justify-end gap-2">
                 <Button
                   type="button"
                   variant="secondary"
@@ -256,11 +280,15 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isPending}>
+                <Button 
+                  type="submit"
+                  form="add-job-form"
+                  disabled={isPending}
+                >
                   {isPending ? 'Creating...' : 'Create Job'}
                 </Button>
               </div>
-            </form>
+            </div>
             </motion.div>
           </motion.div>
         </>
