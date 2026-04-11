@@ -96,7 +96,7 @@ Return ONLY the cover letter text, no additional commentary.`
   const ai = getAIClient()
   const response = await ai.chatCompletion(
     [{ role: 'user', content: prompt }],
-    { model: MODEL, temperature: 0.7 }
+    { model: MODEL, temperature: 0.7, responseFormat: 'text' }
   )
 
   const coverLetter = response.data.choices[0]?.message?.content?.trim() ?? ''

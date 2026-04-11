@@ -29,10 +29,19 @@ export async function GET() {
     orderBy: [{ botScore: 'desc' }, { createdAt: 'desc' }],
   })
 
+  // De-duplicate within the queue itself: keep only the highest-scoring entry per company+title
+  const seenTitleKeys = new Map<string, string>() // key -> job id that won
+  const deduped = jobs.filter((job) => {
+    const key = `${job.company.toLowerCase().trim()}::${job.title.toLowerCase().trim()}`
+    if (seenTitleKeys.has(key)) return false
+    seenTitleKeys.set(key, job.id)
+    return true
+  })
+
   // Check for any duplicates the user may have already applied to elsewhere
   const duplicateFlags: Record<string, { appliedAt: Date; existingId: string }> = {}
 
-  for (const job of jobs) {
+  for (const job of deduped) {
     // Check by URL first (exact match)
     if (job.url) {
       const existing = await prisma.job.findFirst({
@@ -67,7 +76,7 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    jobs: jobs.map((j) => ({
+    jobs: deduped.map((j) => ({
       ...j,
       duplicate: duplicateFlags[j.id] ?? null,
     })),
