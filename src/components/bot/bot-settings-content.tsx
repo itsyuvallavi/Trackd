@@ -45,11 +45,11 @@ function TagInput({
 }) {
   const [input, setInput] = useState('')
 
-  function addTag(raw: string) {
-    const trimmed = raw.trim()
-    if (trimmed && !values.includes(trimmed)) {
-      onChange([...values, trimmed])
-    }
+  function addTags(raw: string) {
+    // Split on comma, slash, or Enter to support "React, Frontend / AI Engineer" style input
+    const parts = raw.split(/[,\/\n]+/).map((s) => s.trim()).filter(Boolean)
+    const toAdd = parts.filter((p) => p && !values.includes(p))
+    if (toAdd.length) onChange([...values, ...toAdd])
     setInput('')
   }
 
@@ -81,10 +81,10 @@ function TagInput({
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ',') {
             e.preventDefault()
-            addTag(input)
+            addTags(input)
           }
         }}
-        onBlur={() => { if (input.trim()) addTag(input) }}
+        onBlur={() => { if (input.trim()) addTags(input) }}
         placeholder={placeholder}
         className="w-full px-3 py-2 text-sm border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-ring"
       />
