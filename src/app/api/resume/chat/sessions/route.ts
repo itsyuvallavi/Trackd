@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { ResumeChatManager } from '@/lib/resume/resume-chat-manager'
+import { getResumeInitUserMessage } from '@/lib/resume/user-facing-error'
 
 /**
  * POST /api/resume/chat/sessions
@@ -10,6 +11,15 @@ import { ResumeChatManager } from '@/lib/resume/resume-chat-manager'
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth()
+
+    if (!process.env.OPENAI_API_KEY?.trim()) {
+      const userMessage =
+        'Resume analysis is unavailable: OPENAI_API_KEY is not set on the server.'
+      return NextResponse.json(
+        { error: 'AI not configured', userMessage },
+        { status: 503 }
+      )
+    }
 
     const body = await request.json()
     const { sessionId } = body as {
@@ -51,29 +61,17 @@ export async function POST(request: NextRequest) {
       ? `openai://${session.openaiFileId}` 
       : session.resumeFileUrl
     
-    console.log('[API] Creating ResumeChatManager with:', {
-      sessionId: session.id,
-      fileReference,
-      fileName: session.resumeFileName,
-      openaiFileId: session.openaiFileId,
-      resumeFileUrl: session.resumeFileUrl,
-    })
-    
     const manager = new ResumeChatManager(
       session.id,
       fileReference,
       session.resumeFileName
     )
     
-    console.error('[API] ===== CALLING generateInitialAnalysis =====')
     let initialMessage: string
     try {
       initialMessage = await manager.generateInitialAnalysis()
-      console.error('[API] Initial analysis generated, length:', initialMessage.length)
-    } catch (analysisError: any) {
-      console.error('[API] ERROR in generateInitialAnalysis:', analysisError?.message)
-      console.error('[API] Error stack:', analysisError?.stack)
-      console.error('[API] Full error:', JSON.stringify(analysisError, null, 2))
+    } catch (analysisError: unknown) {
+      console.error('generateInitialAnalysis failed:', analysisError)
       throw analysisError
     }
 
@@ -100,14 +98,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ session })
   } catch (error) {
     console.error('Error initializing resume session:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    const errorDetails = error instanceof Error ? error.stack : String(error)
-    console.error('Error details:', errorDetails)
-    
+    const userMessage = getResumeInitUserMessage(error)
+    const devDetail = error instanceof Error ? error.message : String(error)
+
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to initialize resume session',
-        message: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
+        userMessage,
+        message: process.env.NODE_ENV === 'development' ? devDetail : undefined,
       },
       { status: 500 }
     )

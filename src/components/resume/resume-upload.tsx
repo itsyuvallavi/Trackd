@@ -7,15 +7,17 @@ import { cn } from '@/lib/utils'
 
 interface ResumeUploadProps {
   onResumeUploaded: (sessionId: string) => void
+  /** When false, upload UI is inert (e.g. missing OPENAI_API_KEY). */
+  disabled?: boolean
 }
 
-export function ResumeUpload({ onResumeUploaded }: ResumeUploadProps) {
+export function ResumeUpload({ onResumeUploaded, disabled = false }: ResumeUploadProps) {
   const [isUploading, setIsUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileUpload = async (file: File) => {
-    if (!file) return
+    if (!file || disabled) return
 
     setIsUploading(true)
     try {
@@ -50,6 +52,7 @@ export function ResumeUpload({ onResumeUploaded }: ResumeUploadProps) {
   }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return
     const file = e.target.files?.[0]
     if (file) {
       handleFileUpload(file)
@@ -74,6 +77,7 @@ export function ResumeUpload({ onResumeUploaded }: ResumeUploadProps) {
     e.preventDefault()
     e.stopPropagation()
     setDragActive(false)
+    if (disabled) return
 
     const file = e.dataTransfer.files?.[0]
     if (file) {
@@ -85,10 +89,11 @@ export function ResumeUpload({ onResumeUploaded }: ResumeUploadProps) {
     <div
       className={cn(
         'bg-background border border-border rounded-lg shadow-sm p-6 text-center transition-colors',
-        dragActive
-          ? 'border-primary bg-primary/5'
-          : 'hover:border-primary/50',
-        isUploading && 'opacity-50 pointer-events-none'
+        !disabled &&
+          (dragActive
+            ? 'border-primary bg-primary/5'
+            : 'hover:border-primary/50'),
+        (isUploading || disabled) && 'opacity-50 pointer-events-none'
       )}
       onDragEnter={handleDrag}
       onDragLeave={handleDrag}
@@ -101,6 +106,7 @@ export function ResumeUpload({ onResumeUploaded }: ResumeUploadProps) {
         accept=".txt,.pdf,.doc,.docx"
         onChange={handleFileSelect}
         className="hidden"
+        disabled={disabled}
       />
       
       {isUploading ? (
@@ -118,10 +124,11 @@ export function ResumeUpload({ onResumeUploaded }: ResumeUploadProps) {
             Drag and drop a file here, or click to browse
           </p>
           <Button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => !disabled && fileInputRef.current?.click()}
             variant="outline"
             size="sm"
             className="mt-1"
+            disabled={disabled}
           >
             <FileText className="size-3 mr-2" />
             Choose File

@@ -294,7 +294,7 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                           <div className="flex items-center gap-2">
                             <div className={`w-0.5 h-4 rounded-full shrink-0 ${statusColorIndicators[job.status as keyof typeof statusColorIndicators]}`} />
                             {job.title.length > 30 ? (
-                              <Tooltip content={job.title}>
+                              <Tooltip content={job.title} scrollable={job.title.length > 120}>
                                 <Link 
                                   href={`/jobs/${job.id}`}
                                   className="text-sm font-medium hover:text-primary transition-colors truncate"
@@ -344,9 +344,9 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                       {visibleColumns.has('notes') && (
                         <TableCell className="py-1.5 text-center" style={{ width: '48px', minWidth: '48px', maxWidth: '48px' }}>
                           {job.notes ? (
-                            <Tooltip content={job.notes}>
+                            <Tooltip content={job.notes} scrollable>
                               <div className="flex items-center justify-center">
-                                <CheckCircle2 className="size-4 text-muted-foreground hover:text-foreground transition-colors cursor-help" />
+                                <CheckCircle2 className="size-4 text-muted-foreground hover:text-foreground transition-colors cursor-help" aria-label="Has notes" />
                               </div>
                             </Tooltip>
                           ) : (

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   FolderOpen,
   Settings,
+  Bot,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip } from '@/components/ui/tooltip'
@@ -14,6 +15,7 @@ export function Sidebar() {
 
   const navItems = [
     { href: '/jobs', icon: FolderOpen, label: 'Jobs' },
+    { href: '/settings/bot', icon: Bot, label: 'Job Bot' },
   ]
 
   return (

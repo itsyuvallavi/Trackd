@@ -18,6 +18,7 @@ enum JobSource {
   ZIPRECRUITER
   LANDING_JOBS
   OTHER
+  BOT
 }
 
 enum JobStatus {
@@ -342,6 +343,84 @@ model ResumeMessage {
   session     ResumeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   
   @@index([sessionId, timestamp])
+}
+
+enum BotRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum BotSearchFrequency {
+  DAILY
+  TWICE_DAILY
+  WEEKLY
+}
+
+model BotConfig {
+  id                String             @id @default(cuid())
+  userId            String             @unique
+
+  // Search preferences
+  keywords          String[]           @default([])  // Job titles / roles to search
+  locations         String[]           @default([])  // Target locations
+  excludeCompanies  String[]           @default([])  // Company blocklist
+  excludeKeywords   String[]           @default([])  // Negative filters in description
+  remoteOnly        Boolean            @default(false)
+  experienceLevel   String?            // "entry" | "mid" | "senior" | "any"
+  salaryMin         Int?               // Minimum annual salary (USD)
+
+  // Scheduling
+  isActive          Boolean            @default(false)
+  searchFrequency   BotSearchFrequency @default(DAILY)
+  lastSearchAt      DateTime?
+
+  // Notifications
+  telegramChatId    String?            // Telegram chat ID for push notifications
+
+  // API keys (user-supplied, optional — fall back to system keys)
+  serpApiKey        String?
+
+  // Evaluation threshold (0–100); jobs below this are not notified
+  minScore          Int                @default(60)
+
+  // Relations
+  runs              BotRun[]
+
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([userId])
+  @@index([isActive])
+}
+
+model BotRun {
+  id              String       @id @default(cuid())
+  userId          String
+  botConfigId     String
+
+  status          BotRunStatus @default(RUNNING)
+  source          String       @default("cron")  // "cron" | "manual"
+
+  // Counts
+  jobsFound       Int          @default(0)   // Raw results from search
+  jobsNew         Int          @default(0)   // New (not already in DB)
+  jobsEvaluated   Int          @default(0)   // Passed through AI evaluator
+  jobsApproved    Int          @default(0)   // Score >= minScore
+
+  // Timing
+  startedAt       DateTime     @default(now())
+  completedAt     DateTime?
+  duration        Int?         // milliseconds
+
+  // Error details
+  errors          Json?
+
+  // Relations
+  botConfig       BotConfig    @relation(fields: [botConfigId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startedAt])
+  @@index([botConfigId, startedAt])
 }
 
 enum FeedbackType {

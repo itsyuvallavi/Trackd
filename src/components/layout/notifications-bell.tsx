@@ -92,16 +92,6 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
   // Show red dot if there are unread notifications OR if email notification should be shown
   const showRedDot = unreadCount > 0 || showEmailNotification
 
-  // Debug logging
-  useEffect(() => {
-    console.log('[NotificationsBell] Debug:', {
-      showEmailNotification,
-      unreadCount,
-      showRedDot,
-      notificationsCount: notifications.length
-    })
-  }, [showEmailNotification, unreadCount, showRedDot, notifications.length])
-
   return (
     <div className="relative">
       <Tooltip content="Notifications">

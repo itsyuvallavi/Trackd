@@ -314,19 +314,9 @@ export async function syncEmails() {
                 },
               })
 
-              // Create notification for job update
-              await notificationService.createJobUpdatedNotification(
-                userId,
-                matchResult.jobId,
-                job?.title || 'Unknown',
-                job?.company || 'Unknown',
-                oldStatus,
-                classified.suggestedStatus,
-                'email'
-              )
+              // Activity feed captures the change; no separate JOB_UPDATED notification for email sync
 
               updatedCount++
-              notificationsCreatedCount++ // Job update notification
               console.log(`Updated job ${matchResult.jobId} to status ${classified.suggestedStatus}`)
             } else {
               console.log(`Skipped updating job ${matchResult.jobId} - status would go backwards`)

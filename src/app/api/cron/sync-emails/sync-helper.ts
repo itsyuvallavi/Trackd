@@ -317,19 +317,9 @@ export async function syncEmailsForUser(userId: string) {
                 },
               })
 
-              // Create notification for job update
-              await notificationService.createJobUpdatedNotification(
-                userId,
-                matchResult.jobId,
-                job?.title || 'Unknown',
-                job?.company || 'Unknown',
-                oldStatus,
-                classified.suggestedStatus,
-                'email'
-              )
+              // Timeline already records the update; skip JOB_UPDATED notification to avoid duplicating the dashboard bell + feed
 
               updatedCount++
-              notificationsCreatedCount++ // Job update notification
               console.log(`Updated job ${matchResult.jobId} to status ${classified.suggestedStatus}`)
             } else {
               console.log(`Skipped updating job ${matchResult.jobId} - status would go backwards`)

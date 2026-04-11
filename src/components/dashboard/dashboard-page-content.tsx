@@ -64,8 +64,8 @@ export function DashboardPageContent({
         <StatusStats counts={statusCounts} />
       </div>
 
-      {/* View Toggle - Mobile friendly */}
-      <div className="mb-4">
+      {/* View Toggle - Activity = timeline; Notifications = inbox (sync alerts, matches, errors) */}
+      <div className="mb-4 space-y-2">
         <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
           <Button
             variant="ghost"
@@ -98,6 +98,11 @@ export function DashboardPageContent({
             Notifications
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground px-0.5">
+          {viewMode === 'changes'
+            ? 'Timeline of status changes, emails, and notes across your jobs.'
+            : 'Alerts from email sync (new roles, ambiguous matches, errors). Routine job updates appear in Recent Activity.'}
+        </p>
       </div>
 
       {/* Content Area */}

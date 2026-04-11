@@ -3,13 +3,14 @@
 import { useState, memo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Briefcase, FileText, Plus, User } from 'lucide-react'
+import { Briefcase, FileText, Plus, User, Bot } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { QuickAddBar } from '@/components/jobs/quick-add-bar'
 
 const navItems = [
   { href: '/jobs', icon: Briefcase, label: 'Jobs' },
   { href: '/resume-advisor', icon: FileText, label: 'Resume' },
+  { href: '/settings/bot', icon: Bot, label: 'Bot' },
 ]
 
 export const BottomTabBar = memo(function BottomTabBar() {

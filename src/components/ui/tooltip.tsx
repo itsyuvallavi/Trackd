@@ -8,13 +8,24 @@ interface TooltipProps {
   children: React.ReactNode
   content: string
   side?: 'top' | 'bottom' | 'left' | 'right'
+  /** Delay before showing (ms). Reduces accidental flashes on dense UIs. */
+  delayMs?: number
+  /** Use a scrollable panel for long text (e.g. job notes). */
+  scrollable?: boolean
 }
 
-export function Tooltip({ children, content, side = 'bottom' }: TooltipProps) {
+export function Tooltip({
+  children,
+  content,
+  side = 'top',
+  delayMs = 350,
+  scrollable = false,
+}: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [position, setPosition] = useState({ top: 0, left: 0 })
   const [mounted, setMounted] = useState(false)
   const triggerRef = useRef<HTMLDivElement>(null)
+  const showTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -23,7 +34,7 @@ export function Tooltip({ children, content, side = 'bottom' }: TooltipProps) {
   useEffect(() => {
     if (isVisible && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect()
-      const offset = 8 // gap between trigger and tooltip
+      const offset = 8
 
       let top = 0
       let left = 0
@@ -49,7 +60,18 @@ export function Tooltip({ children, content, side = 'bottom' }: TooltipProps) {
 
       setPosition({ top, left })
     }
-  }, [isVisible, side])
+  }, [isVisible, side, content])
+
+  const clearShowTimer = () => {
+    if (showTimerRef.current) {
+      clearTimeout(showTimerRef.current)
+      showTimerRef.current = null
+    }
+  }
+
+  useEffect(() => {
+    return () => clearShowTimer()
+  }, [])
 
   const getTransformClasses = () => {
     switch (side) {
@@ -66,36 +88,48 @@ export function Tooltip({ children, content, side = 'bottom' }: TooltipProps) {
     }
   }
 
-  const tooltipContent = isVisible && mounted ? (
-    <div
-      className={cn(
-        'fixed z-[99999] px-3 py-1.5 text-xs font-medium text-white bg-gray-900 rounded-md shadow-2xl animate-in fade-in duration-150 pointer-events-none max-w-xs',
-        content.length > 50 ? 'whitespace-normal' : 'whitespace-nowrap',
-        getTransformClasses()
-      )}
-      style={{ top: `${position.top}px`, left: `${position.left}px` }}
-    >
-      {content}
-      {/* Arrow */}
+  const handleEnter = () => {
+    clearShowTimer()
+    showTimerRef.current = setTimeout(() => setIsVisible(true), delayMs)
+  }
+
+  const handleLeave = () => {
+    clearShowTimer()
+    setIsVisible(false)
+  }
+
+  const tooltipContent =
+    isVisible && mounted ? (
       <div
         className={cn(
-          'absolute w-2 h-2 bg-gray-900 rotate-45',
-          side === 'bottom' && 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2',
-          side === 'top' && 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2',
-          side === 'right' && 'left-0 top-1/2 -translate-y-1/2 -translate-x-1/2',
-          side === 'left' && 'right-0 top-1/2 -translate-y-1/2 translate-x-1/2'
+          'fixed z-[99999] px-3 py-1.5 text-xs font-medium text-white bg-gray-900 rounded-md shadow-2xl animate-in fade-in duration-150 pointer-events-none max-w-xs',
+          scrollable && 'max-w-sm max-h-40 overflow-y-auto py-2 whitespace-normal',
+          !scrollable &&
+            (content.length > 50 ? 'whitespace-normal' : 'whitespace-nowrap'),
+          getTransformClasses()
         )}
-      />
-    </div>
-  ) : null
+        style={{ top: `${position.top}px`, left: `${position.left}px` }}
+      >
+        {content}
+        <div
+          className={cn(
+            'absolute w-2 h-2 bg-gray-900 rotate-45',
+            side === 'bottom' && 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2',
+            side === 'top' && 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2',
+            side === 'right' && 'left-0 top-1/2 -translate-y-1/2 -translate-x-1/2',
+            side === 'left' && 'right-0 top-1/2 -translate-y-1/2 translate-x-1/2'
+          )}
+        />
+      </div>
+    ) : null
 
   return (
     <>
       <div
         ref={triggerRef}
         className="inline-block"
-        onMouseEnter={() => setIsVisible(true)}
-        onMouseLeave={() => setIsVisible(false)}
+        onMouseEnter={handleEnter}
+        onMouseLeave={handleLeave}
       >
         {children}
       </div>

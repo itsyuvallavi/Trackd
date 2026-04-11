@@ -48,8 +48,6 @@ export function SidebarWrapper({
   return (
     <AppShell 
       showEmailNotification={showEmailNotification}
-      sidebarOpen={sidebarOpen}
-      onSidebarToggle={setSidebarOpen}
     >
       <PageWithSidebar 
         activities={activities} 

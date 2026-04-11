@@ -17,7 +17,9 @@
     "test:sync": "vitest run src/__tests__/sync-flow.test.ts",
     "debug:sync": "bun run src/scripts/debug-email-sync.ts",
     "test:live": "bun run src/scripts/test-email-sync-live.ts",
-    "test:live:run": "bun run src/scripts/test-email-sync-live.ts --live"
+    "test:live:run": "bun run src/scripts/test-email-sync-live.ts --live",
+    "test:bot": "bun run scripts/test-bot-search.ts",
+    "test:bot:dry": "bun run scripts/test-bot-search.ts --dry-run"
   },
   "dependencies": {
     "@base-ui/react": "^1.0.0",
@@ -25,7 +27,6 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@prisma/adapter-pg": "^7.1.0",
-    "@prisma/client": "^7.2.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.88.0",
     "@tabler/icons-react": "^3.36.1",
@@ -36,11 +37,11 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.24.7",
-    "imap": "^0.8.19",
+    "imap": "^0.8.17",
     "lucide-react": "^0.561.0",
     "mailparser": "^3.9.1",
     "nanoid": "^5.1.6",
-    "next": "16.0.10",
+    "next": "^16.2.3",
     "openai": "^6.15.0",
     "pg": "^8.16.3",
     "puppeteer": "^24.33.0",
@@ -54,6 +55,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@prisma/client": "^7.7.0",
     "@tailwindcss/postcss": "^4",
     "@types/adm-zip": "^0.5.7",
     "@types/imap": "^0.8.43",
@@ -64,10 +66,10 @@
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^4.0.16",
     "babel-plugin-react-compiler": "1.0.0",
-    "baseline-browser-mapping": "^2.9.19",
+    "baseline-browser-mapping": "^2.10.17",
     "eslint": "^9",
     "eslint-config-next": "16.0.10",
-    "prisma": "^7.2.0",
+    "prisma": "^7.7.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.0.16"

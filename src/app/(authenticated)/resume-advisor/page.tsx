@@ -7,9 +7,11 @@ export const revalidate = 60
 export default async function ResumeAdvisorPage() {
   await requireAuth()
 
+  const aiConfigured = Boolean(process.env.OPENAI_API_KEY?.trim())
+
   return (
     <AppShell>
-      <ResumeAdvisorContent />
+      <ResumeAdvisorContent aiConfigured={aiConfigured} />
     </AppShell>
   )
 }

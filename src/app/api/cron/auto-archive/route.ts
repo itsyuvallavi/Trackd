@@ -4,22 +4,13 @@ import { archiveInactiveJobsForAllUsers } from '@/lib/auto-archive'
 export const dynamic = 'force-dynamic'
 
 /**
- * Cron endpoint to automatically archive jobs with no email activity
- * 
- * Schedule: Run daily (e.g., "0 2 * * *" = 2 AM daily)
- * 
- * Security: Requires Vercel Cron header or CRON_SECRET Bearer token
+ * Cron: archive applications whose Job.updatedAt is older than the threshold (default 21 days).
  */
 export async function GET(request: Request) {
   try {
-    // SECURITY: Verify this is called by Vercel Cron or with proper auth
-    // Same security model as sync-emails cron
     const vercelCronHeader = request.headers.get('x-vercel-cron')
     const authHeader = request.headers.get('authorization')
 
-    // In production, require either:
-    // 1. Vercel Cron header (x-vercel-cron)
-    // 2. CRON_SECRET Bearer token
     if (process.env.NODE_ENV === 'production') {
       const hasVercelCron = vercelCronHeader === '1' || request.headers.get('x-vercel-signature')
       const hasValidSecret =
@@ -30,7 +21,6 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
     } else {
-      // In development, allow if CRON_SECRET is provided and matches
       if (process.env.CRON_SECRET) {
         if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
           return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -38,7 +28,6 @@ export async function GET(request: Request) {
       }
     }
 
-    // Check if auto-archive is enabled (feature flag)
     const autoArchiveEnabled = process.env.AUTO_ARCHIVE_ENABLED !== 'false'
     if (!autoArchiveEnabled) {
       return NextResponse.json({
@@ -47,22 +36,17 @@ export async function GET(request: Request) {
       })
     }
 
-    // Get configuration from environment variables (with defaults)
-    const daysSinceLastEmail = parseInt(process.env.AUTO_ARCHIVE_DAYS || '30', 10)
-    const excludeRecentDays = parseInt(process.env.AUTO_ARCHIVE_EXCLUDE_RECENT_DAYS || '7', 10)
+    const daysSinceUpdate = parseInt(process.env.AUTO_ARCHIVE_DAYS || '21', 10)
 
     console.log('🔄 Starting auto-archive cron job...')
-    console.log(`   Config: ${daysSinceLastEmail} days since last email, exclude if updated in last ${excludeRecentDays} days`)
+    console.log(`   Config: archive if updatedAt older than ${daysSinceUpdate} days`)
 
-    // Archive inactive jobs for all users
-    const result = await archiveInactiveJobsForAllUsers(daysSinceLastEmail, excludeRecentDays)
+    const result = await archiveInactiveJobsForAllUsers(daysSinceUpdate)
 
-    // Log summary
     console.log(`✅ Auto-archive complete:`)
     console.log(`   Users processed: ${result.totalUsersProcessed}`)
     console.log(`   Jobs archived: ${result.totalJobsArchived}`)
 
-    // Log per-user results if there are any archived jobs
     if (result.totalJobsArchived > 0) {
       console.log('\n   Per-user breakdown:')
       for (const [userId, userResult] of Object.entries(result.resultsByUser)) {
@@ -75,7 +59,6 @@ export async function GET(request: Request) {
       }
     }
 
-    // Log any errors
     const totalErrors = Object.values(result.resultsByUser).reduce(
       (sum, r) => sum + r.errors.length,
       0
@@ -88,8 +71,7 @@ export async function GET(request: Request) {
       success: true,
       enabled: true,
       config: {
-        daysSinceLastEmail,
-        excludeRecentDays,
+        daysSinceUpdate,
       },
       results: {
         totalUsersProcessed: result.totalUsersProcessed,

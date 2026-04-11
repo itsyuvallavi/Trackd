@@ -69,7 +69,7 @@ export function AutoRefreshIndicator({
   const tooltipContent = `Auto-refreshing in ${timeUntilRefresh}s`
 
   return (
-    <Tooltip content={tooltipContent}>
+    <Tooltip content={tooltipContent} delayMs={0}>
       <div className="flex items-center gap-1.5 text-muted-foreground cursor-default">
         {/* Refresh Icon with Spin Animation */}
         <RefreshCw 

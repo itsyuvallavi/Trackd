@@ -492,16 +492,7 @@ async function runLiveTest(config: TestConfig) {
                 description: `Email detected: ${email.subject}`,
               },
             })
-            await notificationService.createJobUpdatedNotification(
-              profile.id,
-              matchResult.jobId!,
-              matchedJob.title,
-              matchedJob.company,
-              matchedJob.status,
-              classified.suggestedStatus,
-              'email'
-            )
-            console.log(colorize('    ✓ Database updated', 'green'))
+            console.log(colorize('    ✓ Database updated (activity only; no duplicate JOB_UPDATED notification)', 'green'))
           }
         } else {
           action = 'skipped'

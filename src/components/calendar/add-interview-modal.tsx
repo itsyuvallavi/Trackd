@@ -134,11 +134,11 @@ export function AddInterviewModal({
             ) : (
               <Select
                 value={selectedJobId || ''}
-                onValueChange={(value) => setSelectedJobId(value)}
+                onValueChange={(value) => setSelectedJobId(value || '')}
                 disabled={isSubmitting}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Choose a job..." />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">Choose a job...</SelectItem>

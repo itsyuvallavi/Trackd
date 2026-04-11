@@ -2,20 +2,23 @@
 
 /**
  * Test script for auto-archive functionality
- * 
+ *
  * Usage:
  *   bun run scripts/test-auto-archive.ts [userId]
- * 
+ *
  * If userId is not provided, will test for all users
  */
 
 import { prisma } from '../src/lib/prisma'
 import { archiveInactiveJobs, archiveInactiveJobsForAllUsers } from '../src/lib/auto-archive'
 
+const DEFAULT_DAYS = 21
+
 async function main() {
   const userId = process.argv[2]
 
   console.log('🧪 Testing Auto-Archive Functionality\n')
+  console.log(`   Rule: archive SAVED/APPLIED/INTERVIEW if Job.updatedAt is older than ${DEFAULT_DAYS} days\n`)
 
   if (userId) {
     console.log(`Testing for user: ${userId}\n`)
@@ -29,7 +32,9 @@ async function main() {
 }
 
 async function testForUser(userId: string) {
-  // First, show current state
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - DEFAULT_DAYS)
+
   const jobsBefore = await prisma.job.findMany({
     where: {
       userId,
@@ -37,43 +42,34 @@ async function testForUser(userId: string) {
         in: ['APPLIED', 'INTERVIEW', 'SAVED'],
       },
     },
-    include: {
-      activities: {
-        where: {
-          type: 'EMAIL_UPDATE',
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-        take: 1,
-      },
+    select: {
+      id: true,
+      title: true,
+      company: true,
+      status: true,
+      updatedAt: true,
     },
   })
 
+  const wouldArchive = jobsBefore.filter((j) => j.updatedAt < cutoff)
+
   console.log(`📊 Current state:`)
   console.log(`   Jobs in APPLIED/INTERVIEW/SAVED: ${jobsBefore.length}`)
-  
-  const jobsWithEmailActivity = jobsBefore.filter(j => j.activities.length > 0)
-  console.log(`   Jobs with email activity: ${jobsWithEmailActivity.length}`)
+  console.log(`   Would archive (updatedAt before ${cutoff.toISOString()}): ${wouldArchive.length}`)
 
-  if (jobsWithEmailActivity.length > 0) {
-    console.log('\n   Jobs with email activity:')
-    for (const job of jobsWithEmailActivity) {
-      const lastEmail = job.activities[0]
-      const daysAgo = Math.floor(
-        (Date.now() - lastEmail.createdAt.getTime()) / (1000 * 60 * 60 * 24)
+  if (wouldArchive.length > 0) {
+    console.log('\n   Candidates:')
+    for (const job of wouldArchive) {
+      const daysSinceUpdate = Math.floor(
+        (Date.now() - job.updatedAt.getTime()) / (1000 * 60 * 60 * 24)
       )
-      console.log(`   - "${job.title}" at ${job.company}`)
-      console.log(`     Status: ${job.status}`)
-      console.log(`     Last email: ${daysAgo} days ago`)
-      console.log(`     Last updated: ${Math.floor((Date.now() - job.updatedAt.getTime()) / (1000 * 60 * 60 * 24))} days ago`)
+      console.log(`   - "${job.title}" at ${job.company} (${job.status}) — ${daysSinceUpdate}d since update`)
     }
   }
 
-  // Run archive function (dry run - we'll use a shorter period for testing)
-  console.log('\n🔄 Running archive function (30 days threshold)...\n')
-  
-  const result = await archiveInactiveJobs(userId, 30, 7)
+  console.log(`\n🔄 Running archive function (${DEFAULT_DAYS} day threshold)...\n`)
+
+  const result = await archiveInactiveJobs(userId, DEFAULT_DAYS)
 
   console.log(`✅ Archive result:`)
   console.log(`   Jobs archived: ${result.jobsArchived}`)
@@ -116,7 +112,7 @@ async function testForUser(userId: string) {
 async function testForAllUsers() {
   console.log('🔄 Running archive for all users...\n')
 
-  const result = await archiveInactiveJobsForAllUsers(30, 7)
+  const result = await archiveInactiveJobsForAllUsers(DEFAULT_DAYS)
 
   console.log(`✅ Archive result:`)
   console.log(`   Users processed: ${result.totalUsersProcessed}`)
@@ -124,9 +120,9 @@ async function testForAllUsers() {
 
   if (result.totalJobsArchived > 0) {
     console.log('\n   Per-user breakdown:')
-    for (const [userId, userResult] of Object.entries(result.resultsByUser)) {
+    for (const [uid, userResult] of Object.entries(result.resultsByUser)) {
       if (userResult.jobsArchived > 0) {
-        console.log(`   - User ${userId}: ${userResult.jobsArchived} jobs archived`)
+        console.log(`   - User ${uid}: ${userResult.jobsArchived} jobs archived`)
         if (userResult.errors.length > 0) {
           console.log(`     Errors: ${userResult.errors.length}`)
         }

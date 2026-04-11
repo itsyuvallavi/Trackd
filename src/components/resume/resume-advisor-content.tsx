@@ -5,7 +5,12 @@ import { ResumeChat } from './resume-chat'
 import { ResumeUpload } from './resume-upload'
 import { ChatHistorySidebar } from './chat-history-sidebar'
 
-export function ResumeAdvisorContent() {
+interface ResumeAdvisorContentProps {
+  /** False when OPENAI_API_KEY is missing (server-side check). */
+  aiConfigured?: boolean
+}
+
+export function ResumeAdvisorContent({ aiConfigured = true }: ResumeAdvisorContentProps) {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [isInitializing, setIsInitializing] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
@@ -26,7 +31,12 @@ export function ResumeAdvisorContent() {
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-        throw new Error(errorData.message || errorData.error || 'Failed to initialize AI analysis')
+        throw new Error(
+          (errorData as { userMessage?: string; message?: string; error?: string }).userMessage ||
+            (errorData as { message?: string }).message ||
+            (errorData as { error?: string }).error ||
+            'Failed to initialize AI analysis'
+        )
       }
       
       // Trigger a refresh by updating sessionId (which will refresh the sidebar)
@@ -52,6 +62,18 @@ export function ResumeAdvisorContent() {
     setIsInitializing(false)
   }
 
+  const configBanner =
+    !aiConfigured ? (
+      <div
+        className="mb-4 rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-foreground"
+        role="status"
+      >
+        Resume analysis is not available: the server is missing{' '}
+        <code className="rounded bg-muted px-1.5 py-0.5 text-xs">OPENAI_API_KEY</code>. Add it to your
+        environment and redeploy to enable uploads and AI feedback.
+      </div>
+    ) : null
+
   // Show upload component when user clicks upload
   if (showUpload && !sessionId) {
     return (
@@ -70,7 +92,8 @@ export function ResumeAdvisorContent() {
                 <h1 className="text-2xl font-semibold mb-2">Resume Advisor</h1>
                 <p className="text-sm text-muted-foreground">Upload your resume to get started</p>
               </div>
-              <ResumeUpload onResumeUploaded={handleResumeUploaded} />
+              {configBanner}
+              <ResumeUpload onResumeUploaded={handleResumeUploaded} disabled={!aiConfigured} />
             </div>
           </div>
         </div>
@@ -102,6 +125,8 @@ export function ResumeAdvisorContent() {
                 {sessionId ? 'Chat with AI about your resume' : 'Get AI-powered feedback on your resume'}
               </p>
             </div>
+
+            {configBanner}
 
             {/* Content */}
             {isInitializing ? (

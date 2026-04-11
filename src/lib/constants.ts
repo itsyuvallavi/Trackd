@@ -36,6 +36,7 @@ export const SOURCE_LABELS: Record<JobSource, string> = {
   ZIPRECRUITER: 'ZipRecruiter',
   LANDING_JOBS: 'Landing.jobs',
   OTHER: 'Other',
+  BOT: 'Bot',
 }
 
 export const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
