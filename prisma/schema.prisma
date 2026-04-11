@@ -459,7 +459,7 @@ model ApplicationProfile {
   address             String?
   city                String?
   state               String?
-  country             String?  @default("United States")
+  country             String?
 
   // Online presence
   linkedinUrl         String?

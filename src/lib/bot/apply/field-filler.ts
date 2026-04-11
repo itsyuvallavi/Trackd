@@ -37,7 +37,7 @@ export async function answerCustomField(
           ? `Requires sponsorship: ${profile.requiresSponsorship ? 'Yes' : 'No'}`
           : null,
         profile.salaryExpectation
-          ? `Salary expectation: $${profile.salaryExpectation.toLocaleString()}/year`
+          ? `Salary expectation: ${profile.salaryExpectation.toLocaleString()} EUR/year (gross annual)`
           : null,
         profile.noticePeriod ? `Notice period: ${profile.noticePeriod}` : null,
         profile.yearsExperience ? `Years of experience: ${profile.yearsExperience}` : null,

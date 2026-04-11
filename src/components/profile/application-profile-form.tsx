@@ -14,6 +14,23 @@ const inputCls =
 
 const labelCls = 'block text-xs font-medium text-muted-foreground uppercase mb-1'
 
+const WORK_AUTH_OPTIONS = [
+  { value: '', label: 'Select…' },
+  // EU / Global
+  { value: 'eu_citizen', label: 'EU / EEA Citizen (full rights)' },
+  { value: 'eu_resident', label: 'EU Residence Permit' },
+  { value: 'pt_resident', label: 'Portugal — Resident / NHR' },
+  { value: 'uk_citizen', label: 'UK Citizen / Settled Status' },
+  { value: 'schengen_visa', label: 'Schengen Visa / Work Permit' },
+  // US
+  { value: 'us_citizen', label: 'US Citizen' },
+  { value: 'green_card', label: 'US Green Card / Permanent Resident' },
+  { value: 'h1b', label: 'H-1B Visa' },
+  { value: 'ead', label: 'EAD (OPT/CPT/H4)' },
+  // Other
+  { value: 'other', label: 'Other / Not listed' },
+]
+
 export function ApplicationProfileForm({ profile }: Props) {
   const [saved, setSaved] = useState(false)
   const [pending, startTransition] = useTransition()
@@ -31,10 +48,10 @@ export function ApplicationProfileForm({ profile }: Props) {
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
-      {/* Contact */}
+      {/* Contact & Location */}
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-          Contact
+          Contact &amp; Location
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -43,7 +60,7 @@ export function ApplicationProfileForm({ profile }: Props) {
               type="tel"
               name="phone"
               defaultValue={profile?.phone ?? ''}
-              placeholder="+1 (555) 000-0000"
+              placeholder="+351 900 000 000"
               className={inputCls}
             />
           </div>
@@ -59,33 +76,23 @@ export function ApplicationProfileForm({ profile }: Props) {
               className={inputCls}
             />
           </div>
-          <div className="sm:col-span-2">
-            <label className={labelCls}>Street Address</label>
-            <input
-              type="text"
-              name="address"
-              defaultValue={profile?.address ?? ''}
-              placeholder="123 Main St"
-              className={inputCls}
-            />
-          </div>
           <div>
             <label className={labelCls}>City</label>
             <input
               type="text"
               name="city"
               defaultValue={profile?.city ?? ''}
-              placeholder="San Francisco"
+              placeholder="Lisbon"
               className={inputCls}
             />
           </div>
           <div>
-            <label className={labelCls}>State</label>
+            <label className={labelCls}>Region / State (optional)</label>
             <input
               type="text"
               name="state"
               defaultValue={profile?.state ?? ''}
-              placeholder="CA"
+              placeholder="Lisboa"
               className={inputCls}
             />
           </div>
@@ -94,7 +101,18 @@ export function ApplicationProfileForm({ profile }: Props) {
             <input
               type="text"
               name="country"
-              defaultValue={profile?.country ?? 'United States'}
+              defaultValue={profile?.country ?? ''}
+              placeholder="Portugal"
+              className={inputCls}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className={labelCls}>Street Address (optional)</label>
+            <input
+              type="text"
+              name="address"
+              defaultValue={profile?.address ?? ''}
+              placeholder="Rua Example 123"
               className={inputCls}
             />
           </div>
@@ -146,23 +164,20 @@ export function ApplicationProfileForm({ profile }: Props) {
           Work Authorization
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
+          <div className="sm:col-span-2">
             <label className={labelCls}>Status</label>
             <select
               name="workAuthorization"
               defaultValue={profile?.workAuthorization ?? ''}
               className={inputCls}
             >
-              <option value="">Select…</option>
-              <option value="us_citizen">US Citizen</option>
-              <option value="green_card">Green Card / Permanent Resident</option>
-              <option value="h1b">H-1B Visa</option>
-              <option value="ead">EAD (OPT/CPT/H4)</option>
-              <option value="other">Other</option>
+              {WORK_AUTH_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
             </select>
           </div>
           <div>
-            <label className={labelCls}>Requires Sponsorship?</label>
+            <label className={labelCls}>Requires Visa Sponsorship?</label>
             <select
               name="requiresSponsorship"
               defaultValue={profile?.requiresSponsorship ? 'true' : 'false'}
@@ -182,16 +197,21 @@ export function ApplicationProfileForm({ profile }: Props) {
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className={labelCls}>Salary Expectation (USD / year)</label>
-            <input
-              type="number"
-              name="salaryExpectation"
-              defaultValue={profile?.salaryExpectation ?? ''}
-              placeholder="120000"
-              min={0}
-              step={1000}
-              className={inputCls}
-            />
+            <label className={labelCls}>Salary Expectation (annual, gross)</label>
+            <div className="relative">
+              <input
+                type="number"
+                name="salaryExpectation"
+                defaultValue={profile?.salaryExpectation ?? ''}
+                placeholder="80000"
+                min={0}
+                step={1000}
+                className={inputCls}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
+                EUR/year
+              </span>
+            </div>
           </div>
           <div>
             <label className={labelCls}>Notice Period</label>
