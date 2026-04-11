@@ -1,10 +1,10 @@
 /**
  * Browserless.io connection manager.
- * Connects Playwright to a remote Chrome instance instead of launching locally.
- * Vercel serverless functions can't spawn browsers — Browserless runs Chrome for us.
+ * Playwright is required only inside withBrowser() so this module is safe to
+ * import from the graph without executing native code at load time.
  */
 
-import { chromium, type Browser, type Page } from 'playwright-core'
+import type { Browser, Page } from 'playwright-core'
 
 const BROWSERLESS_WS = 'wss://production-sfo.browserless.io'
 
@@ -18,6 +18,9 @@ export async function withBrowser<T>(
   fn: (page: Page) => Promise<T>,
   options: { timeout?: number } = {}
 ): Promise<T> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { chromium } = require('playwright-core') as typeof import('playwright-core')
+
   const wsUrl = getBrowserlessUrl()
   let browser: Browser | null = null
 
@@ -36,8 +39,7 @@ export async function withBrowser<T>(
     const page = await context.newPage()
     page.setDefaultTimeout(30_000)
 
-    const result = await fn(page)
-    return result
+    return await fn(page)
   } finally {
     if (browser) {
       await browser.close().catch(() => {})

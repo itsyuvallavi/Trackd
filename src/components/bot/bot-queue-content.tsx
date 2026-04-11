@@ -335,6 +335,9 @@ export function BotQueueContent() {
     try {
       const res = await fetch('/api/bot/queue')
       const data = await res.json() as { jobs?: QueueJob[]; profileComplete?: boolean; error?: string }
+      if (res.status === 401) {
+        throw new Error('Session expired — please sign in again.')
+      }
       if (!res.ok) throw new Error(data.error ?? 'Failed to load queue')
       setJobs(data.jobs ?? [])
       setProfileComplete(data.profileComplete ?? true)

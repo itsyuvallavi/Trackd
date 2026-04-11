@@ -4,7 +4,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { detectATS } from './ats-detector'
+import { detectATS } from '@/lib/bot/ats-detector'
 import { withBrowser } from './browser'
 import { fillGreenhouseApplication, submitGreenhouseApplication } from './adapters/greenhouse'
 import { fillLeverApplication, submitLeverApplication } from './adapters/lever'
@@ -13,9 +13,12 @@ import { prisma } from '@/lib/prisma'
 import { pickResumeForJob } from '@/lib/bot/resume/parser'
 import type { ApplicationProfile } from '@prisma/client'
 import type { ResumeStructuredData } from '@/lib/bot/resume/types'
-import * as fs from 'fs'
-import * as os from 'os'
-import * as path from 'path'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const fs = require('fs') as typeof import('fs')
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const os = require('os') as typeof import('os')
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const path = require('path') as typeof import('path')
 
 function getSupabaseAdmin() {
   return createClient(

@@ -11,8 +11,8 @@ import {
   Send,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ATS_LABELS } from '@/lib/bot/apply/ats-detector'
-import type { ATSType } from '@/lib/bot/apply/ats-detector'
+import { ATS_LABELS } from '@/lib/bot/ats-detector'
+import type { ATSType } from '@/lib/bot/ats-detector'
 
 interface AutoApplyDrawerProps {
   jobId: string

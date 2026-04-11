@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { detectATS } from '@/lib/bot/apply/ats-detector'
+import { detectATS } from '@/lib/bot/ats-detector'
 import { runApplicationFill } from '@/lib/bot/apply/apply-orchestrator'
 
 export const maxDuration = 300

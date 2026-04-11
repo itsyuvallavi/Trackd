@@ -8,12 +8,17 @@ export function useBotQueueCount(): number {
   useEffect(() => {
     let cancelled = false
     fetch('/api/bot/queue')
-      .then((r) => r.json())
-      .then((d: { jobs?: unknown[] }) => {
+      .then((r) => {
+        if (!r.ok) return { jobs: [] as unknown[] }
+        return r.json() as Promise<{ jobs?: unknown[] }>
+      })
+      .then((d) => {
         if (!cancelled) setCount(d.jobs?.length ?? 0)
       })
       .catch(() => {})
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   return count

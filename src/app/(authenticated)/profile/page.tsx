@@ -15,12 +15,16 @@ export const revalidate = 0
 export default async function ProfilePage() {
   const user = await requireAuth()
 
-  // Fetch all data in parallel using cached queries
   const [profileData, emailIntegration, extensionKey, appProfile] = await Promise.all([
     getUserProfile(user.id),
     getEmailIntegration(user.id),
     getExtensionKey(user.id),
-    prisma.applicationProfile.findUnique({ where: { userId: user.id } }),
+    prisma.applicationProfile
+      .findUnique({ where: { userId: user.id } })
+      .catch((e) => {
+        console.error('[profile] applicationProfile:', e)
+        return null
+      }),
   ])
 
   // Create profile if it doesn't exist
