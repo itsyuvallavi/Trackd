@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   const buffer = Buffer.from(arrayBuffer)
 
   const { error: uploadError } = await supabase.storage
-    .from('resumes')
+    .from('resume')
     .upload(path, buffer, { contentType: 'application/pdf', upsert: false })
 
   if (uploadError) {
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'File upload failed', detail: uploadError.message }, { status: 500 })
   }
 
-  const { data: urlData } = supabase.storage.from('resumes').getPublicUrl(path)
+  const { data: urlData } = supabase.storage.from('resume').getPublicUrl(path)
   const fileUrl = urlData.publicUrl
 
   // Parse PDF with OpenAI
@@ -124,9 +124,9 @@ export async function DELETE(req: NextRequest) {
 
   // Delete from Supabase Storage
   const supabase = getSupabaseAdmin()
-  const path = resume.fileUrl.split('/resumes/')[1]
+  const path = resume.fileUrl.split('/resume/')[1]
   if (path) {
-    await supabase.storage.from('resumes').remove([path]).catch(() => {})
+    await supabase.storage.from('resume').remove([path]).catch(() => {})
   }
 
   await prisma.botResume.delete({ where: { id } })
