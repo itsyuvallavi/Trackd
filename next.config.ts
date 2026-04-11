@@ -15,6 +15,9 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 60, // Cache images for 60 seconds
     qualities: [75, 85], // Allow both quality levels
   },
+  // Packages with native binaries that must not be bundled by webpack
+  serverExternalPackages: ['playwright-core', 'playwright'],
+
   // Enable experimental features for better performance
   experimental: {
     optimizePackageImports: ['lucide-react', '@tabler/icons-react'], // Tree-shake unused icons
