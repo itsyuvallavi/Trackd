@@ -2,11 +2,12 @@ import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { AppShell } from '@/components/layout/app-shell'
 import { BotSettingsContent } from '@/components/bot/bot-settings-content'
+import { BotResumeManager } from '@/components/bot/bot-resume-manager'
 
 export default async function BotSettingsPage() {
   const user = await requireAuth()
 
-  const [botConfig, recentRuns] = await Promise.all([
+  const [botConfig, recentRuns, resumes] = await Promise.all([
     prisma.botConfig.findUnique({ where: { userId: user.id } }),
     prisma.botRun.findMany({
       where: { userId: user.id },
@@ -24,6 +25,20 @@ export default async function BotSettingsPage() {
         duration: true,
         errors: true,
       },
+    }),
+    prisma.botResume.findMany({
+      where: { userId: user.id },
+      select: {
+        id: true,
+        label: true,
+        matchKeywords: true,
+        isDefault: true,
+        fileName: true,
+        fileUrl: true,
+        structuredData: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'asc' },
     }),
   ])
 
@@ -47,6 +62,7 @@ export default async function BotSettingsPage() {
             telegramConfigured={telegramConfigured}
             searchServiceConfigured={searchServiceConfigured}
           />
+          <BotResumeManager initialResumes={resumes.map((r) => ({ ...r, createdAt: r.createdAt.toISOString(), structuredData: r.structuredData as import('@/lib/bot/resume/types').ResumeStructuredData | null }))} />
         </div>
       </div>
     </AppShell>

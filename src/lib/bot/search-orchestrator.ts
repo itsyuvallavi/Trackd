@@ -81,17 +81,36 @@ export async function runBotSearch(
     return result
   }
 
-  // Collect all URLs and dedup against DB
+  // Collect all URLs and dedup against DB (including already-applied jobs)
   const jobsWithUrls = searchResponse.jobs.filter((j) => j.url?.trim())
   const urls = jobsWithUrls.map((j) => j.url!.trim().replace(/\/$/, ''))
 
   const existingJobs = await prisma.job.findMany({
     where: { userId, url: { in: urls } },
-    select: { url: true },
+    select: { url: true, status: true },
   })
   const existingUrls = new Set(existingJobs.map((j) => j.url?.replace(/\/$/, '') ?? ''))
 
-  const newJobs = jobsWithUrls.filter((j) => !existingUrls.has(j.url!.trim().replace(/\/$/, '')))
+  // Also load all applied/interview/offer jobs to block company+title duplicates
+  const activeApplications = await prisma.job.findMany({
+    where: { userId, status: { in: ['APPLIED', 'INTERVIEW', 'OFFER'] } },
+    select: { company: true, title: true },
+  })
+  const appliedKeys = new Set(
+    activeApplications.map((j) => `${j.company.toLowerCase()}::${j.title.toLowerCase()}`)
+  )
+
+  const newJobs = jobsWithUrls.filter((j) => {
+    const url = j.url!.trim().replace(/\/$/, '')
+    if (existingUrls.has(url)) return false
+    // Block if already actively applying to same company+title
+    const key = `${j.company.toLowerCase()}::${j.title.toLowerCase()}`
+    if (appliedKeys.has(key)) {
+      console.log(`[bot] Skipping duplicate application: ${j.title} @ ${j.company}`)
+      return false
+    }
+    return true
+  })
   const noUrlJobs = searchResponse.jobs.filter((j) => !j.url?.trim())
   const allNewJobs: SearchJobResult[] = [...newJobs, ...noUrlJobs]
 

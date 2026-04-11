@@ -394,6 +394,28 @@ model BotConfig {
   @@index([isActive])
 }
 
+model BotResume {
+  id             String   @id @default(cuid())
+  userId         String
+
+  label          String   // e.g. "Software Engineer", "Product Manager"
+  matchKeywords  String[] // Job title keywords that trigger this resume
+  isDefault      Boolean  @default(false)
+
+  // File (stored in Supabase Storage)
+  fileUrl        String
+  fileName       String
+
+  // Parsed content
+  rawText        String?  // Full extracted text from PDF
+  structuredData Json?    // { name, email, phone, linkedin, github, skills[], experience[], education[], summary }
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+}
+
 model BotRun {
   id              String       @id @default(cuid())
   userId          String
