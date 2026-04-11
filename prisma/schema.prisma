@@ -450,6 +450,55 @@ model BotRun {
   @@index([botConfigId, startedAt])
 }
 
+model ApplicationProfile {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+
+  // Contact
+  phone               String?
+  address             String?
+  city                String?
+  state               String?
+  country             String?  @default("United States")
+
+  // Online presence
+  linkedinUrl         String?
+  githubUrl           String?
+  portfolioUrl        String?
+
+  // Work eligibility
+  workAuthorization   String?  // "us_citizen" | "green_card" | "h1b" | "ead" | "other"
+  requiresSponsorship Boolean  @default(false)
+
+  // Application preferences
+  salaryExpectation   Int?     // annual USD
+  noticePeriod        String?  // "immediately" | "2_weeks" | "1_month" | "3_months"
+  yearsExperience     Int?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model ApplicationAttempt {
+  id           String   @id @default(cuid())
+  userId       String
+  jobId        String
+
+  atsType      String   // "greenhouse" | "lever" | "indeed" | "workday" | "direct"
+  status       String   // "filling" | "awaiting_review" | "submitting" | "submitted" | "failed" | "cancelled"
+
+  formData     Json?    // fields that were filled in
+  screenshots  String[] @default([])  // Supabase Storage URLs
+  errorMessage String?
+  submittedAt  DateTime?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId, jobId])
+  @@index([userId, status])
+}
+
 enum FeedbackType {
   ERROR
   BUG

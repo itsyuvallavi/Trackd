@@ -16,8 +16,10 @@ import {
   Loader2,
   RefreshCw,
   Inbox,
+  Wand2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { AutoApplyDrawer } from './auto-apply-drawer'
 
 interface QueueJob {
   id: string
@@ -70,6 +72,7 @@ function JobCard({
   const [skipping, setSkipping] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showAutoApply, setShowAutoApply] = useState(false)
 
   const generateLetter = async () => {
     if (coverLetter) {
@@ -229,14 +232,29 @@ function JobCard({
 
       {/* Actions */}
       <div className="flex items-center gap-2 flex-wrap">
+        {/* Auto Apply — primary CTA when URL exists */}
+        {job.url && (
+          <button
+            onClick={() => setShowAutoApply(true)}
+            disabled={applying || skipping}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+              'bg-foreground text-background hover:opacity-90',
+              (applying || skipping) && 'opacity-50 cursor-not-allowed'
+            )}
+          >
+            <Wand2 className="size-4" />
+            Auto Apply
+          </button>
+        )}
+
+        {/* Manual mark-as-applied */}
         <button
           onClick={handleApply}
           disabled={applying || skipping}
           className={cn(
-            'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-            job.duplicate
-              ? 'bg-yellow-500/10 text-yellow-700 border border-yellow-500/30 hover:bg-yellow-500/20'
-              : 'bg-foreground text-background hover:opacity-90',
+            'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-border hover:bg-muted transition-colors',
+            job.duplicate && 'border-yellow-500/30 text-yellow-700',
             (applying || skipping) && 'opacity-50 cursor-not-allowed'
           )}
         >
@@ -268,7 +286,7 @@ function JobCard({
               ? 'Hide Letter'
               : coverLetter
                 ? 'Show Letter'
-                : 'Generate Cover Letter'}
+                : 'Cover Letter'}
         </button>
 
         <button
@@ -284,6 +302,21 @@ function JobCard({
           Skip
         </button>
       </div>
+
+      {/* Auto Apply Drawer */}
+      {showAutoApply && (
+        <AutoApplyDrawer
+          jobId={job.id}
+          jobTitle={job.title}
+          jobCompany={job.company}
+          jobUrl={job.url}
+          onClose={() => setShowAutoApply(false)}
+          onApplied={() => {
+            setShowAutoApply(false)
+            setDone(true)
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -6,19 +6,21 @@ import { ThemeSelector } from '@/components/profile/theme-selector'
 import { EmailIntegrationForm } from '@/components/email/email-integration-form'
 import { ExtensionKeySection } from '@/components/email/extension-key-section'
 import { SyncHistory } from '@/components/email/sync-history'
+import { ApplicationProfileForm } from '@/components/profile/application-profile-form'
 import Link from 'next/link'
 import { getUserProfile, getEmailIntegration, getExtensionKey } from '@/lib/cached-queries'
 
-export const revalidate = 300 // Revalidate every 5 minutes (profile changes less frequently)
+export const revalidate = 0
 
 export default async function ProfilePage() {
   const user = await requireAuth()
 
   // Fetch all data in parallel using cached queries
-  const [profileData, emailIntegration, extensionKey] = await Promise.all([
+  const [profileData, emailIntegration, extensionKey, appProfile] = await Promise.all([
     getUserProfile(user.id),
     getEmailIntegration(user.id),
     getExtensionKey(user.id),
+    prisma.applicationProfile.findUnique({ where: { userId: user.id } }),
   ])
 
   // Create profile if it doesn't exist
@@ -103,6 +105,17 @@ export default async function ProfilePage() {
                   Save changes
                 </button>
               </form>
+            </div>
+          </div>
+
+          {/* Application Profile Section */}
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold mb-2">Application Profile</h2>
+            <p className="text-sm text-muted-foreground mb-6">
+              Used by the bot to automatically fill job application forms — contact details, work authorization, salary expectations, and more.
+            </p>
+            <div className="rounded-xl border border-border bg-card/80 backdrop-blur px-6 py-6 shadow-sm">
+              <ApplicationProfileForm profile={appProfile} />
             </div>
           </div>
 

@@ -27,4 +27,52 @@ export async function updateProfile(formData: FormData) {
   revalidatePath('/profile')
 }
 
+export async function updateApplicationProfile(formData: FormData) {
+  const user = await requireAuth()
+
+  const str = (key: string) => (formData.get(key) ?? '').toString().trim() || null
+  const num = (key: string) => {
+    const v = parseInt((formData.get(key) ?? '').toString(), 10)
+    return isNaN(v) ? null : v
+  }
+  const bool = (key: string) => formData.get(key) === 'true'
+
+  await prisma.applicationProfile.upsert({
+    where: { userId: user.id },
+    update: {
+      phone: str('phone'),
+      address: str('address'),
+      city: str('city'),
+      state: str('state'),
+      country: str('country') ?? 'United States',
+      linkedinUrl: str('linkedinUrl'),
+      githubUrl: str('githubUrl'),
+      portfolioUrl: str('portfolioUrl'),
+      workAuthorization: str('workAuthorization'),
+      requiresSponsorship: bool('requiresSponsorship'),
+      salaryExpectation: num('salaryExpectation'),
+      noticePeriod: str('noticePeriod'),
+      yearsExperience: num('yearsExperience'),
+    },
+    create: {
+      userId: user.id,
+      phone: str('phone'),
+      address: str('address'),
+      city: str('city'),
+      state: str('state'),
+      country: str('country') ?? 'United States',
+      linkedinUrl: str('linkedinUrl'),
+      githubUrl: str('githubUrl'),
+      portfolioUrl: str('portfolioUrl'),
+      workAuthorization: str('workAuthorization'),
+      requiresSponsorship: bool('requiresSponsorship'),
+      salaryExpectation: num('salaryExpectation'),
+      noticePeriod: str('noticePeriod'),
+      yearsExperience: num('yearsExperience'),
+    },
+  })
+
+  revalidatePath('/profile')
+}
+
 
