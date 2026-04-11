@@ -27,23 +27,32 @@ export default async function ProfilePage() {
       }),
   ])
 
-  // Create profile if it doesn't exist
   let profile = profileData
   if (!profile) {
-    profile = await prisma.profile.create({
-      data: {
+    profile = await prisma.profile.upsert({
+      where: { id: user.id },
+      create: {
         id: user.id,
         email: user.email ?? '',
         name:
-          (user.user_metadata as any)?.full_name ??
-          (user.user_metadata as any)?.name ??
+          (user.user_metadata as Record<string, unknown>)?.full_name?.toString() ??
+          (user.user_metadata as Record<string, unknown>)?.name?.toString() ??
           null,
       },
+      update: {},
     })
   }
 
+  const appProfileForClient = appProfile
+    ? (JSON.parse(JSON.stringify(appProfile)) as typeof appProfile)
+    : null
+
+  const emailIntegrationForClient = emailIntegration
+    ? (JSON.parse(JSON.stringify(emailIntegration)) as NonNullable<typeof emailIntegration>)
+    : null
+
   return (
-    <AppShell showEmailNotification={!emailIntegration}>
+    <AppShell showEmailNotification={!emailIntegrationForClient}>
       <div className="flex-1 overflow-auto">
         <div className="max-w-2xl mx-auto px-4 md:px-8 py-4 md:py-10">
           {/* Profile Section */}
@@ -119,7 +128,7 @@ export default async function ProfilePage() {
               Used by the bot to automatically fill job application forms — contact details, work authorization, salary expectations, and more.
             </p>
             <div className="rounded-xl border border-border bg-card/80 backdrop-blur px-6 py-6 shadow-sm">
-              <ApplicationProfileForm profile={appProfile} />
+              <ApplicationProfileForm profile={appProfileForClient} />
             </div>
           </div>
 
@@ -138,31 +147,31 @@ export default async function ProfilePage() {
                 <div className="mb-4">
                   <div className="flex items-center gap-3 mb-2">
                     <h3 className="text-lg font-semibold">Email Integration</h3>
-                    {emailIntegration && emailIntegration.isActive && (
+                    {emailIntegrationForClient && emailIntegrationForClient.isActive && (
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-green-500"></div>
                         <span className="text-sm text-foreground/60">Connected</span>
                       </div>
                     )}
                   </div>
-                  {emailIntegration && emailIntegration.isActive && (
+                  {emailIntegrationForClient && emailIntegrationForClient.isActive && (
                     <div className="text-sm text-foreground/60 space-y-1">
-                      <p>{emailIntegration.email}</p>
-                      {emailIntegration.autoSyncEnabled && (
+                      <p>{emailIntegrationForClient.email}</p>
+                      {emailIntegrationForClient.autoSyncEnabled && (
                         <p className="flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                          Auto-sync: Every {emailIntegration.autoSyncFrequency} minutes
+                          Auto-sync: Every {emailIntegrationForClient.autoSyncFrequency} minutes
                         </p>
                       )}
                     </div>
                   )}
-                  {emailIntegration?.lastError && (
+                  {emailIntegrationForClient?.lastError && (
                     <p className="text-sm text-red-600 dark:text-red-400 mt-2">
-                      Error: {emailIntegration.lastError}
+                      Error: {emailIntegrationForClient.lastError}
                     </p>
                   )}
                 </div>
-                <EmailIntegrationForm integration={emailIntegration} />
+                <EmailIntegrationForm integration={emailIntegrationForClient} />
               </div>
 
               {/* Chrome Extension Section */}

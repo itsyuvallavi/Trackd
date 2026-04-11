@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { EmailIntegration } from '@prisma/client'
+import type { EmailIntegration } from '@prisma/client'
 import { saveEmailIntegration, syncEmails, testEmailConnection, updateAutoSyncSettings } from '@/app/(authenticated)/settings/email-actions'
 import { Button } from '@/components/ui/button'
 import { SyncResultToast } from './sync-result-toast'
