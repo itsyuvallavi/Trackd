@@ -6,16 +6,18 @@ import { usePathname } from 'next/navigation'
 import { Briefcase, FileText, Plus, User, Bot } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { QuickAddBar } from '@/components/jobs/quick-add-bar'
+import { useBotQueueCount } from '@/lib/bot/use-bot-queue-count'
 
 const navItems = [
   { href: '/jobs', icon: Briefcase, label: 'Jobs' },
   { href: '/resume-advisor', icon: FileText, label: 'Resume' },
-  { href: '/settings/bot', icon: Bot, label: 'Bot' },
+  { href: '/bot/queue', icon: Bot, label: 'Queue' },
 ]
 
 export const BottomTabBar = memo(function BottomTabBar() {
   const pathname = usePathname()
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false)
+  const queueCount = useBotQueueCount()
 
   const isActive = (href: string) => {
     return pathname === href || pathname.startsWith(href + '/')
@@ -54,10 +56,17 @@ export const BottomTabBar = memo(function BottomTabBar() {
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 )}
               >
-                <Icon 
-                  className="size-5 shrink-0" 
-                  strokeWidth={active ? 2.5 : 2}
-                />
+                <div className="relative shrink-0">
+                  <Icon 
+                    className="size-5" 
+                    strokeWidth={active ? 2.5 : 2}
+                  />
+                  {item.href === '/bot/queue' && queueCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-4 h-4 px-0.5 rounded-full bg-primary text-primary-foreground text-[9px] font-bold tabular-nums leading-none">
+                      {queueCount > 99 ? '99+' : queueCount}
+                    </span>
+                  )}
+                </div>
                 <span className={cn(
                   "text-xs font-medium transition-opacity whitespace-nowrap",
                   active ? "opacity-100" : "opacity-0 w-0 overflow-hidden"

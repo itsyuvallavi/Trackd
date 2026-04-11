@@ -7,10 +7,11 @@ import {
   Calendar, 
   Search, 
   MessageSquare,
-  CheckSquare,
-  FileText
+  FileText,
+  Bot,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { BotQueueBadge } from '@/components/bot/bot-queue-badge'
 
 interface NavItem {
   name: string
@@ -24,6 +25,11 @@ const navItems: NavItem[] = [
     name: 'Applications',
     href: '/jobs',
     icon: Briefcase,
+  },
+  {
+    name: 'Bot Queue',
+    href: '/bot/queue',
+    icon: Bot,
   },
   {
     name: 'Resume Advisor',
@@ -101,6 +107,7 @@ export function LeftSidebar() {
               )}>
                 {item.name}
               </span>
+              {item.href === '/bot/queue' && <BotQueueBadge />}
               {isActive && (
                 <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-primary rounded-r-full" />
               )}

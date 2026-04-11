@@ -128,12 +128,14 @@ export async function runBotSearch(
     try {
       let score = 0
       let shouldApply = false
+      let reasoning = ''
 
       if (process.env.OPENAI_API_KEY) {
         try {
           const evaluation = await evaluateJob(job, botConfig)
           score = evaluation.score
           shouldApply = evaluation.shouldApply
+          reasoning = evaluation.reasoning
           result.jobsEvaluated++
           if (shouldApply) result.jobsApproved++
         } catch (evalErr) {
@@ -163,7 +165,8 @@ export async function runBotSearch(
           source: sourceToPrismaSource(job.source),
           salary,
           tags,
-          notes: score > 0 ? `AI score: ${score}/100` : undefined,
+          botScore: score > 0 ? score : null,
+          botReasoning: reasoning || null,
           activities: {
             create: {
               userId,

@@ -90,6 +90,11 @@ model Job {
   contactName String?
   contactEmail String?
 
+  // Bot-generated content
+  coverLetter  String?    // AI-generated cover letter for this job
+  botScore     Int?       // AI match score (0-100)
+  botReasoning String?    // AI reasoning for the score
+
   // Relations
   activities  Activity[]
   interviewSessions InterviewSession[]
