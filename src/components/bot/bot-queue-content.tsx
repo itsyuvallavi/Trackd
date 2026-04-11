@@ -17,7 +17,9 @@ import {
   RefreshCw,
   Inbox,
   Wand2,
+  UserCircle,
 } from 'lucide-react'
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { AutoApplyDrawer } from './auto-apply-drawer'
 
@@ -323,6 +325,7 @@ function JobCard({
 
 export function BotQueueContent() {
   const [jobs, setJobs] = useState<QueueJob[]>([])
+  const [profileComplete, setProfileComplete] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -331,9 +334,10 @@ export function BotQueueContent() {
     setError(null)
     try {
       const res = await fetch('/api/bot/queue')
-      const data = await res.json() as { jobs?: QueueJob[]; error?: string }
+      const data = await res.json() as { jobs?: QueueJob[]; profileComplete?: boolean; error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Failed to load queue')
       setJobs(data.jobs ?? [])
+      setProfileComplete(data.profileComplete ?? true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load queue')
     } finally {
@@ -397,6 +401,19 @@ export function BotQueueContent() {
           Refresh
         </button>
       </div>
+
+      {/* Incomplete profile warning */}
+      {!profileComplete && !loading && (
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/8 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+          <UserCircle className="size-4 mt-0.5 shrink-0" />
+          <span>
+            <strong>Your application profile is incomplete.</strong> The bot needs your phone, location, and work authorization to fill forms automatically.{' '}
+            <Link href="/profile" className="underline hover:text-amber-900 dark:hover:text-amber-200">
+              Complete your profile →
+            </Link>
+          </span>
+        </div>
+      )}
 
       {/* Duplicate notice */}
       {duplicateCount > 0 && (
