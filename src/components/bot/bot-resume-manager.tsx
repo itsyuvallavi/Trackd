@@ -83,8 +83,12 @@ export function BotResumeManager({ initialResumes }: BotResumeManagerProps) {
 
   function handleDelete(id: string) {
     startDelete(async () => {
-      const res = await fetch(`/api/bot/resumes?id=${id}`, { method: 'DELETE' })
-      if (!res.ok) { flashMessage('Delete failed', true); return }
+      const res = await fetch(`/api/bot/resumes?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string; detail?: string }
+        flashMessage(data.detail ?? data.error ?? 'Delete failed', true)
+        return
+      }
       setResumes((prev) => prev.filter((r) => r.id !== id))
     })
   }
@@ -269,10 +273,10 @@ export function BotResumeManager({ initialResumes }: BotResumeManagerProps) {
           {isUploading ? (
             <>
               <span className="inline-block size-3 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-              Uploading &amp; parsing…
+              Uploading and parsing…
             </>
           ) : (
-            'Upload &amp; parse resume'
+            'Upload and parse resume'
           )}
         </button>
 

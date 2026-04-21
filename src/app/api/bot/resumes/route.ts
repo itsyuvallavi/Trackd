@@ -5,7 +5,41 @@ import { createClient } from '@supabase/supabase-js'
 import { parseResumePdf } from '@/lib/bot/resume/parser'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 export const maxDuration = 120
+
+/** Object path inside the `resume` bucket from a Supabase Storage public or signed URL. */
+function storageResumeObjectPath(fileUrl: string): string | null {
+  const raw = fileUrl?.trim()
+  if (!raw) return null
+  try {
+    const pathname = new URL(raw).pathname
+    const markers = ['/object/public/resume/', '/object/sign/resume/'] as const
+    for (const m of markers) {
+      const i = pathname.indexOf(m)
+      if (i !== -1) {
+        const segment = pathname.slice(i + m.length)
+        try {
+          return decodeURIComponent(segment)
+        } catch {
+          return segment
+        }
+      }
+    }
+    const parts = pathname.split('/resume/')
+    if (parts.length > 1) {
+      const segment = parts[parts.length - 1]!
+      try {
+        return decodeURIComponent(segment)
+      } catch {
+        return segment
+      }
+    }
+  } catch {
+    return null
+  }
+  return null
+}
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -122,13 +156,24 @@ export async function DELETE(req: NextRequest) {
   const resume = await prisma.botResume.findFirst({ where: { id, userId: user.id } })
   if (!resume) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Delete from Supabase Storage
-  const supabase = getSupabaseAdmin()
-  const path = resume.fileUrl.split('/resume/')[1]
-  if (path) {
-    await supabase.storage.from('resume').remove([path]).catch(() => {})
-  }
+  try {
+    const objectPath = storageResumeObjectPath(resume.fileUrl)
+    if (objectPath) {
+      const supabase = getSupabaseAdmin()
+      const { error: removeErr } = await supabase.storage.from('resume').remove([objectPath])
+      if (removeErr) {
+        console.warn('[api/bot/resumes] Storage remove:', removeErr.message)
+      }
+    }
 
-  await prisma.botResume.delete({ where: { id } })
-  return NextResponse.json({ success: true })
+    const del = await prisma.botResume.deleteMany({ where: { id, userId: user.id } })
+    if (del.count === 0) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+    return NextResponse.json({ success: true })
+  } catch (e) {
+    console.error('[api/bot/resumes] DELETE failed:', e)
+    const message = e instanceof Error ? e.message : 'Unknown error'
+    return NextResponse.json({ error: 'Delete failed', detail: message }, { status: 500 })
+  }
 }
