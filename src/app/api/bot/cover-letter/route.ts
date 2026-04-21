@@ -4,8 +4,19 @@ import { prisma } from '@/lib/prisma'
 import { getAIClient } from '@/lib/ai/client'
 import { pickResumeForJob } from '@/lib/bot/resume/parser'
 import type { ResumeStructuredData } from '@/lib/bot/resume/types'
+import {
+  COVER_LETTER_POLISH_SYSTEM_PROMPT,
+  COVER_LETTER_SYSTEM_PROMPT,
+  buildCoverLetterUserPrompt,
+  buildPolishUserPrompt,
+  buildResumeSectionForCoverLetter,
+} from '@/lib/bot/cover-letter-generation'
 
 const MODEL = 'gpt-4o-mini'
+
+function skipPolishPass(): boolean {
+  return process.env.COVER_LETTER_SKIP_POLISH === '1'
+}
 
 export async function POST(req: NextRequest) {
   const user = await requireAuth()
@@ -14,7 +25,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'AI not configured' }, { status: 503 })
   }
 
-  const { jobId } = await req.json() as { jobId: string }
+  const { jobId, regenerate } = await req.json() as { jobId: string; regenerate?: boolean }
   if (!jobId) {
     return NextResponse.json({ error: 'jobId required' }, { status: 400 })
   }
@@ -36,8 +47,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Job not found' }, { status: 404 })
   }
 
-  // Return cached cover letter if already generated
-  if (job.coverLetter) {
+  // Return cached cover letter unless client asks to regenerate
+  if (job.coverLetter && !regenerate) {
     return NextResponse.json({ coverLetter: job.coverLetter, cached: true })
   }
 
@@ -56,53 +67,47 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const resumeSection = resume
-    ? `
-CANDIDATE DETAILS:
-Name: ${resume.name}
-${resume.summary ? `Summary: ${resume.summary}` : ''}
-Skills: ${resume.skills.slice(0, 25).join(', ')}
-Experience:
-${resume.experience
-  .slice(0, 4)
-  .map((e) => `  - ${e.title} at ${e.company} (${e.startDate}–${e.endDate})\n    ${e.description.slice(0, 300)}`)
-  .join('\n')}
-Education:
-${resume.education.map((e) => `  - ${e.degree} in ${e.field ?? 'N/A'} from ${e.institution}`).join('\n')}
-`
-    : 'No resume available — write a strong general cover letter.'
-
-  const prompt = `Write a professional, concise cover letter for the following job application.
-
-JOB:
-Title: ${job.title}
-Company: ${job.company}
-Location: ${job.location || 'Not specified'}
-${job.botReasoning ? `Why this job matches: ${job.botReasoning}` : ''}
-${resumeSection}
-
-GUIDELINES:
-- 3–4 paragraphs, no more than 300 words
-- Opening: express genuine interest in the role and company
-- Middle: highlight 2–3 most relevant experiences/skills from the resume
-- Closing: confident call to action
-- Tone: professional but warm, not generic
-- Do NOT use placeholder text like "[Your Name]" — write as if filling the full letter
-- Use the candidate's actual name from the resume${resume?.name ? ` (${resume.name})` : ''}
-- Sign off with the candidate's name
-
-Return ONLY the cover letter text, no additional commentary.`
-
-  const ai = getAIClient()
-  const response = await ai.chatCompletion(
-    [{ role: 'user', content: prompt }],
-    { model: MODEL, temperature: 0.7, responseFormat: 'text' }
+  const resumeSection = buildResumeSectionForCoverLetter(resume)
+  const userPrompt = buildCoverLetterUserPrompt(
+    {
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      botReasoning: job.botReasoning,
+      notes: job.notes,
+    },
+    resumeSection
   )
 
-  const coverLetter = response.data.choices[0]?.message?.content?.trim() ?? ''
+  const ai = getAIClient()
+
+  const draftResponse = await ai.chatCompletion(
+    [
+      { role: 'system', content: COVER_LETTER_SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt },
+    ],
+    { model: MODEL, temperature: 0.82, responseFormat: 'text' }
+  )
+
+  let coverLetter =
+    draftResponse.data.choices[0]?.message?.content?.trim() ?? ''
 
   if (!coverLetter) {
     return NextResponse.json({ error: 'Failed to generate cover letter' }, { status: 500 })
+  }
+
+  if (!skipPolishPass()) {
+    const polishResponse = await ai.chatCompletion(
+      [
+        { role: 'system', content: COVER_LETTER_POLISH_SYSTEM_PROMPT },
+        { role: 'user', content: buildPolishUserPrompt(coverLetter) },
+      ],
+      { model: MODEL, temperature: 0.55, responseFormat: 'text' }
+    )
+
+    const polished =
+      polishResponse.data.choices[0]?.message?.content?.trim() ?? ''
+    if (polished.length > 0) coverLetter = polished
   }
 
   // Cache the cover letter on the job record
@@ -111,5 +116,10 @@ Return ONLY the cover letter text, no additional commentary.`
     data: { coverLetter },
   })
 
-  return NextResponse.json({ coverLetter, cached: false })
+  return NextResponse.json({
+    coverLetter,
+    cached: false,
+    regenerated: Boolean(regenerate),
+    polishUsed: !skipPolishPass(),
+  })
 }

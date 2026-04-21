@@ -46,39 +46,43 @@
 
 ### Dark Mode Variables
 
-| Current Variable | Current Value | New Value | Usage |
-|-----------------|---------------|-----------|-------|
-| `--background` | `#0a0a0a` | `#1A2B29` | Main page background |
-| `--foreground` | `#ededed` | `#FFFFFF` or `#E5E7EB` | Primary text |
-| `--card` | `#0a0a0a` | `#0F1B1A` | Card/modal backgrounds |
-| `--card-foreground` | `#ededed` | `#FFFFFF` | Text on cards |
-| `--muted` | `#262626` | `#2D4A47` | Muted backgrounds |
-| `--muted-foreground` | `#a3a3a3` | `#9CA3AF` | Muted text |
-| `--border` | `#262626` | `#3A5B57` (opacity 20-30%) | Borders |
-| `--input` | `#262626` | `#2D4A47` | Input backgrounds |
-| `--ring` | `#ededed` | `#C3F73A` | Focus rings |
-| `--accent` | `#262626` | `#2D4A47` | Accent backgrounds |
-| `--accent-foreground` | `#ededed` | `#FFFFFF` | Text on accent |
-| `--primary` | `#ededed` | `#3A5B57` | Primary buttons/brand |
-| `--primary-foreground` | `#0a0a0a` | `#FFFFFF` | Text on primary |
+
+| Current Variable       | Current Value | New Value                  | Usage                  |
+| ---------------------- | ------------- | -------------------------- | ---------------------- |
+| `--background`         | `#0a0a0a`     | `#1A2B29`                  | Main page background   |
+| `--foreground`         | `#ededed`     | `#FFFFFF` or `#E5E7EB`     | Primary text           |
+| `--card`               | `#0a0a0a`     | `#0F1B1A`                  | Card/modal backgrounds |
+| `--card-foreground`    | `#ededed`     | `#FFFFFF`                  | Text on cards          |
+| `--muted`              | `#262626`     | `#2D4A47`                  | Muted backgrounds      |
+| `--muted-foreground`   | `#a3a3a3`     | `#9CA3AF`                  | Muted text             |
+| `--border`             | `#262626`     | `#3A5B57` (opacity 20-30%) | Borders                |
+| `--input`              | `#262626`     | `#2D4A47`                  | Input backgrounds      |
+| `--ring`               | `#ededed`     | `#C3F73A`                  | Focus rings            |
+| `--accent`             | `#262626`     | `#2D4A47`                  | Accent backgrounds     |
+| `--accent-foreground`  | `#ededed`     | `#FFFFFF`                  | Text on accent         |
+| `--primary`            | `#ededed`     | `#3A5B57`                  | Primary buttons/brand  |
+| `--primary-foreground` | `#0a0a0a`     | `#FFFFFF`                  | Text on primary        |
+
 
 ### Light Mode Variables
 
-| Current Variable | Current Value | New Value | Usage |
-|-----------------|---------------|-----------|-------|
-| `--background` | `#ffffff` | `#FFFFFF` | Main page background |
-| `--foreground` | `#171717` | `#1F1F1F` | Primary text |
-| `--card` | `#ffffff` | `#F9FAFB` | Card/modal backgrounds |
-| `--card-foreground` | `#171717` | `#1F1F1F` | Text on cards |
-| `--muted` | `#f5f5f5` | `#F5F5F5` | Muted backgrounds |
-| `--muted-foreground` | `#737373` | `#4A4A4A` | Muted text |
-| `--border` | `#e5e5e5` | `#E5E7EB` | Borders |
-| `--input` | `#e5e5e5` | `#E8E8E8` | Input backgrounds |
-| `--ring` | `#171717` | `#3A5B57` | Focus rings |
-| `--accent` | `#f5f5f5` | `#F5F5F5` | Accent backgrounds |
-| `--accent-foreground` | `#171717` | `#1F1F1F` | Text on accent |
-| `--primary` | `#171717` | `#3A5B57` | Primary buttons/brand |
-| `--primary-foreground` | `#ffffff` | `#FFFFFF` | Text on primary |
+
+| Current Variable       | Current Value | New Value | Usage                  |
+| ---------------------- | ------------- | --------- | ---------------------- |
+| `--background`         | `#ffffff`     | `#FFFFFF` | Main page background   |
+| `--foreground`         | `#171717`     | `#1F1F1F` | Primary text           |
+| `--card`               | `#ffffff`     | `#F9FAFB` | Card/modal backgrounds |
+| `--card-foreground`    | `#171717`     | `#1F1F1F` | Text on cards          |
+| `--muted`              | `#f5f5f5`     | `#F5F5F5` | Muted backgrounds      |
+| `--muted-foreground`   | `#737373`     | `#4A4A4A` | Muted text             |
+| `--border`             | `#e5e5e5`     | `#E5E7EB` | Borders                |
+| `--input`              | `#e5e5e5`     | `#E8E8E8` | Input backgrounds      |
+| `--ring`               | `#171717`     | `#3A5B57` | Focus rings            |
+| `--accent`             | `#f5f5f5`     | `#F5F5F5` | Accent backgrounds     |
+| `--accent-foreground`  | `#171717`     | `#1F1F1F` | Text on accent         |
+| `--primary`            | `#171717`     | `#3A5B57` | Primary buttons/brand  |
+| `--primary-foreground` | `#ffffff`     | `#FFFFFF` | Text on primary        |
+
 
 ---
 
@@ -101,16 +105,19 @@ These will be available in both light and dark modes:
 ### Buttons
 
 **Primary Button (Dark Mode)**
+
 - Background: `--primary` (`#3A5B57`)
 - Text: `--primary-foreground` (`#FFFFFF`)
 - Hover: Slightly lighter teal (`#4A6B67`)
 
 **CTA/Accent Button**
+
 - Background: `--accent-lime` (`#C3F73A`)
 - Text: `--text-dark` (`#1F1F1F`)
 - Hover: Slightly brighter lime
 
 **Secondary/Outline Button**
+
 - Background: Transparent
 - Border: `--border` (teal with opacity)
 - Text: `--foreground`
@@ -119,6 +126,7 @@ These will be available in both light and dark modes:
 ### Status Colors (Unchanged - Keep Distinct)
 
 These will remain as they are for clarity:
+
 - **Saved**: Gray
 - **Applied**: Blue
 - **Interview**: Purple
@@ -149,15 +157,17 @@ These will remain as they are for clarity:
 
 ### Current Colors → New Colors
 
-| Element | Current | New |
-|---------|---------|-----|
-| Body background | `#0a0a0a` | `#1A2B29` |
-| Card/field background | `#171717` | `#0F1B1A` |
-| Border | `#262626` | `#3A5B57` (30% opacity) |
-| Primary button | `#ededed` | `#C3F73A` |
-| Primary button text | `#0a0a0a` | `#1F1F1F` |
-| Text | `#ededed` | `#FFFFFF` |
-| Muted text | `#a3a3a3` | `#9CA3AF` |
+
+| Element               | Current   | New                     |
+| --------------------- | --------- | ----------------------- |
+| Body background       | `#0a0a0a` | `#1A2B29`               |
+| Card/field background | `#171717` | `#0F1B1A`               |
+| Border                | `#262626` | `#3A5B57` (30% opacity) |
+| Primary button        | `#ededed` | `#C3F73A`               |
+| Primary button text   | `#0a0a0a` | `#1F1F1F`               |
+| Text                  | `#ededed` | `#FFFFFF`               |
+| Muted text            | `#a3a3a3` | `#9CA3AF`               |
+
 
 ---
 
@@ -189,21 +199,19 @@ Background: #FFFFFF (white)
 
 ## Implementation Files to Update
 
-1. **`src/app/globals.css`**
-   - Update all CSS variable definitions
-   - Add new variables for accent colors
-   - Update `@theme inline` directive
-
-2. **`browser-extension/popup.html`**
-   - Update inline styles to match new palette
-   - Update button colors
-   - Update background and border colors
-
+1. `**src/app/globals.css**`
+  - Update all CSS variable definitions
+  - Add new variables for accent colors
+  - Update `@theme inline` directive
+2. `**browser-extension/popup.html**`
+  - Update inline styles to match new palette
+  - Update button colors
+  - Update background and border colors
 3. **Review these components** (will auto-update via CSS variables):
-   - `src/components/ui/button.tsx`
-   - `src/components/layout/simple-top-bar.tsx`
-   - `src/components/jobs/applications-header.tsx`
-   - All other components using theme variables
+  - `src/components/ui/button.tsx`
+  - `src/components/layout/simple-top-bar.tsx`
+  - `src/components/jobs/applications-header.tsx`
+  - All other components using theme variables
 
 ---
 

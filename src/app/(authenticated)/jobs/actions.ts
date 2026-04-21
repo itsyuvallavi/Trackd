@@ -6,6 +6,7 @@ import { requireAuth } from '@/lib/auth'
 import { createJobSchema, updateJobSchema } from '@/lib/validations/job'
 import { JobStatus, ActivityType } from '@prisma/client'
 import { NotificationService } from '@/lib/notification-service'
+import { dismissedRowsForUser } from '@/lib/bot/dismissed-job-imports'
 
 export async function createJob(formData: FormData) {
   try {
@@ -181,6 +182,17 @@ export async function updateJobStatus(id: string, status: JobStatus) {
 
 export async function deleteJob(id: string) {
   const user = await requireAuth()
+
+  const job = await prisma.job.findFirst({
+    where: { id, userId: user.id },
+    select: { url: true, title: true, company: true },
+  })
+  if (job) {
+    const rows = dismissedRowsForUser(user.id, job)
+    if (rows.length > 0) {
+      await prisma.dismissedJobImport.createMany({ data: rows, skipDuplicates: true })
+    }
+  }
 
   await prisma.job.deleteMany({
     where: { id, userId: user.id },

@@ -52,6 +52,17 @@ export interface BotRunSummary {
   jobsFound: number
   jobsNew: number
   jobsApproved: number
+  /** Same URL as a job already stored for this user */
+  skippedExistingByUrl: number
+  /** Same company + title as a job already stored */
+  skippedExistingByTitle: number
+  /** Duplicate listing within this search response */
+  skippedBatchDuplicate: number
+  /** Matched a job you deleted earlier — not re-imported */
+  skippedPreviouslyDismissed: number
+  /** Evaluated but score below minScore — not written to the DB */
+  skippedLowScore: number
+  minScore: number
   topJobs: Array<{
     title: string
     company: string
@@ -68,11 +79,33 @@ export async function sendBotRunSummary(
 ): Promise<void> {
   const errorCount = Object.keys(summary.errors).length
 
+  const dedupTotal =
+    summary.skippedExistingByUrl +
+    summary.skippedExistingByTitle +
+    summary.skippedBatchDuplicate +
+    summary.skippedPreviouslyDismissed
+
   let text = `<b>🤖 Job Search Complete</b>\n\n`
   text += `📊 <b>Stats:</b>\n`
-  text += `• Found: ${summary.jobsFound} jobs\n`
-  text += `• New: ${summary.jobsNew} not in your list\n`
-  text += `• Recommended: ${summary.jobsApproved} matches your profile\n`
+  text += `• From APIs: ${summary.jobsFound} listings\n`
+  if (dedupTotal > 0) {
+    text += `• Already in Trackd: ${dedupTotal} skipped`
+    const parts: string[] = []
+    if (summary.skippedExistingByUrl > 0) parts.push(`${summary.skippedExistingByUrl} same link`)
+    if (summary.skippedExistingByTitle > 0) parts.push(`${summary.skippedExistingByTitle} same role`)
+    if (summary.skippedBatchDuplicate > 0) parts.push(`${summary.skippedBatchDuplicate} duplicate in batch`)
+    if (summary.skippedPreviouslyDismissed > 0) {
+      parts.push(`${summary.skippedPreviouslyDismissed} removed earlier`)
+    }
+    text += ` (${parts.join(', ')})\n`
+  } else {
+    text += `• Already in Trackd: 0 (no URL/title duplicates or removed listings)\n`
+  }
+  if (summary.skippedLowScore > 0) {
+    text += `• Below AI threshold (${summary.minScore}/100): ${summary.skippedLowScore} not saved\n`
+  }
+  text += `• Saved to your list: ${summary.jobsNew}\n`
+  text += `• Strong matches (≥${summary.minScore}): ${summary.jobsApproved}\n`
 
   if (summary.topJobs.length > 0) {
     text += `\n⭐ <b>Top Picks:</b>\n`

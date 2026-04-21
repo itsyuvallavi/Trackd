@@ -25,6 +25,7 @@ The component is highly configurable:
 ```
 
 ### Current Settings
+
 - **Interval**: 30 seconds
 - **Enabled**: Yes
 - **Timer visible**: No (cleaner UI)
@@ -48,18 +49,21 @@ The component is highly configurable:
 ## 🛠️ Customization Options
 
 ### Show the timer
+
 ```tsx
 <AutoRefreshIndicator showTimer={true} />
 // Shows: 🔄 25s
 ```
 
 ### Change interval
+
 ```tsx
 <AutoRefreshIndicator intervalSeconds={60} />
 // Refreshes every minute
 ```
 
 ### Disable temporarily
+
 ```tsx
 <AutoRefreshIndicator enabled={false} />
 // No auto-refresh (useful for settings)
@@ -68,6 +72,7 @@ The component is highly configurable:
 ## 📍 Location
 
 Added to `SimpleTopBar` component:
+
 ```
 Logo  |  Search  |  [Auto-refresh] 🔔 [Notifications] 👤 [Profile]
 ```
@@ -86,6 +91,7 @@ Perfect for seeing new jobs from the extension or email sync without manual refr
 ## 🎨 Color Palette Used
 
 From the Clause-inspired palette:
+
 - **Muted gray**: `text-muted-foreground` (#8A8A8A)
 - **Primary**: `text-primary` (#3A5B57)
 - **Pulse**: `bg-primary/20` (20% opacity primary)

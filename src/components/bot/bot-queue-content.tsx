@@ -16,12 +16,21 @@ import {
   Loader2,
   RefreshCw,
   Inbox,
-  Wand2,
   UserCircle,
+  Trash2,
 } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import { AutoApplyDrawer } from './auto-apply-drawer'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 interface QueueJob {
   id: string
@@ -30,7 +39,8 @@ interface QueueJob {
   location: string | null
   url: string | null
   salary: string | null
-  source: string
+  /** Human-readable API product (e.g. "JSearch (RapidAPI)", "Jobs Search API (RapidAPI) · LinkedIn") */
+  sourceDisplayName: string
   botScore: number | null
   botReasoning: string | null
   coverLetter: string | null
@@ -62,19 +72,23 @@ function JobCard({
   job,
   onApply,
   onSkip,
+  onDelete,
 }: {
   job: QueueJob
   onApply: (id: string) => Promise<void>
   onSkip: (id: string) => Promise<void>
+  onDelete: (id: string) => Promise<void>
 }) {
   const [showLetter, setShowLetter] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [regeneratingLetter, setRegeneratingLetter] = useState(false)
   const [coverLetter, setCoverLetter] = useState<string | null>(job.coverLetter)
   const [applying, setApplying] = useState(false)
   const [skipping, setSkipping] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showAutoApply, setShowAutoApply] = useState(false)
 
   const generateLetter = async () => {
     if (coverLetter) {
@@ -96,6 +110,26 @@ function JobCard({
       setError(e instanceof Error ? e.message : 'Failed to generate cover letter')
     } finally {
       setGenerating(false)
+    }
+  }
+
+  const regenerateLetter = async () => {
+    setRegeneratingLetter(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/bot/cover-letter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId: job.id, regenerate: true }),
+      })
+      const data = await res.json() as { coverLetter?: string; error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Failed')
+      setCoverLetter(data.coverLetter ?? null)
+      setShowLetter(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to regenerate cover letter')
+    } finally {
+      setRegeneratingLetter(false)
     }
   }
 
@@ -125,9 +159,24 @@ function JobCard({
     }
   }
 
+  const handleConfirmRemove = async () => {
+    setDeleting(true)
+    setError(null)
+    try {
+      await onDelete(job.id)
+      setRemoveDialogOpen(false)
+      setDone(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to remove')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (done) return null
 
   return (
+    <>
     <div className={cn(
       'rounded-xl border bg-card p-5 flex flex-col gap-4 transition-all',
       job.duplicate && 'border-yellow-500/30 bg-yellow-500/5'
@@ -163,6 +212,9 @@ function JobCard({
                 {job.salary}
               </span>
             )}
+            <span className="text-xs text-muted-foreground/90" title="Search provider">
+              {job.sourceDisplayName}
+            </span>
           </div>
         </div>
 
@@ -171,7 +223,7 @@ function JobCard({
             href={job.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+            className="shrink-0 rounded-lg p-2 text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
             title="Open job posting"
           >
             <ExternalLink className="size-4" />
@@ -209,17 +261,36 @@ function JobCard({
       {/* Cover Letter */}
       {coverLetter && showLetter && (
         <div className="rounded-lg border bg-muted/30 p-4">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2 gap-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
               <FileText className="size-3" />
               Cover Letter
             </span>
-            <button
-              onClick={() => setShowLetter(false)}
-              className="text-xs text-muted-foreground hover:text-foreground"
-            >
-              <ChevronUp className="size-4" />
-            </button>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => void regenerateLetter()}
+                disabled={regeneratingLetter || generating}
+                className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                title="Regenerate cover letter"
+                aria-label="Regenerate cover letter"
+              >
+                {regeneratingLetter ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <RefreshCw className="size-4" aria-hidden />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowLetter(false)}
+                className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                title="Hide cover letter"
+                aria-label="Hide cover letter"
+              >
+                <ChevronUp className="size-4" />
+              </button>
+            </div>
           </div>
           <pre className="text-sm leading-relaxed whitespace-pre-wrap font-sans text-foreground/90">
             {coverLetter}
@@ -233,31 +304,14 @@ function JobCard({
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {/* Auto Apply — primary CTA when URL exists */}
-        {job.url && (
-          <button
-            onClick={() => setShowAutoApply(true)}
-            disabled={applying || skipping}
-            className={cn(
-              'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-              'bg-foreground text-background hover:opacity-90',
-              (applying || skipping) && 'opacity-50 cursor-not-allowed'
-            )}
-          >
-            <Wand2 className="size-4" />
-            Auto Apply
-          </button>
-        )}
-
-        {/* Manual mark-as-applied */}
+      <div className="flex w-full flex-wrap items-center gap-2">
         <button
           onClick={handleApply}
-          disabled={applying || skipping}
+          disabled={applying || skipping || deleting}
           className={cn(
             'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-border hover:bg-muted transition-colors',
             job.duplicate && 'border-yellow-500/30 text-yellow-700',
-            (applying || skipping) && 'opacity-50 cursor-not-allowed'
+            (applying || skipping || deleting) && 'opacity-50 cursor-not-allowed'
           )}
         >
           {applying ? (
@@ -270,7 +324,7 @@ function JobCard({
 
         <button
           onClick={generateLetter}
-          disabled={generating || applying || skipping}
+          disabled={generating || regeneratingLetter || applying || skipping || deleting}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-border hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {generating ? (
@@ -293,7 +347,7 @@ function JobCard({
 
         <button
           onClick={handleSkip}
-          disabled={applying || skipping}
+          disabled={applying || skipping || deleting}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {skipping ? (
@@ -303,23 +357,69 @@ function JobCard({
           )}
           Skip
         </button>
-      </div>
 
-      {/* Auto Apply Drawer */}
-      {showAutoApply && (
-        <AutoApplyDrawer
-          jobId={job.id}
-          jobTitle={job.title}
-          jobCompany={job.company}
-          jobUrl={job.url}
-          onClose={() => setShowAutoApply(false)}
-          onApplied={() => {
-            setShowAutoApply(false)
-            setDone(true)
-          }}
-        />
-      )}
+        <button
+          type="button"
+          onClick={() => setRemoveDialogOpen(true)}
+          disabled={applying || skipping || deleting}
+          className={cn(
+            'ml-auto shrink-0 inline-flex items-center justify-center rounded-lg border border-red-500/45 bg-red-500/[0.06] p-2 text-red-600 hover:bg-red-500/12 hover:text-red-700 transition-colors',
+            'dark:text-red-400 dark:hover:text-red-300 disabled:opacity-40 disabled:pointer-events-none'
+          )}
+          title="Remove from Trackd"
+          aria-label="Remove from Trackd"
+        >
+          {deleting ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : (
+            <Trash2 className="size-4" aria-hidden />
+          )}
+        </button>
+      </div>
     </div>
+
+    <AlertDialog
+      open={removeDialogOpen}
+      onOpenChange={(open) => {
+        if (deleting) return
+        setRemoveDialogOpen(open)
+      }}
+    >
+      <AlertDialogContent className="sm:max-w-md">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove from Trackd?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This deletes the job from your tracker permanently. It does not withdraw an application on the employer&apos;s site.
+          </AlertDialogDescription>
+          <div className="mt-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-left text-sm text-foreground">
+            <div className="font-medium line-clamp-2">{job.title}</div>
+            <div className="text-muted-foreground text-xs mt-0.5">{job.company}</div>
+          </div>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            type="button"
+            onClick={(e) => {
+              e.preventDefault()
+              void handleConfirmRemove()
+            }}
+            disabled={deleting}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {deleting ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="size-4 animate-spin" />
+                Removing…
+              </span>
+            ) : (
+              'Remove'
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }
 
@@ -371,6 +471,17 @@ export function BotQueueContent() {
     })
     const data = await res.json() as { error?: string }
     if (!res.ok) throw new Error(data.error ?? 'Failed to skip')
+    setJobs((prev) => prev.filter((j) => j.id !== jobId))
+  }
+
+  const handleDelete = async (jobId: string) => {
+    const res = await fetch('/api/bot/queue/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId }),
+    })
+    const data = await res.json() as { error?: string }
+    if (!res.ok) throw new Error(data.error ?? 'Failed to remove')
     setJobs((prev) => prev.filter((j) => j.id !== jobId))
   }
 
@@ -463,6 +574,7 @@ export function BotQueueContent() {
               job={job}
               onApply={handleApply}
               onSkip={handleSkip}
+              onDelete={handleDelete}
             />
           ))}
         </div>

@@ -54,7 +54,11 @@ export function JobCardMobile({ job, index = 0 }: JobCardMobileProps) {
           <div className="min-h-[22px] flex items-center">
             <StatusDropdown jobId={job.id} currentStatus={job.status as JobStatus} />
           </div>
-          <JobActionsMenu jobId={job.id} />
+          <JobActionsMenu
+            jobId={job.id}
+            jobTitle={job.title}
+            jobCompany={job.company}
+          />
         </div>
       </div>
     </div>

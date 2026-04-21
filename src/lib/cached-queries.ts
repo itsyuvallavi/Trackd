@@ -1,5 +1,6 @@
 import { cache } from 'react'
 import { prisma } from '@/lib/prisma'
+import { getPublicJobTableColumnNames } from '@/lib/prisma-job-columns'
 
 /**
  * Cached query for email integration
@@ -98,31 +99,50 @@ export const getRecentActivities = cache(async (userId: string, limit = 50) => {
  * This is the most frequently accessed data, so caching significantly improves TTFB
  */
 export const getUserJobs = cache(async (userId: string, limit = 100) => {
-  return prisma.job.findMany({
+  const baseSelect = {
+    id: true,
+    title: true,
+    company: true,
+    location: true,
+    status: true,
+    priority: true,
+    source: true,
+    tags: true,
+    url: true,
+    savedAt: true,
+    appliedAt: true,
+    interviewAt: true,
+    nextAction: true,
+    notes: true,
+    salary: true,
+    contactName: true,
+    contactEmail: true,
+    createdAt: true,
+    updatedAt: true,
+  } as const
+
+  const cols = await getPublicJobTableColumnNames()
+  const select = {
+    ...baseSelect,
+    ...(cols.has('importSource') ? { importSource: true as const } : {}),
+    ...(cols.has('importJobBoard') ? { importJobBoard: true as const } : {}),
+  }
+
+  const rows = await prisma.job.findMany({
     where: { userId },
-    select: {
-      id: true,
-      title: true,
-      company: true,
-      location: true,
-      status: true,
-      priority: true,
-      source: true,
-      url: true,
-      savedAt: true,
-      appliedAt: true,
-      interviewAt: true,
-      nextAction: true,
-      tags: true,
-      notes: true,
-      salary: true,
-      contactName: true,
-      contactEmail: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+    select,
     orderBy: { savedAt: 'desc' },
     take: limit,
   })
+
+  return rows.map((r) => ({
+    ...r,
+    importSource: cols.has('importSource')
+      ? ((r as { importSource?: string | null }).importSource ?? null)
+      : null,
+    importJobBoard: cols.has('importJobBoard')
+      ? ((r as { importJobBoard?: string | null }).importJobBoard ?? null)
+      : null,
+  }))
 })
 

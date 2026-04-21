@@ -3,18 +3,33 @@
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { MoreHorizontal, Eye, Edit, Trash2 } from 'lucide-react'
+import { MoreHorizontal, Eye, Edit, Trash2, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { deleteJob } from '@/app/(authenticated)/jobs/actions'
 
 interface JobActionsMenuProps {
   jobId: string
+  /** Shown in the delete confirmation dialog */
+  jobTitle: string
+  jobCompany: string
 }
 
-export function JobActionsMenu({ jobId }: JobActionsMenuProps) {
+export function JobActionsMenu({ jobId, jobTitle, jobCompany }: JobActionsMenuProps) {
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [position, setPosition] = useState({ top: 0, right: 0, placement: 'bottom' as 'top' | 'bottom' })
   const buttonRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -64,16 +79,16 @@ export function JobActionsMenu({ jobId }: JobActionsMenuProps) {
     }
   }, [isOpen])
 
-  const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this job?')) return
-
+  const handleConfirmDelete = async () => {
+    setDeleteError(null)
     setIsDeleting(true)
     try {
       await deleteJob(jobId)
+      setDeleteDialogOpen(false)
       router.refresh()
     } catch (error) {
       console.error('Failed to delete job:', error)
-      alert('Failed to delete job')
+      setDeleteError(error instanceof Error ? error.message : 'Failed to delete job')
     } finally {
       setIsDeleting(false)
       setIsOpen(false)
@@ -81,6 +96,7 @@ export function JobActionsMenu({ jobId }: JobActionsMenuProps) {
   }
 
   return (
+    <>
     <div className="relative">
       <Button
         ref={buttonRef}
@@ -133,16 +149,69 @@ export function JobActionsMenu({ jobId }: JobActionsMenuProps) {
             </Link>
 
             <button
-              onClick={handleDelete}
+              type="button"
+              onClick={() => {
+                setIsOpen(false)
+                setDeleteDialogOpen(true)
+              }}
               disabled={isDeleting}
               className="flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-accent transition-colors w-full text-left disabled:opacity-50"
             >
               <Trash2 className="size-4" />
-              {isDeleting ? 'Deleting...' : 'Delete'}
+              Delete
             </button>
           </div>
         </>
       )}
     </div>
+
+    <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => {
+      if (isDeleting) return
+      setDeleteDialogOpen(open)
+      if (!open) setDeleteError(null)
+    }}>
+      <AlertDialogContent className="sm:max-w-md">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete this job?</AlertDialogTitle>
+          <AlertDialogDescription className="space-y-2 text-left">
+            <span className="block">
+              This removes{' '}
+              <span className="font-medium text-foreground">{jobTitle}</span>
+              {' '}at{' '}
+              <span className="font-medium text-foreground">{jobCompany}</span>
+              {' '}from Trackd permanently.
+            </span>
+            <span className="block text-muted-foreground">
+              This does not withdraw an application on the employer&apos;s site.
+            </span>
+          </AlertDialogDescription>
+          {deleteError ? (
+            <p className="text-sm text-red-600 dark:text-red-400 pt-1">{deleteError}</p>
+          ) : null}
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            type="button"
+            onClick={(e) => {
+              e.preventDefault()
+              void handleConfirmDelete()
+            }}
+            disabled={isDeleting}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {isDeleting ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="size-4 animate-spin" />
+                Deleting…
+              </span>
+            ) : (
+              'Delete job'
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }

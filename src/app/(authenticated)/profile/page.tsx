@@ -44,7 +44,13 @@ export default async function ProfilePage() {
   }
 
   const appProfileForClient = appProfile
-    ? (JSON.parse(JSON.stringify(appProfile)) as typeof appProfile)
+    ? (() => {
+        const { portalSignupPassword: _omit, ...rest } = appProfile
+        return {
+          ...rest,
+          hasPortalSignupPassword: Boolean(_omit),
+        }
+      })()
     : null
 
   const emailIntegrationForClient = emailIntegration
@@ -125,7 +131,8 @@ export default async function ProfilePage() {
           <div className="mb-8">
             <h2 className="text-xl font-semibold mb-2">Application Profile</h2>
             <p className="text-sm text-muted-foreground mb-6">
-              Used by the bot to automatically fill job application forms — contact details, work authorization, salary expectations, and more.
+              Used by the apply bot: your legal name and application email (and optional job-board signup
+              password), plus contact details, work authorization, salary expectations, and more.
             </p>
             <div className="rounded-xl border border-border bg-card/80 backdrop-blur px-6 py-6 shadow-sm">
               <ApplicationProfileForm profile={appProfileForClient} />

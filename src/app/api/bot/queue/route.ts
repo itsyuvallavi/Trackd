@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import type { JobSource } from '@prisma/client'
+import { jobSourceDisplayName } from '@/lib/job-source-display'
+import { getPublicJobTableColumnNames } from '@/lib/prisma-job-columns'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -14,6 +16,9 @@ type QueueJobRow = {
   url: string | null
   salary: string | null
   source: JobSource
+  importSource: string | null
+  importJobBoard: string | null
+  tags: string[]
   botScore: number | null
   botReasoning: string | null
   coverLetter: string | null
@@ -21,10 +26,22 @@ type QueueJobRow = {
 }
 
 function isProfileComplete(
-  p: { phone: string | null; workAuthorization: string | null; city: string | null } | null
+  p: {
+    phone: string | null
+    workAuthorization: string | null
+    city: string | null
+    applicationFullName: string | null
+    applicationEmail: string | null
+  } | null
 ): boolean {
   if (!p) return false
-  return !!(p.phone && p.workAuthorization && p.city)
+  return !!(
+    p.phone &&
+    p.workAuthorization &&
+    p.city &&
+    p.applicationFullName?.trim() &&
+    p.applicationEmail?.trim()
+  )
 }
 
 function normUrl(u: string | null | undefined): string | null {
@@ -45,12 +62,23 @@ export async function GET() {
     )
   }
 
-  let appProfile: { phone: string | null; workAuthorization: string | null; city: string | null } | null =
-    null
+  let appProfile: {
+    phone: string | null
+    workAuthorization: string | null
+    city: string | null
+    applicationFullName: string | null
+    applicationEmail: string | null
+  } | null = null
   try {
     appProfile = await prisma.applicationProfile.findUnique({
       where: { userId: user.id },
-      select: { phone: true, workAuthorization: true, city: true },
+      select: {
+        phone: true,
+        workAuthorization: true,
+        city: true,
+        applicationFullName: true,
+        applicationEmail: true,
+      },
     })
   } catch (e) {
     console.error('[bot/queue] applicationProfile:', e)
@@ -62,58 +90,37 @@ export async function GET() {
     tags: { has: 'bot-approved' as const },
   }
 
-  let jobs: QueueJobRow[]
+  const cols = await getPublicJobTableColumnNames()
+  const rawJobs = await prisma.job.findMany({
+    where: baseWhere,
+    select: {
+      id: true,
+      title: true,
+      company: true,
+      location: true,
+      url: true,
+      salary: true,
+      source: true,
+      ...(cols.has('importSource') ? { importSource: true as const } : {}),
+      ...(cols.has('importJobBoard') ? { importJobBoard: true as const } : {}),
+      botScore: true,
+      botReasoning: true,
+      coverLetter: true,
+      tags: true,
+      createdAt: true,
+    },
+    orderBy: [{ botScore: 'desc' }, { createdAt: 'desc' }],
+  })
 
-  try {
-    jobs = await prisma.job.findMany({
-      where: baseWhere,
-      select: {
-        id: true,
-        title: true,
-        company: true,
-        location: true,
-        url: true,
-        salary: true,
-        source: true,
-        botScore: true,
-        botReasoning: true,
-        coverLetter: true,
-        createdAt: true,
-      },
-      orderBy: [{ botScore: 'desc' }, { createdAt: 'desc' }],
-    })
-  } catch (e) {
-    // Production DB may not have bot_* / coverLetter columns yet
-    console.error('[bot/queue] jobs full select failed, minimal select:', e)
-    try {
-      const minimal = await prisma.job.findMany({
-        where: baseWhere,
-        select: {
-          id: true,
-          title: true,
-          company: true,
-          location: true,
-          url: true,
-          salary: true,
-          source: true,
-          createdAt: true,
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-      jobs = minimal.map((j) => ({
-        ...j,
-        botScore: null,
-        botReasoning: null,
-        coverLetter: null,
-      }))
-    } catch (e2) {
-      console.error('[bot/queue] jobs minimal select:', e2)
-      return NextResponse.json(
-        { jobs: [], profileComplete: isProfileComplete(appProfile), error: 'Database error' },
-        { status: 500 }
-      )
-    }
-  }
+  const jobs: QueueJobRow[] = rawJobs.map((j) => ({
+    ...j,
+    importSource: cols.has('importSource')
+      ? ((j as { importSource?: string | null }).importSource ?? null)
+      : null,
+    importJobBoard: cols.has('importJobBoard')
+      ? ((j as { importJobBoard?: string | null }).importJobBoard ?? null)
+      : null,
+  }))
 
   const seen = new Map<string, string>()
   const deduped = jobs.filter((job) => {
@@ -167,6 +174,9 @@ export async function GET() {
       ...j,
       createdAt: j.createdAt.toISOString(),
       duplicate: duplicateFlags[j.id] ?? null,
+      sourceDisplayName: jobSourceDisplayName(j.importSource, j.source, j.importJobBoard, {
+        tags: j.tags ?? [],
+      }),
     })),
   })
 }

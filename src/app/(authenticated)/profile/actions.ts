@@ -37,38 +37,44 @@ export async function updateApplicationProfile(formData: FormData) {
   }
   const bool = (key: string) => formData.get(key) === 'true'
 
+  const clearPortalPassword =
+    formData.get('clearPortalSignupPassword') === 'on' ||
+    formData.get('clearPortalSignupPassword') === 'true'
+  const portalPwdRaw = (formData.get('portalSignupPassword') ?? '').toString().trim()
+  const portalPasswordPatch = clearPortalPassword
+    ? { portalSignupPassword: null as string | null }
+    : portalPwdRaw
+      ? { portalSignupPassword: portalPwdRaw }
+      : {}
+
+  const shared = {
+    applicationFullName: str('applicationFullName'),
+    applicationEmail: str('applicationEmail'),
+    phone: str('phone'),
+    address: str('address'),
+    city: str('city'),
+    state: str('state'),
+    country: str('country'),
+    linkedinUrl: str('linkedinUrl'),
+    githubUrl: str('githubUrl'),
+    portfolioUrl: str('portfolioUrl'),
+    workAuthorization: str('workAuthorization'),
+    requiresSponsorship: bool('requiresSponsorship'),
+    salaryExpectation: num('salaryExpectation'),
+    noticePeriod: str('noticePeriod'),
+    yearsExperience: num('yearsExperience'),
+  }
+
   await prisma.applicationProfile.upsert({
     where: { userId: user.id },
     update: {
-      phone: str('phone'),
-      address: str('address'),
-      city: str('city'),
-      state: str('state'),
-      country: str('country'),
-      linkedinUrl: str('linkedinUrl'),
-      githubUrl: str('githubUrl'),
-      portfolioUrl: str('portfolioUrl'),
-      workAuthorization: str('workAuthorization'),
-      requiresSponsorship: bool('requiresSponsorship'),
-      salaryExpectation: num('salaryExpectation'),
-      noticePeriod: str('noticePeriod'),
-      yearsExperience: num('yearsExperience'),
+      ...shared,
+      ...portalPasswordPatch,
     },
     create: {
       userId: user.id,
-      phone: str('phone'),
-      address: str('address'),
-      city: str('city'),
-      state: str('state'),
-      country: str('country'),
-      linkedinUrl: str('linkedinUrl'),
-      githubUrl: str('githubUrl'),
-      portfolioUrl: str('portfolioUrl'),
-      workAuthorization: str('workAuthorization'),
-      requiresSponsorship: bool('requiresSponsorship'),
-      salaryExpectation: num('salaryExpectation'),
-      noticePeriod: str('noticePeriod'),
-      yearsExperience: num('yearsExperience'),
+      ...shared,
+      portalSignupPassword: clearPortalPassword ? null : portalPwdRaw || null,
     },
   })
 

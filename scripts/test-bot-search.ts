@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import './load-env'
+
 /**
  * Integration test for the job search bot pipeline.
  *
@@ -7,12 +9,18 @@
  *
  * Usage:
  *   bun run scripts/test-bot-search.ts [userId] [--dry-run]
+ *   bun run scripts/test-bot-search.ts --dry-run --sources=jsearch,jobs_search_api
+ *   … add --one-location to use only the first saved location (fewer RapidAPI requests)
  *
  * --dry-run  Preview results without saving to DB
+ * --sources= only run these backends (same as BOT_SEARCH_SOURCES); overrides env for this run
+ * --one-location  pass a single location into runSearch (reduces API round-trips)
  *
- * Required env vars (at least one):
- *   JSEARCH_API_KEY   RapidAPI key for JSearch (LinkedIn/Indeed/Glassdoor)
- *   SERP_API_KEY      SerpAPI key for Google Jobs
+ * Required env — at least one backend (see `src/lib/bot/bot-search-sources.ts`):
+ *   JSEARCH_API_KEY / JOBS_SEARCH_API_KEY   JSearch + Jobs Search API (shared RapidAPI key OK)
+ *
+ * Jobs Search API boards default to LinkedIn + Glassdoor + others (no Indeed). Override with
+ * JOBS_SEARCH_SITE_NAMES=comma,separated,slugs if needed.
  *
  * Optional:
  *   OPENAI_API_KEY    Enable AI scoring (otherwise jobs are saved without score)
@@ -20,10 +28,22 @@
 
 import { prisma } from '../src/lib/prisma'
 import { BotSearchFrequency } from '@prisma/client'
+import { jobsSearchApiRapidApiKey } from '../src/lib/bot/rapidapi-jobs-search-keys'
+import {
+  botSearchHasQueryableBackend,
+  botSearchSourceAllowed,
+  botSearchSourcesAllowlist,
+  effectiveSearchBackendLabels,
+} from '../src/lib/bot/bot-search-sources'
 
 const isDryRun = process.argv.includes('--dry-run')
+const oneLocation = process.argv.includes('--one-location')
 const targetUserId = process.argv.find(
-  (a) => !a.startsWith('--') && a !== process.argv[0] && a !== process.argv[1]
+  (a) =>
+    !a.startsWith('--') &&
+    a !== process.argv[0] &&
+    a !== process.argv[1] &&
+    !a.includes('=')
 )
 
 const G = '\x1b[32m', Y = '\x1b[33m', R = '\x1b[31m', C = '\x1b[36m', B = '\x1b[1m', X = '\x1b[0m'
@@ -33,6 +53,15 @@ const fail = (m: string) => console.log(`${R}✗${X} ${m}`)
 const info = (m: string) => console.log(`${C}→${X} ${m}`)
 const h    = (m: string) => console.log(`\n${B}${m}${X}`)
 
+function explainSearchFailures(failed: Record<string, string>) {
+  const blob = JSON.stringify(failed)
+  if (/\b429\b|quota/i.test(blob)) {
+    warn(
+      'HTTP 429 / quota on at least one provider — upgrade RapidAPI plans or wait for reset; --one-location reduces requests.'
+    )
+  }
+}
+
 async function main() {
   h('🤖 Bot Search Integration Test')
   if (isDryRun) warn('DRY RUN — no jobs will be saved to DB\n')
@@ -41,21 +70,55 @@ async function main() {
   h('Step 1: Environment check')
 
   const jSearchKey = process.env.JSEARCH_API_KEY
-  const serpKey = process.env.SERP_API_KEY
+  const jobsSearchKey = process.env.JOBS_SEARCH_API_KEY?.trim()
+  const effectiveJobsSearchKey = jobsSearchApiRapidApiKey()
   const openaiKey = process.env.OPENAI_API_KEY
 
-  if (!jSearchKey && !serpKey) {
-    fail('No search API keys set. Need at least one:')
-    console.log('  JSEARCH_API_KEY — get free key at https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch')
-    console.log('  SERP_API_KEY    — get free key at https://serpapi.com')
+  if (!botSearchHasQueryableBackend()) {
+    fail('No search backends configured for this environment.')
+    console.log('  Set JSEARCH_API_KEY and/or JOBS_SEARCH_API_KEY (Jobs Search API can reuse JSEARCH key).')
     process.exit(1)
   }
-  if (jSearchKey) ok('JSEARCH_API_KEY set (JSearch — LinkedIn/Indeed/Glassdoor)')
-  else warn('JSEARCH_API_KEY not set — skipping JSearch')
-  if (serpKey)   ok('SERP_API_KEY set (Google Jobs via SerpAPI)')
-  else warn('SERP_API_KEY not set — skipping SerpAPI')
-  if (!openaiKey) warn('OPENAI_API_KEY not set — AI scoring will be skipped')
-  else ok('OPENAI_API_KEY set — AI scoring enabled')
+  const sourcesAllow = process.env.BOT_SEARCH_SOURCES?.trim()
+  if (sourcesAllow) info(`BOT_SEARCH_SOURCES=${sourcesAllow} (only these backends will run)`)
+  else info('BOT_SEARCH_SOURCES unset — all backends that have keys will run')
+
+  h('Backends that WILL run (after allowlist + keys)')
+  const effective = effectiveSearchBackendLabels()
+  if (effective.length === 0) {
+    warn('None — fix keys or BOT_SEARCH_SOURCES / --sources=')
+  } else {
+    for (const label of effective) ok(label)
+  }
+
+  const allow = botSearchSourcesAllowlist()
+  h('Keys on disk (✓ green = selected backend will actually call this run)')
+  if ((jSearchKey ?? '').trim()) {
+    if (botSearchSourceAllowed(allow, 'jsearch'))
+      ok('JSEARCH_API_KEY → JSearch will run this run')
+    else info('JSEARCH_API_KEY present → not used this run (not in BOT_SEARCH_SOURCES / --sources)')
+  } else if (botSearchSourceAllowed(allow, 'jsearch')) {
+    warn('JSEARCH_API_KEY missing — jsearch was requested but cannot run')
+  } else {
+    info('JSEARCH_API_KEY not set (skipped for this allowlist)')
+  }
+
+  if (effectiveJobsSearchKey) {
+    if (botSearchSourceAllowed(allow, 'jobs_search_api'))
+      ok(
+        jobsSearchKey
+          ? 'JOBS_SEARCH_API_KEY → Jobs Search API will run this run'
+          : 'JSEARCH_API_KEY → Jobs Search API will run this run (JOBS_SEARCH_API_KEY unset)'
+      )
+    else info('Jobs Search API key present → not used this run (not in allowlist)')
+  } else if (botSearchSourceAllowed(allow, 'jobs_search_api')) {
+    warn('No RapidAPI key for Jobs Search API — requested but cannot run')
+  } else {
+    info('Jobs Search API key not configured (skipped for this allowlist)')
+  }
+
+  if (!openaiKey) warn('OPENAI_API_KEY not set — AI scoring spot-check will be skipped')
+  else ok('OPENAI_API_KEY set — AI scoring enabled for Step 4 spot-check')
 
   // ── 2. Resolve user + BotConfig ───────────────────────────────────────────
   h('Step 2: Resolve BotConfig')
@@ -92,22 +155,45 @@ async function main() {
   })
 
   console.log(`  Keywords:  ${botConfig.keywords.join(', ')}`)
-  console.log(`  Locations: ${botConfig.locations.join(', ')}`)
+  const locationsForRun = (() => {
+    const raw = botConfig.locations.length > 0 ? botConfig.locations : ['Remote']
+    if (oneLocation) {
+      const first = raw[0] ?? 'Remote'
+      info(`--one-location: using "${first}" only (${raw.length} configured)`)
+      return [first]
+    }
+    return raw
+  })()
+
+  console.log(`  Locations: ${locationsForRun.join(', ')}${oneLocation ? ' (subset)' : ''}`)
   console.log(`  MinScore:  ${botConfig.minScore}`)
 
   // ── 3. Run search ─────────────────────────────────────────────────────────
   h('Step 3: Run search APIs')
+  if (
+    !sourcesAllow &&
+    !oneLocation &&
+    locationsForRun.length > 2 &&
+    effective.length > 2
+  ) {
+    warn(
+      `Many locations (${locationsForRun.length}) × backends (${effective.length}) can take several minutes — narrow with --sources=jsearch or --one-location`
+    )
+  }
+
   const { runSearch } = await import('../src/lib/bot/adapters/search-client')
+  /** Cap returned jobs for this script (full dedup counts still in meta). */
+  const previewResultsWanted = 10
 
   let searchResponse
   try {
     searchResponse = await runSearch({
       keywords: botConfig.keywords,
-      locations: botConfig.locations.length > 0 ? botConfig.locations : ['Remote'],
+      locations: locationsForRun,
       remote_only: botConfig.remoteOnly,
       exclude_companies: botConfig.excludeCompanies,
       exclude_keywords: botConfig.excludeKeywords,
-      results_wanted: 10,
+      results_wanted: previewResultsWanted,
     })
   } catch (e) {
     fail(`Search failed: ${e instanceof Error ? e.message : String(e)}`)
@@ -116,13 +202,34 @@ async function main() {
 
   ok('Search complete')
   console.log(`  Platforms OK:   ${searchResponse.meta.platforms_succeeded.join(', ') || 'none'}`)
-  if (Object.keys(searchResponse.meta.platforms_failed).length > 0)
+  if (Object.keys(searchResponse.meta.platforms_failed).length > 0) {
     warn(`  Platform issues: ${JSON.stringify(searchResponse.meta.platforms_failed)}`)
+    explainSearchFailures(searchResponse.meta.platforms_failed)
+  }
   console.log(`  Raw results:   ${searchResponse.meta.total_raw}`)
   console.log(`  After dedup:   ${searchResponse.meta.total_deduped}`)
+  const fmtSrc = (o: Record<string, number>) =>
+    Object.entries(o)
+      .sort((a, b) => b[1] - a[1])
+      .map(([s, n]) => `${s}=${n}`)
+      .join(', ') || 'none'
+  console.log(`  By source (raw):    ${fmtSrc(searchResponse.meta.by_source_raw)}`)
+  console.log(`  By source (dedup):  ${fmtSrc(searchResponse.meta.by_source_deduped)}`)
+  console.log(
+    `  Returned slice:   ${searchResponse.jobs.length} job(s) (results_wanted=${previewResultsWanted})`
+  )
 
   if (searchResponse.jobs.length === 0) {
-    warn('No jobs returned. Check API keys or try different keywords.')
+    const failedMsgs = Object.values(searchResponse.meta.platforms_failed).join('\n')
+    const quotaBlocked = /\b429\b|quota/i.test(failedMsgs)
+    if (quotaBlocked) {
+      warn('No jobs returned — quota/rate limits may have blocked APIs; try again later or broaden keys/plan.')
+    } else {
+      warn(
+        'No jobs returned — narrow keywords/locations, API errors (see Platform issues), or filters excluded every listing.'
+      )
+      info('Put broader roles first in Bot keywords, relax exclude lists, or try fewer locations (--one-location).')
+    }
   } else {
     console.log('\n  Sample jobs:')
     for (const job of searchResponse.jobs.slice(0, 5)) {
@@ -140,14 +247,20 @@ async function main() {
     const sample = searchResponse.jobs[0]
     try {
       info(`Evaluating: "${sample.title}" @ ${sample.company}`)
-      const ev = await evaluateJob(sample, botConfig)
+      const { evaluation: ev } = await evaluateJob(sample, botConfig)
       ok('Evaluation complete')
       console.log(`  Score:       ${ev.score}/100`)
       console.log(`  Apply:       ${ev.shouldApply}`)
       console.log(`  Reasoning:   ${ev.reasoning}`)
       console.log(`  Flags:       ${ev.flags.join(', ') || 'none'}`)
     } catch (e) {
-      warn(`AI eval failed: ${e instanceof Error ? e.message : String(e)}`)
+      const msg =
+        e instanceof Error
+          ? e.message
+          : e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string'
+            ? (e as { message: string }).message
+            : JSON.stringify(e)
+      warn(`AI eval failed: ${msg}`)
     }
   }
 
@@ -178,6 +291,13 @@ async function main() {
     console.log(`  New:       ${result.jobsNew}`)
     console.log(`  Evaluated: ${result.jobsEvaluated}`)
     console.log(`  Approved:  ${result.jobsApproved}`)
+    console.log(
+      `  Dedup:     url=${result.skippedExistingByUrl} title=${result.skippedExistingByTitle} batch=${result.skippedBatchDuplicate} dismissed=${result.skippedPreviouslyDismissed}`
+    )
+    console.log(`  Below min: ${result.jobsSkippedLowScore}`)
+    if (result.evaluationSkips.length > 0) {
+      info(`${result.evaluationSkips.length} below-threshold eval(s) — see evaluationSkips in result`)
+    }
     if (Object.keys(result.errors).length > 0)
       warn(`  Errors: ${JSON.stringify(result.errors)}`)
   } else if (isDryRun) {
@@ -189,7 +309,11 @@ async function main() {
   h('✅ All checks passed')
   console.log('\nTo activate the bot, set these in Vercel and go to /settings/bot:')
   if (!jSearchKey) console.log('  JSEARCH_API_KEY  → https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch')
-  if (!serpKey)    console.log('  SERP_API_KEY     → https://serpapi.com')
+  if (!jobsSearchKey && !effectiveJobsSearchKey) {
+    console.log(
+      '  JOBS_SEARCH_API_KEY (optional if JSEARCH_API_KEY set) → RapidAPI jobs-search-api getjobs_excel'
+    )
+  }
   console.log('  TELEGRAM_BOT_TOKEN (optional) → @BotFather on Telegram')
   console.log('')
 

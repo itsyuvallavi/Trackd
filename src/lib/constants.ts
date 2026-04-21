@@ -36,7 +36,8 @@ export const SOURCE_LABELS: Record<JobSource, string> = {
   ZIPRECRUITER: 'ZipRecruiter',
   LANDING_JOBS: 'Landing.jobs',
   OTHER: 'Other',
-  BOT: 'Bot',
+  /** Only when `Job.importSource` is missing — prefer fixing data over showing this. */
+  BOT: 'Unknown API',
 }
 
 export const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {

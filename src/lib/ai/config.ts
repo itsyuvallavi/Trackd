@@ -45,6 +45,56 @@ export function getAIConfig(): AIConfig {
  * Recommendation: gpt-4o-mini is sufficient for resume generation with good prompts
  * Set RESUME_AI_MODEL=gpt-4o-mini for cost efficiency, or gpt-4o for maximum quality
  */
+/**
+ * Job-application automation uses two roles (can be the same model):
+ *
+ * - **Plan** (one JSON plan per scan): needs strong instruction-following — default `gpt-4o`.
+ * - **Field** (many small `answerCustomField` calls): default `gpt-4o-mini` to save cost.
+ *
+ * Env vars (optional splits):
+ * - `OPENAI_APPLY_PLAN_MODEL` — planner only; falls back to `OPENAI_APPLY_MODEL`, then `gpt-4o`.
+ * - `OPENAI_APPLY_FIELD_MODEL` — per-field answers; falls back to `OPENAI_APPLY_MODEL`, then `gpt-4o-mini`.
+ * - `OPENAI_APPLY_MODEL` — if set and the split vars are not, both roles use this (legacy single knob).
+ */
+export function getApplyPlanModel(): string {
+  return (
+    process.env.OPENAI_APPLY_PLAN_MODEL?.trim() ||
+    process.env.OPENAI_APPLY_MODEL?.trim() ||
+    'gpt-4o'
+  )
+}
+
+export function getApplyFieldModel(): string {
+  return (
+    process.env.OPENAI_APPLY_FIELD_MODEL?.trim() ||
+    process.env.OPENAI_APPLY_MODEL?.trim() ||
+    'gpt-4o-mini'
+  )
+}
+
+/** @deprecated Prefer getApplyPlanModel() or getApplyFieldModel(). */
+export function getApplyAIModel(): string {
+  return getApplyPlanModel()
+}
+
+export function getApplyAIConfig(): AIConfig {
+  const apiKey = process.env.OPENAI_API_KEY
+
+  if (!apiKey) {
+    throw new Error(
+      'OPENAI_API_KEY environment variable is not set. ' + 'Please set it in your .env file.'
+    )
+  }
+
+  return {
+    apiKey,
+    model: getApplyPlanModel(),
+    maxRetries: parseInt(process.env.AI_MAX_RETRIES || '3', 10),
+    timeout: parseInt(process.env.OPENAI_APPLY_TIMEOUT_MS || '120000', 10),
+    temperature: parseFloat(process.env.OPENAI_APPLY_TEMPERATURE || '0.25'),
+  }
+}
+
 export function getResumeAIConfig(): AIConfig {
   const apiKey = process.env.OPENAI_API_KEY
 
@@ -99,6 +149,15 @@ export function calculateCost(
   } else if (model.includes('gpt-4.1')) {
     INPUT_COST_PER_MILLION = 2.00
     OUTPUT_COST_PER_MILLION = 8.00
+  } else if (model.includes('gpt-5.4-mini')) {
+    INPUT_COST_PER_MILLION = 0.75
+    OUTPUT_COST_PER_MILLION = 4.5
+  } else if (model.includes('gpt-5.4-nano')) {
+    INPUT_COST_PER_MILLION = 0.2
+    OUTPUT_COST_PER_MILLION = 1.25
+  } else if (model.includes('gpt-5.4')) {
+    INPUT_COST_PER_MILLION = 2.5
+    OUTPUT_COST_PER_MILLION = 15.0
   } else if (model.includes('gpt-4o')) {
     INPUT_COST_PER_MILLION = 2.50
     OUTPUT_COST_PER_MILLION = 10.00

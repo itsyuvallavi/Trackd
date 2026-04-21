@@ -9,6 +9,7 @@ import {
   MessageSquare,
   FileText,
   Bot,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BotQueueBadge } from '@/components/bot/bot-queue-badge'
@@ -27,7 +28,12 @@ const navItems: NavItem[] = [
     icon: Briefcase,
   },
   {
-    name: 'Bot Queue',
+    name: 'Bot settings',
+    href: '/settings/bot',
+    icon: SlidersHorizontal,
+  },
+  {
+    name: 'Bot queue',
     href: '/bot/queue',
     icon: Bot,
   },

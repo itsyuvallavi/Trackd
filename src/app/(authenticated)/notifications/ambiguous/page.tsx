@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth'
 import { AppShell } from '@/components/layout/app-shell'
 import { AmbiguousMatchResolver } from '@/components/notifications/ambiguous-match-resolver'
 import { notFound } from 'next/navigation'
+import { serializeForClient } from '@/lib/serialize-for-client'
 
 export default async function AmbiguousMatchPage({
   searchParams,
@@ -143,7 +144,7 @@ export default async function AmbiguousMatchPage({
             emailSubject={metadata.emailSubject}
             emailFrom={metadata.emailFrom}
             emailDate={metadata.emailDate}
-            matchedJobs={orderedJobs}
+            matchedJobs={serializeForClient(orderedJobs)}
             suggestedStatus={metadata.suggestedStatus}
             emailType={metadata.emailType}
             emailTextBody={metadata.emailTextBody}

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth'
+import { getCurrentUser } from '@/lib/auth'
 import { getRecentActivities, getRecentNotifications } from '@/lib/cached-queries'
+import { serializeForClient } from '@/lib/serialize-for-client'
 
 /**
  * API endpoint for dashboard sidebar data
@@ -8,23 +9,24 @@ import { getRecentActivities, getRecentNotifications } from '@/lib/cached-querie
  */
 export async function GET() {
   try {
-    const user = await requireAuth()
+    const user = await getCurrentUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-    // Fetch data in parallel using cached queries
     const [activities, notificationsRaw] = await Promise.all([
       getRecentActivities(user.id, 50),
       getRecentNotifications(user.id, 50),
     ])
 
-    // Convert notifications createdAt from Date to string for client-side
-    const notifications = notificationsRaw.map(n => ({
+    const notifications = notificationsRaw.map((n) => ({
       ...n,
       createdAt: n.createdAt.toISOString(),
     }))
 
     return NextResponse.json({
-      activities,
-      notifications,
+      activities: serializeForClient(activities),
+      notifications: serializeForClient(notifications),
     })
   } catch (error) {
     console.error('Error fetching dashboard sidebar data:', error)

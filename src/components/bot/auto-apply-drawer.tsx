@@ -10,7 +10,6 @@ import {
   Bot,
   Send,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { ATS_LABELS } from '@/lib/bot/ats-detector'
 import type { ATSType } from '@/lib/bot/ats-detector'
 
@@ -37,7 +36,35 @@ interface ApplyResult {
   screenshotUrls: string[]
   fieldsFilledCount: number
   skippedFields: string[]
+  applySummary?: string[]
+  success?: boolean
   error?: string
+}
+
+function friendlyAutomationFailure(raw: string): { title: string; detail: string } {
+  if (raw.includes('Playwright version mismatch') || raw.includes('428 Precondition')) {
+    return {
+      title: 'Browser automation version mismatch',
+      detail:
+        'The automation cloud is on Playwright 1.58. This app pins playwright-core to the same version — redeploy after pulling the latest code. If this message persists, ask your host to upgrade Browserless or align versions.',
+    }
+  }
+  const trimmed = raw.trim()
+  if (trimmed.length > 900) {
+    return { title: 'Automation failed', detail: `${trimmed.slice(0, 900)}…` }
+  }
+  return { title: 'Automation failed', detail: trimmed || 'An unexpected error occurred.' }
+}
+
+/** Avoid "Unexpected end of JSON input" when the server returns 500 HTML or an empty body. */
+async function parseJsonResponse<T>(res: Response): Promise<T | null> {
+  const text = await res.text()
+  if (!text.trim()) return null
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    return null
+  }
 }
 
 export function AutoApplyDrawer({
@@ -67,9 +94,18 @@ export function AutoApplyDrawer({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ jobId }),
         })
-        const data = await res.json() as ApplyResult & { error?: string }
-        if (!res.ok || data.error) {
-          setError(data.error ?? 'Failed to start automation')
+        const data = await parseJsonResponse<ApplyResult & { error?: string }>(res)
+        if (data === null) {
+          setError(
+            `Server returned a non-JSON response (${res.status}). Check Vercel function logs for this request.`
+          )
+          setPhase('failed')
+          return
+        }
+        const automationFailed =
+          typeof data.success === 'boolean' && data.success === false
+        if (!res.ok || data.error || automationFailed) {
+          setError(data.error ?? `Request failed (${res.status})`)
           setPhase('failed')
           return
         }
@@ -94,7 +130,12 @@ export function AutoApplyDrawer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'confirm' }),
       })
-      const data = await res.json() as { success: boolean; error?: string }
+      const data = await parseJsonResponse<{ success: boolean; error?: string }>(res)
+      if (data === null) {
+        throw new Error(
+          `Server returned a non-JSON response (${res.status}). Check Vercel function logs.`
+        )
+      }
       if (!res.ok || !data.success) throw new Error(data.error ?? 'Submit failed')
       setPhase('submitted')
       setTimeout(() => onApplied(), 1500)
@@ -123,6 +164,9 @@ export function AutoApplyDrawer({
     ? (ATS_LABELS[result.atsType as ATSType] ?? result.atsType)
     : 'Job Application'
 
+  const automationFailure =
+    phase === 'failed' ? friendlyAutomationFailure(error ?? '') : null
+
   return (
     <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center">
       {/* Backdrop */}
@@ -131,8 +175,8 @@ export function AutoApplyDrawer({
         onClick={phase === 'filling' || phase === 'submitting' ? undefined : handleCancel}
       />
 
-      {/* Drawer */}
-      <div className="relative w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-background border border-border shadow-2xl flex flex-col">
+      {/* Near full-viewport width so tall/wide page previews are usable; min-w-0 keeps flex from clipping */}
+      <div className="relative mx-2 w-[min(100%,calc(100vw-1rem))] max-w-[min(1600px,calc(100vw-1rem))] min-w-0 max-h-[95vh] rounded-t-2xl sm:rounded-2xl bg-background border border-border shadow-2xl flex flex-col overflow-hidden sm:mx-4">
         {/* Header */}
         <div className="flex items-start justify-between p-5 border-b border-border shrink-0">
           <div>
@@ -156,8 +200,8 @@ export function AutoApplyDrawer({
           )}
         </div>
 
-        {/* Body */}
-        <div className="flex-1 p-5 space-y-5">
+        {/* Body — min-h-0 + overflow-y-auto required for flex child to scroll long content */}
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-5 space-y-5">
           {/* Filling phase */}
           {phase === 'filling' && (
             <div className="flex flex-col items-center justify-center py-12 gap-4 text-center">
@@ -199,20 +243,51 @@ export function AutoApplyDrawer({
                 </div>
               </div>
 
-              <div>
+              {result.applySummary && result.applySummary.length > 0 && (
+                <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                    What the bot did
+                  </p>
+                  <ul className="list-disc space-y-1.5 pl-4 text-sm text-foreground/90">
+                    {result.applySummary.map((line, i) => (
+                      <li key={i}>{line}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                  Form Preview
+                  Page preview (optional)
                 </p>
                 {result.screenshotUrls.length > 0 ? (
-                  <div className="space-y-3">
+                  <div className="space-y-3 min-w-0">
                     {result.screenshotUrls.map((url, i) => (
-                      <div key={i} className="rounded-lg overflow-hidden border border-border">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={url}
-                          alt={`Form page ${i + 1}`}
-                          className="w-full"
-                        />
+                      <div key={i} className="min-w-0 rounded-lg border border-border bg-muted/20">
+                        <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-1.5 border-b border-border/80 bg-muted/40">
+                          <span className="text-xs text-muted-foreground">
+                            Scroll vertically in this panel; scroll horizontally below if needed. For 1:1 pixels, open in a new tab.
+                          </span>
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download={`apply-preview-${i + 1}.png`}
+                            className="text-xs font-semibold text-primary hover:underline shrink-0 rounded-md border border-primary/30 px-2 py-1 hover:bg-primary/5"
+                          >
+                            Open full size (new tab)
+                          </a>
+                        </div>
+                        {/* Wide PNGs: min-w-0 + overflow-x-auto prevents right-edge crop inside flex layouts */}
+                        <div className="min-w-0 max-w-full overflow-x-auto overflow-y-visible rounded-b-lg bg-muted/10">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={url}
+                            alt={`Form page ${i + 1}`}
+                            className="block h-auto max-w-none w-auto align-top"
+                            loading="lazy"
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -266,14 +341,16 @@ export function AutoApplyDrawer({
           )}
 
           {/* Failed */}
-          {phase === 'failed' && (
+          {phase === 'failed' && automationFailure && (
             <div className="space-y-4">
               <div className="flex items-start gap-3 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3">
                 <AlertTriangle className="size-4 text-red-500 mt-0.5 shrink-0" />
-                <div className="text-sm">
-                  <p className="font-medium text-red-700 dark:text-red-300">Automation failed</p>
-                  <p className="text-red-600/80 dark:text-red-400/80 mt-0.5">
-                    {error ?? 'An unexpected error occurred.'}
+                <div className="text-sm min-w-0">
+                  <p className="font-medium text-red-700 dark:text-red-300">
+                    {automationFailure.title}
+                  </p>
+                  <p className="text-red-600/80 dark:text-red-400/80 mt-0.5 whitespace-pre-wrap break-words">
+                    {automationFailure.detail}
                   </p>
                 </div>
               </div>

@@ -2,6 +2,7 @@ import { requireAuth } from '@/lib/auth'
 import { JobsPageWrapper } from '@/components/jobs/jobs-page-wrapper'
 import { AppShell } from '@/components/layout/app-shell'
 import { getEmailIntegration, getUserJobs } from '@/lib/cached-queries'
+import { serializeForClient } from '@/lib/serialize-for-client'
 import { Suspense } from 'react'
 import { JobsListSkeleton } from '@/components/jobs/jobs-list-skeleton'
 
@@ -20,7 +21,7 @@ export default async function JobsPage() {
   return (
     <AppShell showEmailNotification={!emailIntegration}>
       <Suspense fallback={<JobsListSkeleton />}>
-        <JobsPageWrapper jobs={jobs} />
+        <JobsPageWrapper jobs={serializeForClient(jobs)} />
       </Suspense>
     </AppShell>
   )

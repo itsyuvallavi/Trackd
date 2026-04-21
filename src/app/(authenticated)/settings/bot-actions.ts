@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { verifyTelegramChatId } from '@/lib/bot/telegram'
+import { executeBotRunForConfig } from '@/lib/bot/execute-bot-run'
+import { botSearchHasQueryableBackend } from '@/lib/bot/bot-search-sources'
 import { BotSearchFrequency } from '@prisma/client'
 
 export interface BotConfigFormData {
@@ -11,6 +13,8 @@ export interface BotConfigFormData {
   locations: string[]
   excludeCompanies: string[]
   excludeKeywords: string[]
+  /** Languages you speak fluently (e.g. english, hebrew). Used to filter jobs that mandate other languages. */
+  spokenLanguages: string[]
   remoteOnly: boolean
   experienceLevel: string
   salaryMin: number | null
@@ -27,18 +31,26 @@ export async function saveBotConfig(data: BotConfigFormData) {
   const resolvedChatId =
     data.telegramChatId.trim() || process.env.TELEGRAM_CHAT_ID || null
 
+  const salaryMin =
+    data.salaryMin != null && Number.isFinite(data.salaryMin)
+      ? Math.floor(data.salaryMin)
+      : null
+  const minScoreRaw = Number.isFinite(data.minScore) ? data.minScore : 60
+  const minScore = Math.max(0, Math.min(100, Math.floor(minScoreRaw)))
+
   const cleaned = {
     keywords: data.keywords.filter(Boolean),
     locations: data.locations.filter(Boolean),
     excludeCompanies: data.excludeCompanies.filter(Boolean),
     excludeKeywords: data.excludeKeywords.filter(Boolean),
+    spokenLanguages: data.spokenLanguages.filter(Boolean),
     remoteOnly: data.remoteOnly,
     experienceLevel: data.experienceLevel || null,
-    salaryMin: data.salaryMin ?? null,
+    salaryMin,
     isActive: data.isActive,
     searchFrequency: data.searchFrequency,
     telegramChatId: resolvedChatId,
-    minScore: Math.max(0, Math.min(100, data.minScore)),
+    minScore,
   }
 
   await prisma.botConfig.upsert({
@@ -66,35 +78,25 @@ export async function triggerBotSearch() {
     return { success: false, error: 'Add at least one search keyword before running.' }
   }
 
-  if (!process.env.JSEARCH_API_KEY && !process.env.SERP_API_KEY) {
+  if (!botSearchHasQueryableBackend()) {
     return {
       success: false,
-      error: 'No search API keys configured. Add JSEARCH_API_KEY and/or SERP_API_KEY in Vercel environment variables.',
+      error:
+        'No search backends configured for this environment (or BOT_SEARCH_SOURCES allowlist). Add API keys or adjust BOT_SEARCH_SOURCES.',
     }
   }
 
-  // Trigger cron endpoint manually
-  const secret = process.env.CRON_SECRET
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  // Run in-process so we do not depend on CRON_SECRET, NEXT_PUBLIC_APP_URL, or
+  // server-to-self HTTP (which often returns 401 Unauthorized in production).
+  const out = await executeBotRunForConfig(config, 'manual')
 
-  try {
-    const res = await fetch(`${baseUrl}/api/cron/bot-search`, {
-      headers: secret ? { authorization: `Bearer ${secret}` } : {},
-    })
+  revalidatePath('/settings/bot')
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      return { success: false, error: `Search failed: ${text}` }
-    }
-
-    revalidatePath('/settings/bot')
-    return { success: true }
-  } catch (err) {
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : 'Search request failed',
-    }
+  if (out.error) {
+    return { success: false, error: out.error }
   }
+
+  return { success: true }
 }
 
 export async function verifyTelegram(chatId: string) {

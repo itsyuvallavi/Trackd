@@ -2,199 +2,658 @@
  * Bot search orchestrator.
  *
  * Flow:
- * 1. Call job search APIs (JSearch + SerpAPI) via the unified search client
- * 2. Deduplicate against existing jobs in the DB (by URL)
+ * 1. Call job search APIs (JSearch, Jobs Search API) via the unified client
+ * 2. Deduplicate against existing jobs in the DB (by URL / title / batch)
  * 3. Save new jobs with status SAVED + source BOT or platform-specific
  * 4. Run AI evaluator on each new job
- * 5. Return stats for BotRun logging
+ * 5. Persist BotRunLog lines + BotRunListing audit rows (when botRunId set)
  */
 
-import { prisma } from '@/lib/prisma'
-import { JobSource } from '@prisma/client'
+import { JobSource, Prisma } from '@prisma/client'
 import type { BotConfig } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import type { SearchJobResult, OrchestratorResult } from './types'
 import { evaluateJob } from './job-evaluator'
 import { runSearch } from './adapters/search-client'
+import { BOT_SEARCH_RESULTS_WANTED } from './search-constants'
+import { botSearchHasQueryableBackend } from './bot-search-sources'
+import {
+  BOT_LISTING_OUTCOME,
+  BOT_LISTING_STAGE,
+  compactJobForAudit,
+  companyTitleKey,
+  insertBotRunListings,
+  normalizeJobUrl,
+} from './bot-run-audit'
+import {
+  dismissedFingerprintForTitleCompany,
+  dismissedFingerprintForUrl,
+} from './dismissed-job-imports'
+
+const REASONING_LOG_MAX = 280
+const REASONING_STORE_MAX = 800
+
+function oneLineExcerpt(text: string, max: number): string {
+  const t = text.replace(/\s+/g, ' ').trim()
+  if (t.length <= max) return t
+  return `${t.slice(0, max - 1)}…`
+}
+
+function metaToJson(meta: unknown): Prisma.InputJsonValue | undefined {
+  if (meta === undefined || meta === null) return undefined
+  if (typeof meta === 'string' || typeof meta === 'number' || typeof meta === 'boolean') {
+    return meta
+  }
+  if (typeof meta === 'object') {
+    return meta as Prisma.InputJsonValue
+  }
+  return String(meta)
+}
 
 function sourceToPrismaSource(source: string): JobSource {
   const map: Record<string, JobSource> = {
     jsearch: JobSource.BOT,
     indeed: JobSource.INDEED,
     linkedin: JobSource.LINKEDIN,
+    linkedin_ljs: JobSource.LINKEDIN,
+    jobs_search_api: JobSource.BOT,
     glassdoor: JobSource.OTHER,
-    serpapi_google: JobSource.BOT,
+    glassdoor_rt: JobSource.OTHER,
     zip_recruiter: JobSource.ZIPRECRUITER,
   }
   return map[source.toLowerCase()] ?? JobSource.BOT
 }
 
+function skippedScoringNote(stage: string): Prisma.InputJsonValue {
+  return {
+    note: 'AI evaluator was not run for this listing.',
+    filterStage: stage,
+  }
+}
+
+function noOpenAiSnapshot(): Prisma.InputJsonValue {
+  return {
+    note: 'OPENAI_API_KEY was not set — listing saved without AI scoring.',
+    gateway: 'none',
+  }
+}
+
+export type RunBotSearchOptions = {
+  /** When set, pipeline log lines → BotRunLog; per-listing audit → BotRunListing. */
+  botRunId?: string
+}
+
+type MutableListing = {
+  finalized: boolean
+  sequence: number
+  importSource: string
+  title: string
+  company: string
+  url: string | null
+  jobSnapshot: Prisma.InputJsonValue
+  minScoreAtRun: number
+  stage: string
+  outcome: string
+  evaluated: boolean
+  score: number | null
+  shouldApply: boolean | null
+  flags: string[]
+  reasoning: string | null
+  resumeMatch: string | null
+  scoringInputs: Prisma.InputJsonValue | null
+  decisionReason: string | null
+  errorMessage: string | null
+}
+
+function toCreateInput(botRunId: string, m: MutableListing): Prisma.BotRunListingCreateManyInput {
+  return {
+    botRunId,
+    sequence: m.sequence,
+    importSource: m.importSource,
+    stage: m.stage,
+    outcome: m.outcome,
+    title: m.title,
+    company: m.company,
+    url: m.url,
+    jobSnapshot: m.jobSnapshot,
+    minScoreAtRun: m.minScoreAtRun,
+    evaluated: m.evaluated,
+    score: m.score,
+    shouldApply: m.shouldApply,
+    flags: m.flags,
+    reasoning: m.reasoning,
+    resumeMatch: m.resumeMatch,
+    scoringInputs: m.scoringInputs ?? undefined,
+    decisionReason: m.decisionReason,
+    errorMessage: m.errorMessage,
+  }
+}
+
 export async function runBotSearch(
   botConfig: BotConfig,
-  userId: string
+  userId: string,
+  opts?: RunBotSearchOptions
 ): Promise<OrchestratorResult> {
+  type LogLevel = 'info' | 'warn' | 'error'
+  const runLogs: { seq: number; level: LogLevel; message: string; meta?: Prisma.InputJsonValue }[] = []
+  let logSeq = 0
+
+  const pushLog = (level: LogLevel, message: string, meta?: unknown) => {
+    const jsonMeta = metaToJson(meta)
+    const row = {
+      seq: logSeq++,
+      level,
+      message,
+      ...(jsonMeta !== undefined ? { meta: jsonMeta } : {}),
+    }
+    runLogs.push(row)
+    if (level === 'info') console.log('[bot]', message)
+    else if (level === 'warn') console.warn('[bot]', message, meta ?? '')
+    else console.error('[bot]', message, meta ?? '')
+  }
+
+  const persistLogs = async () => {
+    const id = opts?.botRunId
+    if (!id || runLogs.length === 0) return
+    try {
+      await prisma.botRunLog.createMany({
+        data: runLogs.map((l) => ({
+          botRunId: id,
+          sequence: l.seq,
+          level: l.level,
+          message: l.message,
+          ...(l.meta !== undefined ? { meta: l.meta } : {}),
+        })),
+      })
+    } catch (e) {
+      console.error('[bot] Failed to persist BotRunLog rows:', e)
+    }
+  }
+
+  const auditBySeq = new Map<number, MutableListing>()
+  let auditFinished = false
+
+  const persistListingAudit = async () => {
+    const id = opts?.botRunId
+    if (!id || !auditFinished || auditBySeq.size === 0) return
+    const rows: Prisma.BotRunListingCreateManyInput[] = []
+    const sortedKeys = [...auditBySeq.keys()].sort((a, b) => a - b)
+    for (const k of sortedKeys) {
+      const m = auditBySeq.get(k)!
+      if (!m.finalized) {
+        console.error(`[bot] Audit row seq=${k} not finalized — skipping DB insert for this sequence`)
+        continue
+      }
+      rows.push(toCreateInput(id, m))
+    }
+    try {
+      await insertBotRunListings(rows)
+    } catch (e) {
+      console.error('[bot] Failed to persist BotRunListing rows:', e)
+    }
+  }
+
   const result: OrchestratorResult = {
     jobsFound: 0,
     jobsNew: 0,
     jobsEvaluated: 0,
     jobsApproved: 0,
+    jobsSkippedLowScore: 0,
+    skippedExistingByUrl: 0,
+    skippedExistingByTitle: 0,
+    skippedBatchDuplicate: 0,
+    skippedPreviouslyDismissed: 0,
     errors: {},
+    evaluationSkips: [],
     platformsMeta: null,
   }
 
-  // Check that at least one search API key is configured
-  if (!process.env.JSEARCH_API_KEY && !process.env.SERP_API_KEY) {
-    result.errors['config'] = 'No search API keys configured. Set JSEARCH_API_KEY and/or SERP_API_KEY.'
-    return result
-  }
-
-  // Run the search
-  let searchResponse
   try {
-    searchResponse = await runSearch({
-      keywords: botConfig.keywords,
-      locations: botConfig.locations.length > 0 ? botConfig.locations : ['Remote'],
-      remote_only: botConfig.remoteOnly,
-      exclude_companies: botConfig.excludeCompanies,
-      exclude_keywords: botConfig.excludeKeywords,
-      results_wanted: 30,
-      experience_level: botConfig.experienceLevel,
-    })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    result.errors['search'] = msg
-    console.error('[bot] Search failed:', msg)
-    return result
-  }
-
-  result.jobsFound = searchResponse.jobs.length
-  result.platformsMeta = searchResponse.meta
-
-  console.log(
-    `[bot] Search complete: ${searchResponse.jobs.length} jobs from [${searchResponse.meta.platforms_succeeded.join(', ')}]`
-  )
-
-  if (searchResponse.meta.platforms_failed && Object.keys(searchResponse.meta.platforms_failed).length > 0) {
-    console.warn('[bot] Platform issues:', searchResponse.meta.platforms_failed)
-  }
-
-  if (searchResponse.jobs.length === 0) {
-    return result
-  }
-
-  // Collect all URLs and dedup against DB (including already-applied jobs)
-  const jobsWithUrls = searchResponse.jobs.filter((j) => j.url?.trim())
-  const urls = jobsWithUrls.map((j) => j.url!.trim().replace(/\/$/, ''))
-
-  const existingJobs = await prisma.job.findMany({
-    where: { userId, url: { in: urls } },
-    select: { url: true, status: true },
-  })
-  const existingUrls = new Set(existingJobs.map((j) => j.url?.replace(/\/$/, '') ?? ''))
-
-  // Also load ALL existing jobs to block company+title duplicates (any status)
-  const allExistingJobs = await prisma.job.findMany({
-    where: { userId },
-    select: { company: true, title: true },
-  })
-  const existingTitleKeys = new Set(
-    allExistingJobs.map((j) => `${j.company.toLowerCase().trim()}::${j.title.toLowerCase().trim()}`)
-  )
-
-  // Deduplicate within the current search batch by title+company
-  const seenInBatch = new Set<string>()
-
-  const newJobs = jobsWithUrls.filter((j) => {
-    const url = j.url!.trim().replace(/\/$/, '')
-    if (existingUrls.has(url)) return false
-
-    const key = `${j.company.toLowerCase().trim()}::${j.title.toLowerCase().trim()}`
-
-    // Block if we already have this company+title in the DB (any status)
-    if (existingTitleKeys.has(key)) {
-      console.log(`[bot] Skipping existing: ${j.title} @ ${j.company}`)
-      return false
+    if (!botSearchHasQueryableBackend()) {
+      result.errors['config'] =
+        'No search backends available for current env / BOT_SEARCH_SOURCES — set JSEARCH_API_KEY and/or Jobs Search API (JOBS_SEARCH_API_KEY / JSEARCH fallback).'
+      pushLog('warn', result.errors['config'])
+      return result
     }
 
-    // Block duplicates within the same search batch
-    if (seenInBatch.has(key)) {
-      console.log(`[bot] Skipping batch duplicate: ${j.title} @ ${j.company}`)
-      return false
-    }
-
-    seenInBatch.add(key)
-    return true
-  })
-  const noUrlJobs = searchResponse.jobs.filter((j) => !j.url?.trim())
-  const allNewJobs: SearchJobResult[] = [...newJobs, ...noUrlJobs]
-
-  result.jobsNew = allNewJobs.length
-
-  if (allNewJobs.length === 0) {
-    console.log(`[bot] No new jobs for user ${userId} — all already tracked`)
-    return result
-  }
-
-  console.log(`[bot] Saving ${allNewJobs.length} new jobs for user ${userId}`)
-
-  // Evaluate and save each new job
-  for (const job of allNewJobs) {
+    let searchResponse
     try {
-      let score = 0
-      let shouldApply = false
-      let reasoning = ''
+      searchResponse = await runSearch({
+        keywords: botConfig.keywords,
+        locations: botConfig.locations.length > 0 ? botConfig.locations : ['Remote'],
+        remote_only: botConfig.remoteOnly,
+        exclude_companies: botConfig.excludeCompanies,
+        exclude_keywords: botConfig.excludeKeywords,
+        results_wanted: BOT_SEARCH_RESULTS_WANTED,
+        experience_level: botConfig.experienceLevel,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      result.errors['search'] = msg
+      pushLog('error', `Search failed: ${msg}`)
+      return result
+    }
 
-      if (process.env.OPENAI_API_KEY) {
-        try {
-          const evaluation = await evaluateJob(job, botConfig)
-          score = evaluation.score
-          shouldApply = evaluation.shouldApply
-          reasoning = evaluation.reasoning
-          result.jobsEvaluated++
-          if (shouldApply) result.jobsApproved++
-        } catch (evalErr) {
-          console.warn(`[bot] Eval skipped for "${job.title}":`, evalErr instanceof Error ? evalErr.message : evalErr)
+    result.jobsFound = searchResponse.jobs.length
+    result.platformsMeta = searchResponse.meta
+
+    pushLog(
+      'info',
+      `Search complete: ${searchResponse.jobs.length} jobs from [${searchResponse.meta.platforms_succeeded.join(', ')}]`
+    )
+    pushLog(
+      'info',
+      `Raw rows by source (before exclude filters): ${JSON.stringify(searchResponse.meta.by_source_raw)}`
+    )
+
+    if (searchResponse.meta.platforms_failed && Object.keys(searchResponse.meta.platforms_failed).length > 0) {
+      pushLog('warn', 'Platform issues', searchResponse.meta.platforms_failed)
+    }
+
+    if (searchResponse.jobs.length === 0) {
+      pushLog('info', 'Search returned zero listings — nothing to deduplicate or evaluate.')
+      return result
+    }
+
+    const jobsWithUrls = searchResponse.jobs.filter((j) => j.url?.trim())
+    const urls = jobsWithUrls.map((j) => j.url!.trim().replace(/\/$/, ''))
+
+    const existingJobs = await prisma.job.findMany({
+      where: { userId, url: { in: urls } },
+      select: { url: true, status: true },
+    })
+    const existingUrls = new Set(
+      existingJobs.map((j) => j.url?.trim().replace(/\/$/, '') ?? '').filter(Boolean)
+    )
+
+    const verboseDedup =
+      process.env.TRACKD_BOT_SEARCH_VERBOSE === '1' ||
+      process.env.TRACKD_BOT_SEARCH_VERBOSE === 'true'
+
+    const allExistingJobs = await prisma.job.findMany({
+      where: { userId },
+      select: { company: true, title: true },
+    })
+    const existingTitleKeys = new Set(
+      allExistingJobs.map((j) => `${j.company.toLowerCase().trim()}::${j.title.toLowerCase().trim()}`)
+    )
+
+    const dismissedRows = await prisma.dismissedJobImport.findMany({
+      where: { userId },
+      select: { fingerprint: true },
+    })
+    const dismissedFp = new Set(dismissedRows.map((r) => r.fingerprint))
+
+    const seenInBatch = new Set<string>()
+    const newJobs: SearchJobResult[] = []
+    const urlToSeq = new Map<string, number>()
+    const noUrlSeqOrdered: number[] = []
+
+    const baseMutable = (job: SearchJobResult, seq: number): Omit<MutableListing, 'finalized'> => ({
+      sequence: seq,
+      importSource: job.source || 'unknown',
+      title: job.title.slice(0, 500),
+      company: job.company.slice(0, 300),
+      url: job.url?.slice(0, 2000) ?? null,
+      jobSnapshot: compactJobForAudit(job),
+      minScoreAtRun: botConfig.minScore,
+      stage: BOT_LISTING_STAGE.SAVED,
+      outcome: BOT_LISTING_OUTCOME.ACCEPTED,
+      evaluated: false,
+      score: null,
+      shouldApply: null,
+      flags: [],
+      reasoning: null,
+      resumeMatch: null,
+      scoringInputs: null,
+      decisionReason: null,
+      errorMessage: null,
+    })
+
+    for (let seq = 0; seq < searchResponse.jobs.length; seq++) {
+      const job = searchResponse.jobs[seq]
+
+      if (!job.url?.trim()) {
+        if (dismissedFp.has(dismissedFingerprintForTitleCompany(job))) {
+          result.skippedPreviouslyDismissed++
+          auditBySeq.set(seq, {
+            ...baseMutable(job, seq),
+            finalized: true,
+            stage: BOT_LISTING_STAGE.DEDUP_DISMISSED,
+            outcome: BOT_LISTING_OUTCOME.SKIPPED,
+            scoringInputs: skippedScoringNote(BOT_LISTING_STAGE.DEDUP_DISMISSED),
+            decisionReason: 'You removed this listing earlier — it will not be re-imported.',
+          })
+          continue
         }
+        noUrlSeqOrdered.push(seq)
+        auditBySeq.set(seq, {
+          ...baseMutable(job, seq),
+          finalized: false,
+          stage: 'awaiting_eval',
+          outcome: 'pending',
+        })
+        continue
       }
 
-      let salary: string | undefined
-      if (job.salary_min || job.salary_max) {
-        const currency = job.salary_currency || 'USD'
-        salary = job.salary_min && job.salary_max
-          ? `${currency} ${job.salary_min.toLocaleString()}–${job.salary_max.toLocaleString()}`
-          : `${currency} ${(job.salary_min || job.salary_max)!.toLocaleString()}`
+      const url = normalizeJobUrl(job.url!)
+      if (
+        dismissedFp.has(dismissedFingerprintForUrl(job.url!)) ||
+        dismissedFp.has(dismissedFingerprintForTitleCompany(job))
+      ) {
+        result.skippedPreviouslyDismissed++
+        if (verboseDedup) {
+          pushLog('info', `Dedup dismissed (deleted earlier): ${job.title} @ ${job.company} — ${url}`)
+        }
+        auditBySeq.set(seq, {
+          ...baseMutable(job, seq),
+          finalized: true,
+          stage: BOT_LISTING_STAGE.DEDUP_DISMISSED,
+          outcome: BOT_LISTING_OUTCOME.SKIPPED,
+          scoringInputs: skippedScoringNote(BOT_LISTING_STAGE.DEDUP_DISMISSED),
+          decisionReason: 'You removed this listing earlier — it will not be re-imported.',
+        })
+        continue
       }
 
-      const tags = ['bot-found']
-      if (shouldApply) tags.push('bot-approved')
-      if (job.is_remote) tags.push('remote')
+      if (existingUrls.has(url)) {
+        result.skippedExistingByUrl++
+        if (verboseDedup) {
+          pushLog('info', `Dedup URL (already in DB): ${job.title} @ ${job.company} — ${url}`)
+        }
+        auditBySeq.set(seq, {
+          ...baseMutable(job, seq),
+          finalized: true,
+          stage: BOT_LISTING_STAGE.DEDUP_URL,
+          outcome: BOT_LISTING_OUTCOME.SKIPPED,
+          scoringInputs: skippedScoringNote(BOT_LISTING_STAGE.DEDUP_URL),
+          decisionReason: 'Same URL already exists in your job tracker.',
+        })
+        continue
+      }
 
-      await prisma.job.create({
-        data: {
-          userId,
-          title: job.title,
-          company: job.company,
-          location: job.location ?? null,
-          url: job.url ?? null,
-          source: sourceToPrismaSource(job.source),
-          salary,
-          tags,
-          botScore: score > 0 ? score : null,
-          botReasoning: reasoning || null,
-          activities: {
-            create: {
-              userId,
-              type: 'NOTE',
-              description: `Bot found via ${job.source}${score > 0 ? ` · AI score ${score}/100` : ''}`,
+      const key = companyTitleKey(job)
+      if (existingTitleKeys.has(key)) {
+        result.skippedExistingByTitle++
+        if (verboseDedup) {
+          pushLog('info', `Dedup title+company (already in DB): ${job.title} @ ${job.company}`)
+        } else {
+          pushLog('info', `Skipping existing: ${job.title} @ ${job.company}`)
+        }
+        auditBySeq.set(seq, {
+          ...baseMutable(job, seq),
+          finalized: true,
+          stage: BOT_LISTING_STAGE.DEDUP_TITLE,
+          outcome: BOT_LISTING_OUTCOME.SKIPPED,
+          scoringInputs: skippedScoringNote(BOT_LISTING_STAGE.DEDUP_TITLE),
+          decisionReason: 'Same company + title already in your tracker (URL may differ).',
+        })
+        continue
+      }
+
+      if (seenInBatch.has(key)) {
+        result.skippedBatchDuplicate++
+        if (verboseDedup) {
+          pushLog('info', `Dedup batch (duplicate in this run): ${job.title} @ ${job.company}`)
+        } else {
+          pushLog('info', `Skipping batch duplicate: ${job.title} @ ${job.company}`)
+        }
+        auditBySeq.set(seq, {
+          ...baseMutable(job, seq),
+          finalized: true,
+          stage: BOT_LISTING_STAGE.DEDUP_BATCH,
+          outcome: BOT_LISTING_OUTCOME.SKIPPED,
+          scoringInputs: skippedScoringNote(BOT_LISTING_STAGE.DEDUP_BATCH),
+          decisionReason: 'Duplicate company + title within this search result set.',
+        })
+        continue
+      }
+
+      seenInBatch.add(key)
+      urlToSeq.set(url, seq)
+      auditBySeq.set(seq, {
+        ...baseMutable(job, seq),
+        finalized: false,
+        stage: 'awaiting_eval',
+        outcome: 'pending',
+      })
+      newJobs.push(job)
+    }
+
+    const dedupTotal =
+      result.skippedExistingByUrl +
+      result.skippedExistingByTitle +
+      result.skippedBatchDuplicate +
+      result.skippedPreviouslyDismissed
+    pushLog(
+      'info',
+      `Dedup vs DB & batch: ${dedupTotal} skipped ` +
+        `(url=${result.skippedExistingByUrl} title=${result.skippedExistingByTitle} batch=${result.skippedBatchDuplicate} dismissed=${result.skippedPreviouslyDismissed}), ` +
+        `${newJobs.length} new listings to evaluate (min score ${botConfig.minScore})`
+    )
+
+    const noUrlJobs = searchResponse.jobs.filter((j) => !j.url?.trim())
+    const allNewJobs: SearchJobResult[] = [...newJobs, ...noUrlJobs]
+
+    if (allNewJobs.length === 0) {
+      pushLog('info', `No new jobs for user ${userId} — all already tracked or duplicate in batch`)
+      auditFinished = true
+      return result
+    }
+
+    pushLog(
+      'info',
+      `Evaluating up to ${allNewJobs.length} listing(s) for user ${userId} (OpenAI saves only if score ≥ ${botConfig.minScore})`
+    )
+
+    let noUrlIdx = 0
+    const openAi = !!process.env.OPENAI_API_KEY
+
+    for (const job of allNewJobs) {
+      let seq: number | undefined
+      if (job.url?.trim()) {
+        seq = urlToSeq.get(normalizeJobUrl(job.url!))
+      } else {
+        seq = noUrlSeqOrdered[noUrlIdx++]
+      }
+      if (seq === undefined) {
+        pushLog('error', `Internal: could not resolve audit sequence for "${job.title}" @ ${job.company}`)
+        continue
+      }
+
+      const audit = auditBySeq.get(seq)
+      if (!audit) {
+        pushLog('error', `Internal: missing audit bucket for seq ${seq}`)
+        continue
+      }
+
+      try {
+        let score = 0
+        let shouldApply = false
+        let reasoning = ''
+        let flags: string[] = []
+        let evaluated = false
+        let resumeMatch: string | null = null
+        let scoringInputs: Prisma.InputJsonValue | null = null
+
+        if (openAi) {
+          try {
+            const { evaluation, scoringInputs: si } = await evaluateJob(job, botConfig)
+            score = evaluation.score
+            shouldApply = evaluation.shouldApply
+            reasoning = evaluation.reasoning
+            flags = evaluation.flags
+            resumeMatch = evaluation.resumeMatch ?? null
+            scoringInputs = si as unknown as Prisma.InputJsonValue
+            evaluated = true
+            result.jobsEvaluated++
+            if (shouldApply) result.jobsApproved++
+          } catch (evalErr) {
+            const errMsg = evalErr instanceof Error ? evalErr.message : String(evalErr)
+            pushLog('warn', `Eval failed for "${job.title}"`, errMsg)
+            auditBySeq.set(seq, {
+              ...audit,
+              finalized: true,
+              stage: BOT_LISTING_STAGE.EVAL_FAILED,
+              outcome: BOT_LISTING_OUTCOME.REJECTED,
+              evaluated: false,
+              score: null,
+              shouldApply: null,
+              flags: [],
+              reasoning: null,
+              resumeMatch: null,
+              scoringInputs: {
+                note: 'Evaluator threw before completing.',
+                error: errMsg.slice(0, 2000),
+              },
+              decisionReason: 'AI evaluation failed — listing not saved.',
+              errorMessage: errMsg.slice(0, 4000),
+            })
+            continue
+          }
+        } else {
+          scoringInputs = noOpenAiSnapshot()
+        }
+
+        if (evaluated && !shouldApply) {
+          result.jobsSkippedLowScore++
+          const minS = botConfig.minScore
+          result.evaluationSkips.push({
+            title: job.title.slice(0, 200),
+            company: job.company.slice(0, 120),
+            score,
+            minScore: minS,
+            flags,
+            reasoning: reasoning.slice(0, REASONING_STORE_MAX),
+            resumeMatch: resumeMatch ?? undefined,
+          })
+          const flagStr = flags.length ? flags.join(', ') : 'none'
+          pushLog(
+            'info',
+            `Below AI threshold (not saved): ${job.title} @ ${job.company} — score ${score}/${minS} | flags: ${flagStr} | ${oneLineExcerpt(reasoning, REASONING_LOG_MAX)}`
+          )
+          auditBySeq.set(seq, {
+            ...audit,
+            finalized: true,
+            stage: BOT_LISTING_STAGE.BELOW_THRESHOLD,
+            outcome: BOT_LISTING_OUTCOME.REJECTED,
+            evaluated: true,
+            score,
+            shouldApply: false,
+            flags,
+            reasoning,
+            resumeMatch,
+            scoringInputs,
+            decisionReason: `AI score ${score} is below your minimum (${minS}).`,
+          })
+          continue
+        }
+
+        let salary: string | undefined
+        if (job.salary_min || job.salary_max) {
+          const currency = job.salary_currency || 'USD'
+          salary =
+            job.salary_min && job.salary_max
+              ? `${currency} ${job.salary_min.toLocaleString()}–${job.salary_max.toLocaleString()}`
+              : `${currency} ${(job.salary_min || job.salary_max)!.toLocaleString()}`
+        }
+
+        const tags = ['bot-found']
+        if (shouldApply && evaluated) tags.push('bot-approved')
+        if (job.is_remote) tags.push('remote')
+
+        await prisma.job.create({
+          data: {
+            userId,
+            title: job.title,
+            company: job.company,
+            location: job.location ?? null,
+            url: job.url ?? null,
+            importSource: job.source || null,
+            importJobBoard: job.jobBoard?.trim() || null,
+            source: sourceToPrismaSource(job.source),
+            salary,
+            tags,
+            botScore: score > 0 ? score : null,
+            botReasoning: reasoning || null,
+            activities: {
+              create: {
+                userId,
+                type: 'NOTE',
+                description: `Bot found via ${job.source}${score > 0 ? ` · AI score ${score}/100` : ''}`,
+              },
             },
           },
-        },
-      })
-    } catch (saveErr) {
-      const msg = saveErr instanceof Error ? saveErr.message : String(saveErr)
-      console.error(`[bot] Failed to save "${job.title}":`, msg)
-      result.errors[`save_${job.title.slice(0, 30)}`] = msg
+        })
+        result.jobsNew++
+        if (evaluated && shouldApply) {
+          const flagStr = flags.length ? flags.join(', ') : 'none'
+          pushLog(
+            'info',
+            `Saved (meets threshold): ${job.title} @ ${job.company} — score ${score}/${botConfig.minScore} | flags: ${flagStr} | ${oneLineExcerpt(reasoning, REASONING_LOG_MAX)}`
+          )
+          auditBySeq.set(seq, {
+            ...audit,
+            finalized: true,
+            stage: BOT_LISTING_STAGE.SAVED,
+            outcome: BOT_LISTING_OUTCOME.ACCEPTED,
+            evaluated: true,
+            score,
+            shouldApply: true,
+            flags,
+            reasoning,
+            resumeMatch,
+            scoringInputs,
+            decisionReason: `Saved — score ${score} meets or exceeds minimum (${botConfig.minScore}).`,
+          })
+        } else if (!evaluated && !openAi) {
+          pushLog(
+            'info',
+            `Saved (no AI): ${job.title} @ ${job.company} — OPENAI_API_KEY unset`
+          )
+          auditBySeq.set(seq, {
+            ...audit,
+            finalized: true,
+            stage: BOT_LISTING_STAGE.SAVED_NO_AI,
+            outcome: BOT_LISTING_OUTCOME.ACCEPTED,
+            evaluated: false,
+            score: null,
+            shouldApply: null,
+            flags: [],
+            reasoning: null,
+            resumeMatch: null,
+            scoringInputs,
+            decisionReason:
+              'Saved without AI scoring because OPENAI_API_KEY is not configured on the server.',
+          })
+        }
+      } catch (saveErr) {
+        const msg = saveErr instanceof Error ? saveErr.message : String(saveErr)
+        pushLog('error', `Failed to save "${job.title}": ${msg}`)
+        result.errors[`save_${job.title.slice(0, 30)}`] = msg
+        const prev = auditBySeq.get(seq)!
+        auditBySeq.set(seq, {
+          ...prev,
+          finalized: true,
+          stage: BOT_LISTING_STAGE.SAVE_FAILED,
+          outcome: BOT_LISTING_OUTCOME.REJECTED,
+          errorMessage: msg.slice(0, 4000),
+          decisionReason: `Database save failed: ${msg.slice(0, 500)}`,
+        })
+      }
     }
-  }
 
-  return result
+    pushLog(
+      'info',
+      `Pipeline done: found=${result.jobsFound} saved=${result.jobsNew} ` +
+        `approved=${result.jobsApproved} below_AI_threshold=${result.jobsSkippedLowScore} ` +
+        `dedup_url=${result.skippedExistingByUrl} dedup_title=${result.skippedExistingByTitle} dedup_batch=${result.skippedBatchDuplicate} dedup_dismissed=${result.skippedPreviouslyDismissed}`
+    )
+
+    auditFinished = true
+    return result
+  } finally {
+    await persistLogs()
+    await persistListingAudit()
+  }
 }

@@ -11,7 +11,7 @@
 import OpenAI from 'openai'
 import { getAIConfig, getResumeAIConfig, calculateCost } from './config'
 import { AIConfig } from './types'
-import { AIResponse, AIError } from './types'
+import { AIResponse } from './types'
 
 export class AIClient {
   private client: OpenAI
@@ -116,14 +116,15 @@ export class AIClient {
   }
 
   /**
-   * Create a standardized AI error
+   * Throw a real Error so callers and logs see a message (plain AIError objects stringify as [object Object]).
    */
-  private createAIError(error: Error, retryable: boolean): AIError {
-    return {
-      message: error.message,
-      code: error instanceof OpenAI.APIError ? (error.code ?? undefined) : undefined,
-      retryable,
+  private createAIError(error: Error, retryable: boolean): never {
+    const e = new Error(error.message)
+    ;(e as Error & { code?: string; retryable: boolean }).retryable = retryable
+    if (error instanceof OpenAI.APIError && error.code != null) {
+      ;(e as Error & { code?: string }).code = String(error.code)
     }
+    throw e
   }
 
   /**

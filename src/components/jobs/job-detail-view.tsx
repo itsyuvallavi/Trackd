@@ -25,7 +25,8 @@ import {
 } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { useRelativeTime } from '@/hooks/use-relative-time'
-import { STATUS_COLORS, STATUS_LABELS, SOURCE_LABELS, PRIORITY_LABELS } from '@/lib/constants'
+import { STATUS_COLORS, STATUS_LABELS, PRIORITY_LABELS } from '@/lib/constants'
+import { jobSourceDisplayName } from '@/lib/job-source-display'
 import { updateJobNotes } from '@/app/(authenticated)/jobs/actions'
 
 interface JobDetailViewProps {
@@ -153,8 +154,13 @@ export function JobDetailView({ job }: JobDetailViewProps) {
                   <div className="flex items-start gap-3">
                     <FileText className="size-5 text-muted-foreground mt-0.5 shrink-0" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-muted-foreground">Source</p>
-                      <p className="font-medium break-words">{SOURCE_LABELS[job.source]}</p>
+                      <p className="text-sm text-muted-foreground">Fetched via (API)</p>
+                      <p className="font-medium break-words">
+                        {jobSourceDisplayName(job.importSource, job.source, job.importJobBoard, {
+                          tags: job.tags ?? [],
+                          activities: job.activities,
+                        })}
+                      </p>
                     </div>
                   </div>
                 )}

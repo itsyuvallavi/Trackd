@@ -4,6 +4,7 @@
  */
 
 import type { Page } from 'playwright-core'
+import { logApply, truncate } from '../apply-log'
 import { answerCustomField } from '../field-filler'
 import type { ApplicationProfile } from '@prisma/client'
 import type { ResumeStructuredData } from '@/lib/bot/resume/types'
@@ -28,6 +29,7 @@ export async function fillLeverApplication(
   resumeFilePath: string | null,
   job: JobCtx
 ): Promise<FillResult> {
+  logApply('lever_start', { url: truncate(url, 120), job: truncate(`${job.title} @ ${job.company}`, 80) })
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 })
   await page.waitForTimeout(1500)
 
@@ -131,10 +133,12 @@ export async function fillLeverApplication(
   await page.waitForTimeout(500)
   const screenshot = await page.screenshot({ fullPage: true })
 
+  logApply('lever_done', { fieldsFilledCount, skippedCount: skippedFields.length })
   return { fieldsFilledCount, skippedFields, screenshot }
 }
 
 export async function submitLeverApplication(page: Page): Promise<void> {
+  logApply('lever_submit_click', {})
   const submitBtn = page.locator(
     'button[type="submit"], button:has-text("Submit application"), button:has-text("Apply")'
   ).last()

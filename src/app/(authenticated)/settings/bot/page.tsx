@@ -1,8 +1,23 @@
+import type { ComponentProps } from 'react'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { AppShell } from '@/components/layout/app-shell'
 import { BotSettingsContent } from '@/components/bot/bot-settings-content'
 import { BotResumeManager } from '@/components/bot/bot-resume-manager'
+import { sanitizeJsonClone, serializeForClient } from '@/lib/serialize-for-client'
+import {
+  BOT_SEARCH_KEYWORD_OR_MAX,
+  BOT_SEARCH_LOCATION_PASSES_MAX,
+  BOT_SEARCH_RESULTS_WANTED,
+  describeJSearchDateWindow,
+} from '@/lib/bot/search-constants'
+import { jobsSearchApiRapidApiKey } from '@/lib/bot/rapidapi-jobs-search-keys'
+import { botSearchHasQueryableBackend } from '@/lib/bot/bot-search-sources'
+
+/** Allow long-running bot search from "Run now" (same ceiling as /api/cron/bot-search). */
+export const maxDuration = 300
+
+type BotResumeManagerResumes = ComponentProps<typeof BotResumeManager>['initialResumes']
 
 export default async function BotSettingsPage() {
   const user = await requireAuth()
@@ -43,7 +58,16 @@ export default async function BotSettingsPage() {
   ])
 
   const telegramConfigured = !!process.env.TELEGRAM_BOT_TOKEN
-  const searchServiceConfigured = !!(process.env.JSEARCH_API_KEY || process.env.SERP_API_KEY)
+  const searchServiceConfigured = botSearchHasQueryableBackend()
+
+  const recentRunsSafe = recentRuns.map((r) => ({
+    ...r,
+    errors: sanitizeJsonClone(r.errors),
+  }))
+  const resumesSafe = resumes.map((r) => ({
+    ...r,
+    structuredData: sanitizeJsonClone(r.structuredData),
+  }))
 
   return (
     <AppShell>
@@ -57,12 +81,29 @@ export default async function BotSettingsPage() {
             </p>
           </div>
           <BotSettingsContent
-            initialConfig={botConfig}
-            recentRuns={recentRuns}
+            initialConfig={serializeForClient(botConfig)}
+            recentRuns={serializeForClient(recentRunsSafe)}
             telegramConfigured={telegramConfigured}
             searchServiceConfigured={searchServiceConfigured}
+            searchBackends={{
+              jsearch: !!process.env.JSEARCH_API_KEY,
+              jobsSearchApi: jobsSearchApiRapidApiKey().length > 0,
+            }}
+            searchUiCaps={{
+              keywordOrMax: BOT_SEARCH_KEYWORD_OR_MAX,
+              locationPassesMax: BOT_SEARCH_LOCATION_PASSES_MAX,
+              resultsTarget: BOT_SEARCH_RESULTS_WANTED,
+              jsearchDateLabel: describeJSearchDateWindow(),
+            }}
           />
-          <BotResumeManager initialResumes={resumes.map((r) => ({ ...r, createdAt: r.createdAt.toISOString(), structuredData: r.structuredData as import('@/lib/bot/resume/types').ResumeStructuredData | null }))} />
+          <BotResumeManager
+            initialResumes={
+              serializeForClient(resumesSafe).map((r) => ({
+                ...r,
+                structuredData: r.structuredData as import('@/lib/bot/resume/types').ResumeStructuredData | null,
+              })) as unknown as BotResumeManagerResumes
+            }
+          />
         </div>
       </div>
     </AppShell>

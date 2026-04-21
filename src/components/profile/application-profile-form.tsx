@@ -5,8 +5,13 @@ import { updateApplicationProfile } from '@/app/(authenticated)/profile/actions'
 import { CheckCircle } from 'lucide-react'
 import type { ApplicationProfile } from '@prisma/client'
 
+/** Password is never sent to the client; `hasPortalSignupPassword` indicates one is stored. */
+export type ApplicationProfileFormProps = Omit<ApplicationProfile, 'portalSignupPassword'> & {
+  hasPortalSignupPassword?: boolean
+}
+
 interface Props {
-  profile: ApplicationProfile | null
+  profile: ApplicationProfileFormProps | null
 }
 
 const inputCls =
@@ -48,6 +53,61 @@ export function ApplicationProfileForm({ profile }: Props) {
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
+      {/* Identity for auto-apply / job-board signup */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+          Application identity
+        </p>
+        <p className="text-xs text-muted-foreground mb-3">
+          Used by the apply bot for your legal name, email, and optional host job-board password (signup
+          gates). The bot still will not click final &quot;Sign up&quot; — you confirm from the screenshot.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className={labelCls}>Legal name</label>
+            <input
+              type="text"
+              name="applicationFullName"
+              defaultValue={profile?.applicationFullName ?? ''}
+              placeholder="As on ID / applications"
+              className={inputCls}
+              autoComplete="name"
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Application email</label>
+            <input
+              type="email"
+              name="applicationEmail"
+              defaultValue={profile?.applicationEmail ?? ''}
+              placeholder="you@example.com"
+              className={inputCls}
+              autoComplete="email"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className={labelCls}>Host job-board password (optional)</label>
+            <input
+              type="password"
+              name="portalSignupPassword"
+              placeholder={
+                profile?.hasPortalSignupPassword
+                  ? 'Leave blank to keep current password'
+                  : 'Unique password for job-board signups only'
+              }
+              className={inputCls}
+              autoComplete="new-password"
+            />
+            {profile?.hasPortalSignupPassword ? (
+              <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                <input type="checkbox" name="clearPortalSignupPassword" className="rounded border-border" />
+                Remove saved job-board password
+              </label>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
       {/* Contact & Location */}
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">

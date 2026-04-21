@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { FeedbackList } from '@/components/admin/feedback-list'
+import { serializeForClient } from '@/lib/serialize-for-client'
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'info@yuvallavi.com'
 
@@ -52,7 +53,7 @@ export default async function AdminFeedbackPage() {
           Review and manage user feedback submissions
         </p>
       </div>
-      <FeedbackList feedback={enrichedFeedback} />
+      <FeedbackList feedback={serializeForClient(enrichedFeedback)} />
     </div>
   )
 }

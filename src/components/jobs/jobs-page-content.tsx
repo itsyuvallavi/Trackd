@@ -19,6 +19,8 @@ import { EmptyState } from '@/components/jobs/empty-state'
 import { ExtensionPopup } from '@/components/jobs/extension-popup'
 import { Tooltip } from '@/components/ui/tooltip'
 import { STATUS_LABELS } from '@/lib/constants'
+import type { JobSource } from '@prisma/client'
+import { jobSourceDisplayName } from '@/lib/job-source-display'
 import { JobCardMobile } from '@/components/jobs/job-card-mobile'
 import { useColumnVisibility, type ColumnKey } from '@/components/jobs/column-visibility-settings'
 import { cn } from '@/lib/utils'
@@ -58,6 +60,9 @@ interface Job {
   company: string
   title: string
   source: string
+  importSource?: string | null
+  importJobBoard?: string | null
+  tags?: string[]
   location: string | null
   status: string
   notes: string | null
@@ -102,13 +107,23 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(job =>
-        job.company.toLowerCase().includes(query) ||
-        job.title.toLowerCase().includes(query) ||
-        job.location?.toLowerCase().includes(query) ||
-        job.source.toLowerCase().includes(query) ||
-        (job.notes?.toLowerCase().includes(query) ?? false)
-      )
+      filtered = filtered.filter((job) => {
+        const srcLabel = jobSourceDisplayName(
+          job.importSource ?? null,
+          job.source as JobSource,
+          job.importJobBoard,
+          { tags: job.tags }
+        )
+        return (
+          job.company.toLowerCase().includes(query) ||
+          job.title.toLowerCase().includes(query) ||
+          job.location?.toLowerCase().includes(query) ||
+          job.source.toLowerCase().includes(query) ||
+          srcLabel.toLowerCase().includes(query) ||
+          (job.importSource?.toLowerCase().includes(query) ?? false) ||
+          (job.notes?.toLowerCase().includes(query) ?? false)
+        )
+      })
     }
 
     // Filter by date range
@@ -258,9 +273,9 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                       {visibleColumns.has('source') && (
                         <TableHead 
                           className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5"
-                          style={{ width: '120px', minWidth: '120px', maxWidth: '120px' }}
+                          style={{ width: '220px', minWidth: '220px', maxWidth: '280px' }}
                         >
-                          Source
+                          Fetched via (API)
                         </TableHead>
                       )}
                     {visibleColumns.has('location') && (
@@ -320,10 +335,15 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                       )}
                       {visibleColumns.has('source') && (
                         <TableCell 
-                          className="text-xs text-muted-foreground py-1.5"
-                          style={{ width: '120px', minWidth: '120px', maxWidth: '120px' }}
+                          className="text-xs text-muted-foreground py-1.5 break-words"
+                          style={{ width: '220px', minWidth: '220px', maxWidth: '280px' }}
                         >
-                          {job.source}
+                          {jobSourceDisplayName(
+                            job.importSource ?? null,
+                            job.source as JobSource,
+                            job.importJobBoard,
+                            { tags: job.tags }
+                          )}
                         </TableCell>
                       )}
                       {visibleColumns.has('location') && (
@@ -356,7 +376,11 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                       )}
                       <TableCell className="text-center py-1.5" style={{ width: '64px', minWidth: '64px', maxWidth: '64px' }}>
                         <div className="flex justify-center">
-                          <JobActionsMenu jobId={job.id} />
+                          <JobActionsMenu
+                            jobId={job.id}
+                            jobTitle={job.title}
+                            jobCompany={job.company}
+                          />
                         </div>
                       </TableCell>
                     </TableRow>

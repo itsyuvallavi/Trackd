@@ -23,7 +23,7 @@ interface ColumnVisibilitySettingsProps {
 const COLUMN_LABELS: Record<ColumnKey, string> = {
   role: 'Role',
   company: 'Company',
-  source: 'Source',
+  source: 'Fetched via (API)',
   location: 'Location',
   status: 'Status',
   notes: 'Notes',

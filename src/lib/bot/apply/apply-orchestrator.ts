@@ -9,10 +9,13 @@ import { withBrowser } from './browser'
 import { fillGreenhouseApplication, submitGreenhouseApplication } from './adapters/greenhouse'
 import { fillLeverApplication, submitLeverApplication } from './adapters/lever'
 import { fillGenericApplication, submitGenericApplication } from './adapters/generic'
+import { logApply } from '@/lib/bot/apply/apply-log'
+import { isUnsafeFullAutomation } from '@/lib/bot/apply/automation-mode'
 import { prisma } from '@/lib/prisma'
 import { pickResumeForJob } from '@/lib/bot/resume/parser'
 import type { ApplicationProfile } from '@prisma/client'
 import type { ResumeStructuredData } from '@/lib/bot/resume/types'
+import type { ApplicationJobContext } from '@/lib/bot/apply/knowledge-bank'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const fs = require('fs') as typeof import('fs')
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -64,6 +67,8 @@ export interface ApplyResult {
   screenshotUrls: string[]
   fieldsFilledCount: number
   skippedFields: string[]
+  /** Short lines for the UI — what the bot did without relying on the screenshot */
+  applySummary: string[]
   atsType: string
   error?: string
 }
@@ -73,15 +78,14 @@ export async function runApplicationFill(
   userId: string,
   jobId: string
 ): Promise<ApplyResult> {
-  // Update attempt to "filling"
-  await prisma.applicationAttempt.update({
-    where: { id: attemptId },
-    data: { status: 'filling' },
-  })
-
   let screenshotUrls: string[] = []
 
   try {
+    await prisma.applicationAttempt.update({
+      where: { id: attemptId },
+      data: { status: 'filling' },
+    })
+
     // Load job
     const job = await prisma.job.findFirstOrThrow({
       where: { id: jobId, userId },
@@ -116,7 +120,23 @@ export async function runApplicationFill(
     // Download resume PDF to temp disk (browser needs a local file path)
     const resumeFilePath = resumeFileUrl ? await downloadResumeToDisk(resumeFileUrl) : null
 
-    const jobCtx = { title: job.title, company: job.company, description: job.botReasoning }
+    const jobCtx: ApplicationJobContext = {
+      title: job.title,
+      company: job.company,
+      description: job.botReasoning,
+      jobUrl: job.url ?? undefined,
+      applicationEmail: profile?.applicationEmail?.trim() ?? null,
+    }
+
+    logApply('fill_start', {
+      attemptId,
+      jobId,
+      userId,
+      atsType,
+      hasResumeFile: Boolean(resumeFilePath),
+      url: job.url?.slice(0, 200) ?? null,
+      unsafeFullAutomation: isUnsafeFullAutomation(),
+    })
 
     const { screenshot, fieldsFilledCount, skippedFields } = await withBrowser(async (page) => {
       switch (atsType) {
@@ -137,6 +157,17 @@ export async function runApplicationFill(
     // Upload screenshot
     const screenshotUrl = await uploadScreenshot(userId, attemptId, 0, screenshot)
     screenshotUrls = [screenshotUrl]
+    logApply('screenshot_uploaded', {
+      attemptId,
+      jobId,
+      userId,
+      bytes: screenshot.length,
+      atsType,
+      fieldsFilledCount,
+      url: screenshotUrl,
+    })
+
+    const applySummary = buildApplySummary(atsType, fieldsFilledCount, skippedFields)
 
     // Save result to DB
     await prisma.applicationAttempt.update({
@@ -145,21 +176,58 @@ export async function runApplicationFill(
         status: 'awaiting_review',
         atsType,
         screenshots: screenshotUrls,
-        formData: { fieldsFilledCount, skippedFields },
+        formData: { fieldsFilledCount, skippedFields, applySummary },
       },
     })
 
-    return { success: true, screenshotUrls, fieldsFilledCount, skippedFields, atsType }
+    logApply('fill_done', { attemptId, jobId, atsType, fieldsFilledCount, skippedFields })
+    return {
+      success: true,
+      screenshotUrls,
+      fieldsFilledCount,
+      skippedFields,
+      applySummary,
+      atsType,
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
+    logApply('fill_failed', { attemptId, jobId, error: msg.slice(0, 500) })
 
     await prisma.applicationAttempt.update({
       where: { id: attemptId },
       data: { status: 'failed', errorMessage: msg },
     }).catch(() => {})
 
-    return { success: false, screenshotUrls, fieldsFilledCount: 0, skippedFields: [], atsType: 'unknown', error: msg }
+    return {
+      success: false,
+      screenshotUrls,
+      fieldsFilledCount: 0,
+      skippedFields: [],
+      applySummary: [],
+      atsType: 'unknown',
+      error: msg,
+    }
   }
+}
+
+function buildApplySummary(
+  atsType: string,
+  fieldsFilledCount: number,
+  skippedFields: string[]
+): string[] {
+  const lines = [
+    `Detected a ${atsType} application form and opened the posting.`,
+    `Filled ${fieldsFilledCount} field(s) from your application profile and resume.`,
+  ]
+  if (skippedFields.length > 0) {
+    lines.push(
+      `Did not change or skipped ${skippedFields.length} field(s): ${skippedFields.join(', ')}.`
+    )
+  }
+  lines.push(
+    'Review the page preview below (scroll or open full size in a new tab), then confirm to submit.'
+  )
+  return lines
 }
 
 export async function runApplicationSubmit(
@@ -175,15 +243,17 @@ export async function runApplicationSubmit(
     return { success: false, error: `Cannot submit — status is "${attempt.status}"` }
   }
 
-  await prisma.applicationAttempt.update({
-    where: { id: attemptId },
-    data: { status: 'submitting' },
-  })
-
   try {
+    await prisma.applicationAttempt.update({
+      where: { id: attemptId },
+      data: { status: 'submitting' },
+    })
+
+    logApply('submit_start', { attemptId, jobId: attempt.jobId, userId, atsType: attempt.atsType })
+
     const job = await prisma.job.findFirstOrThrow({
       where: { id: jobId, userId },
-      select: { url: true },
+      select: { url: true, title: true, company: true, botReasoning: true },
     })
     if (!job.url) throw new Error('No URL')
 
@@ -199,7 +269,7 @@ export async function runApplicationSubmit(
     let resume: ResumeStructuredData | null = null
     let resumeFileUrl: string | null = null
     if (resumes.length > 0) {
-      const bestId = pickResumeForJob(resumes, attempt.atsType)
+      const bestId = pickResumeForJob(resumes, job.title)
       const matched = resumes.find((r) => r.id === bestId)
       if (matched) {
         resume = matched.structuredData as unknown as ResumeStructuredData
@@ -208,7 +278,13 @@ export async function runApplicationSubmit(
     }
 
     const resumeFilePath = resumeFileUrl ? await downloadResumeToDisk(resumeFileUrl) : null
-    const jobCtx = { title: atsType, company: '' }
+    const jobCtx: ApplicationJobContext = {
+      title: job.title,
+      company: job.company,
+      description: job.botReasoning,
+      jobUrl: job.url ?? undefined,
+      applicationEmail: profile?.applicationEmail?.trim() ?? null,
+    }
 
     await withBrowser(async (page) => {
       switch (atsType) {
@@ -261,9 +337,11 @@ export async function runApplicationSubmit(
       }),
     ])
 
+    logApply('submit_done', { attemptId, jobId, userId, atsType: attempt.atsType })
     return { success: true }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
+    logApply('submit_failed', { attemptId, jobId, error: msg.slice(0, 500) })
     await prisma.applicationAttempt.update({
       where: { id: attemptId },
       data: { status: 'failed', errorMessage: msg },

@@ -5,6 +5,7 @@ import { JobStatus } from '@prisma/client'
 import { startOfMonth, endOfMonth } from 'date-fns'
 import { CalendarPageWrapper } from '@/components/calendar/calendar-page-wrapper'
 import { CalendarEvent } from '@/components/calendar/calendar-page-content'
+import { serializeForClient } from '@/lib/serialize-for-client'
 
 function buildEvents(jobs: any[]): CalendarEvent[] {
   const events: CalendarEvent[] = []
@@ -95,7 +96,7 @@ export default async function CalendarPage({
   return (
     <AppShell>
       <CalendarPageWrapper 
-        events={allEvents} 
+        events={serializeForClient(allEvents)} 
         monthStart={monthStart}
       />
     </AppShell>

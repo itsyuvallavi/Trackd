@@ -40,7 +40,7 @@ const nextConfig: NextConfig = {
       })
     }
 
-    return [
+    const routes = [
       // Security headers for all routes
       {
         source: '/:path*',
@@ -55,8 +55,13 @@ const nextConfig: NextConfig = {
           { key: 'Access-Control-Allow-Headers', value: 'Content-Type, X-Extension-Key' },
         ],
       },
-      // Add caching headers for static assets
-      {
+    ]
+
+    // Next.js already hashes and caches static assets correctly in production. Overriding
+    // Cache-Control on /_next/static in dev makes the browser pin stale HMR chunks, which
+    // triggers "module factory is not available" errors. Only set it in production.
+    if (process.env.NODE_ENV === 'production') {
+      routes.push({
         source: '/_next/static/:path*',
         headers: [
           ...securityHeaders,
@@ -65,8 +70,10 @@ const nextConfig: NextConfig = {
             value: 'public, max-age=31536000, immutable',
           },
         ],
-      },
-    ]
+      })
+    }
+
+    return routes
   },
 };
 

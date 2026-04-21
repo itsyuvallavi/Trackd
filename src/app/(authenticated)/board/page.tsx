@@ -4,6 +4,7 @@ import { AppShell } from '@/components/layout/app-shell'
 import dynamic from 'next/dynamic'
 import { JobStatus } from '@prisma/client'
 import { getEmailIntegration } from '@/lib/cached-queries'
+import { serializeForClient } from '@/lib/serialize-for-client'
 
 // Lazy load KanbanBoard since it's a heavy component with drag-and-drop
 const KanbanBoard = dynamic(() => import('@/components/board/kanban-board').then(mod => ({ default: mod.KanbanBoard })), {
@@ -39,14 +40,16 @@ export default async function BoardPage() {
     getEmailIntegration(user.id),
   ])
 
+  const plainJobs = serializeForClient(jobs)
+
   // Group jobs by status
   const jobsByStatus = COLUMNS.reduce((acc, column) => {
-    acc[column.status] = jobs.filter(job => job.status === column.status)
+    acc[column.status] = plainJobs.filter(job => job.status === column.status)
     return acc
-  }, {} as Record<JobStatus, typeof jobs>)
+  }, {} as Record<JobStatus, typeof plainJobs>)
 
-  const totalJobs = jobs.length
-  const activeJobs = jobs.filter(j => ['SAVED', 'APPLIED', 'INTERVIEW', 'OFFER'].includes(j.status)).length
+  const totalJobs = plainJobs.length
+  const activeJobs = plainJobs.filter(j => ['SAVED', 'APPLIED', 'INTERVIEW', 'OFFER'].includes(j.status)).length
 
   return (
     <AppShell showEmailNotification={!emailIntegration}>

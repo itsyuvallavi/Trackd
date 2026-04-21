@@ -95,6 +95,11 @@ model Job {
   botScore     Int?       // AI match score (0-100)
   botReasoning String?    // AI reasoning for the score
 
+  /** Which adapter slug produced this row (e.g. `jsearch`, `jobs_search_api`) — see job-source-display */
+  importSource    String?
+  /** When importSource is jobs_search_api, which board (indeed, glassdoor, …) */
+  importJobBoard   String?
+
   // Relations
   activities  Activity[]
   interviewSessions InterviewSession[]
@@ -107,6 +112,17 @@ model Job {
 
   @@index([userId, status])
   @@index([userId, savedAt])
+}
+
+/** Fingerprints of jobs the user deleted — bot search skips re-importing the same URL or company+title. */
+model DismissedJobImport {
+  id          String   @id @default(cuid())
+  userId      String
+  fingerprint String
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, fingerprint])
+  @@index([userId])
 }
 
 model Activity {
@@ -371,6 +387,7 @@ model BotConfig {
   locations         String[]           @default([])  // Target locations
   excludeCompanies  String[]           @default([])  // Company blocklist
   excludeKeywords   String[]           @default([])  // Negative filters in description
+  spokenLanguages   String[]           @default([]) // Fluency filters for job language requirements
   remoteOnly        Boolean            @default(false)
   experienceLevel   String?            // "entry" | "mid" | "senior" | "any"
   salaryMin         Int?               // Minimum annual salary (USD)
@@ -382,9 +399,6 @@ model BotConfig {
 
   // Notifications
   telegramChatId    String?            // Telegram chat ID for push notifications
-
-  // API keys (user-supplied, optional — fall back to system keys)
-  serpApiKey        String?
 
   // Evaluation threshold (0–100); jobs below this are not notified
   minScore          Int                @default(60)
@@ -442,17 +456,70 @@ model BotRun {
 
   // Error details
   errors          Json?
+  /** Per-run search metadata (platform stats, etc.) */
+  searchMeta      Json?
 
   // Relations
   botConfig       BotConfig    @relation(fields: [botConfigId], references: [id], onDelete: Cascade)
+  botRunLogs      BotRunLog[]
+  botRunListings  BotRunListing[]
 
   @@index([userId, startedAt])
   @@index([botConfigId, startedAt])
 }
 
+model BotRunLog {
+  id        String   @id @default(cuid())
+  botRunId  String
+  sequence  Int
+  level     String
+  message   String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  botRun    BotRun   @relation(fields: [botRunId], references: [id], onDelete: Cascade)
+
+  @@index([botRunId, sequence])
+}
+
+model BotRunListing {
+  id             String   @id @default(cuid())
+  botRunId       String
+  sequence       Int
+  importSource   String
+  stage          String
+  outcome        String
+  title          String
+  company        String
+  url            String?
+  jobSnapshot    Json
+  minScoreAtRun  Int
+  evaluated      Boolean  @default(false)
+  score          Int?
+  shouldApply    Boolean?
+  flags          String[] @default([])
+  reasoning      String?
+  resumeMatch    String?
+  scoringInputs  Json?
+  decisionReason String?
+  errorMessage   String?
+  createdAt      DateTime @default(now())
+
+  botRun         BotRun   @relation(fields: [botRunId], references: [id], onDelete: Cascade)
+
+  @@unique([botRunId, sequence])
+  @@index([botRunId, outcome])
+  @@index([botRunId, stage])
+}
+
 model ApplicationProfile {
   id                  String   @id @default(cuid())
   userId              String   @unique
+
+  /** Preferred name/email for ATS forms (may differ from Profile.name / auth email) */
+  applicationFullName String?
+  applicationEmail    String?
+  portalSignupPassword String?
 
   // Contact
   phone               String?

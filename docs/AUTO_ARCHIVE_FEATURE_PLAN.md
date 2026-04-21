@@ -7,6 +7,7 @@ Automatically archive jobs that haven't received email responses within 30 days.
 ## Requirements
 
 ### Core Functionality
+
 - **Trigger**: Jobs that haven't received email updates in 30+ days
 - **Action**: Change status to `ARCHIVED`
 - **Exclusions**: 
@@ -17,24 +18,24 @@ Automatically archive jobs that haven't received email responses within 30 days.
 ### Business Logic
 
 1. **What counts as "email activity"?**
-   - Activity records with `type: EMAIL_UPDATE`
-   - These are created when emails are synced and matched to jobs
-
+  - Activity records with `type: EMAIL_UPDATE`
+  - These are created when emails are synced and matched to jobs
 2. **When to archive?**
-   - Job status is `APPLIED`, `INTERVIEW`, or `SAVED`
-   - Last `EMAIL_UPDATE` activity was 30+ days ago
-   - Job hasn't been manually updated in last 7 days (check `updatedAt`)
-
+  - Job status is `APPLIED`, `INTERVIEW`, or `SAVED`
+  - Last `EMAIL_UPDATE` activity was 30+ days ago
+  - Job hasn't been manually updated in last 7 days (check `updatedAt`)
 3. **What NOT to archive?**
-   - Jobs with status `OFFER` (user might be negotiating)
-   - Jobs with status `REJECTED` (already handled)
-   - Jobs with status `ARCHIVED` (already archived)
-   - Jobs updated manually in last 7 days (user is actively managing)
+  - Jobs with status `OFFER` (user might be negotiating)
+  - Jobs with status `REJECTED` (already handled)
+  - Jobs with status `ARCHIVED` (already archived)
+  - Jobs updated manually in last 7 days (user is actively managing)
 
 ## Implementation Plan
 
 ### Phase 1: Database & Schema (No changes needed)
+
 ✅ Schema already supports:
+
 - `Activity` model with `type: EMAIL_UPDATE`
 - `Job` model with `status: ARCHIVED`
 - `updatedAt` field for tracking manual updates
@@ -44,12 +45,14 @@ Automatically archive jobs that haven't received email responses within 30 days.
 **File**: `src/app/api/cron/auto-archive/route.ts`
 
 Create a new cron endpoint that:
+
 1. Finds all jobs that meet archiving criteria
 2. Updates their status to `ARCHIVED`
 3. Creates `STATUS_CHANGE` activity records
 4. Returns statistics
 
 **Logic**:
+
 ```typescript
 // Find jobs to archive:
 // - Status: APPLIED, INTERVIEW, or SAVED
@@ -61,10 +64,12 @@ Create a new cron endpoint that:
 ### Phase 3: Cron Job Setup
 
 **Option A: Add to existing sync-emails cron** (Recommended)
+
 - Run auto-archive check after email sync completes
 - More efficient, runs on same schedule
 
 **Option B: Separate cron job**
+
 - New endpoint: `/api/cron/auto-archive`
 - Run daily (once per day is sufficient)
 - Add to `vercel.json`
@@ -72,6 +77,7 @@ Create a new cron endpoint that:
 ### Phase 4: Activity Tracking
 
 When archiving, create an Activity record:
+
 ```typescript
 {
   type: 'STATUS_CHANGE',
@@ -84,6 +90,7 @@ When archiving, create an Activity record:
 ### Phase 5: User Preferences (Future Enhancement)
 
 Add settings to allow users to:
+
 - Enable/disable auto-archive
 - Customize the time period (default: 30 days)
 - Choose which statuses to auto-archive
@@ -137,6 +144,7 @@ export async function archiveInactiveJobs(userId: string) {
 ### 3. Integration with Email Sync
 
 **Option**: Add auto-archive check to existing sync-emails cron:
+
 - After email sync completes successfully
 - Run archive check for that user
 - More efficient than separate cron
@@ -144,16 +152,19 @@ export async function archiveInactiveJobs(userId: string) {
 ## Testing Plan
 
 ### Unit Tests
+
 - Test archive logic with various date scenarios
 - Test exclusion rules (OFFER, recently updated, etc.)
 - Test activity creation
 
 ### Integration Tests
+
 - Test cron endpoint authentication
 - Test end-to-end archive flow
 - Test with real database queries
 
 ### Manual Testing
+
 1. Create test jobs with old EMAIL_UPDATE activities
 2. Run cron job manually
 3. Verify jobs are archived
@@ -163,31 +174,30 @@ export async function archiveInactiveJobs(userId: string) {
 ## Edge Cases
 
 1. **Job never had email activity**
-   - Should we archive? → **No** (only archive if there WAS email activity that stopped)
-
+  - Should we archive? → **No** (only archive if there WAS email activity that stopped)
 2. **Job has manual notes/updates but no emails**
-   - Should we archive? → **No** (user is actively managing it)
-
+  - Should we archive? → **No** (user is actively managing it)
 3. **Job received email but it was a rejection**
-   - Status should already be REJECTED, so won't be archived ✅
-
+  - Status should already be REJECTED, so won't be archived ✅
 4. **Multiple users**
-   - Process each user separately
-   - Don't archive other users' jobs
-
+  - Process each user separately
+  - Don't archive other users' jobs
 5. **Race conditions**
-   - Use transactions for status update + activity creation
-   - Handle concurrent updates gracefully
+  - Use transactions for status update + activity creation
+  - Handle concurrent updates gracefully
 
 ## Configuration
 
 ### Environment Variables
+
 - `AUTO_ARCHIVE_ENABLED` (default: `true`)
 - `AUTO_ARCHIVE_DAYS` (default: `30`)
 - `AUTO_ARCHIVE_EXCLUDE_RECENT_DAYS` (default: `7`)
 
 ### Future: User Preferences
+
 Add to `EmailIntegration` or new `UserPreferences` model:
+
 ```typescript
 autoArchiveEnabled: Boolean @default(true)
 autoArchiveDays: Int @default(30)
@@ -212,22 +222,19 @@ autoArchiveDays: Int @default(30)
 ## Future Enhancements
 
 1. **User Preferences UI**
-   - Settings page to configure auto-archive
-   - Per-user time periods
-   - Enable/disable toggle
-
+  - Settings page to configure auto-archive
+  - Per-user time periods
+  - Enable/disable toggle
 2. **Notifications**
-   - Notify user when jobs are auto-archived
-   - "X jobs were archived" notification
-
+  - Notify user when jobs are auto-archived
+  - "X jobs were archived" notification
 3. **Smart Archiving**
-   - Consider job source (some sources more likely to ghost)
-   - Consider application date vs email activity
-   - ML-based prediction of "dead" applications
-
+  - Consider job source (some sources more likely to ghost)
+  - Consider application date vs email activity
+  - ML-based prediction of "dead" applications
 4. **Undo Feature**
-   - Allow users to un-archive jobs
-   - Show "Recently archived" section
+  - Allow users to un-archive jobs
+  - Show "Recently archived" section
 
 ## Questions to Resolve
 
@@ -236,3 +243,4 @@ autoArchiveDays: Int @default(30)
 3. ✅ How long to wait after manual update? → **7 days**
 4. ⏳ Should this be user-configurable? → **Future enhancement**
 5. ⏳ Should we notify users? → **Future enhancement**
+

@@ -1,0 +1,1 @@
+-- Deprecated: use `repair-prisma-migration-metadata.sql` (covers ghosted rename + resume migration name).

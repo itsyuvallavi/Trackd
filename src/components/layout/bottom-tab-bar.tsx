@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, memo } from 'react'
+import { useState, useEffect, memo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Briefcase, FileText, Plus, User, Bot } from 'lucide-react'
+import { Briefcase, FileText, Plus, User, Bot, SlidersHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { QuickAddBar } from '@/components/jobs/quick-add-bar'
 import { useBotQueueCount } from '@/lib/bot/use-bot-queue-count'
@@ -11,19 +11,32 @@ import { useBotQueueCount } from '@/lib/bot/use-bot-queue-count'
 const navItems = [
   { href: '/jobs', icon: Briefcase, label: 'Jobs' },
   { href: '/resume-advisor', icon: FileText, label: 'Resume' },
+  { href: '/settings/bot', icon: SlidersHorizontal, label: 'Bot' },
   { href: '/bot/queue', icon: Bot, label: 'Queue' },
 ]
 
 export const BottomTabBar = memo(function BottomTabBar() {
   const pathname = usePathname()
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const queueCount = useBotQueueCount()
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const isActive = (href: string) => {
     return pathname === href || pathname.startsWith(href + '/')
   }
 
-  const isProfileActive = pathname === '/profile' || pathname.startsWith('/profile/') || pathname.startsWith('/settings/')
+  const isProfileActive =
+    pathname === '/profile' ||
+    pathname.startsWith('/profile/') ||
+    (pathname.startsWith('/settings/') && !pathname.startsWith('/settings/bot'))
+
+  if (!mounted) {
+    return null
+  }
 
   return (
     <>
@@ -50,7 +63,7 @@ export const BottomTabBar = memo(function BottomTabBar() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "relative flex items-center justify-center gap-2 px-4 py-2.5 rounded-full transition-all duration-200 w-[90px]",
+                  "relative flex items-center justify-center gap-2 px-3 py-2.5 rounded-full transition-all duration-200 min-w-[72px] max-w-[90px]",
                   active 
                     ? "bg-foreground text-background" 
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
