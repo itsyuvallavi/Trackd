@@ -8,19 +8,19 @@ import './load-env'
  * Tests the full flow: BotConfig → search APIs → AI evaluator → DB save
  *
  * Usage:
- *   bun run scripts/test-bot-search.ts [userId] [--dry-run]
- *   bun run scripts/test-bot-search.ts --dry-run --sources=jsearch,jobs_search_api
- *   … add --one-location to use only the first saved location (fewer RapidAPI requests)
+ *   bun run scripts/test-bot-search.ts [--dry-run] [--one-location]
+ *   bun run scripts/test-bot-search.ts --dry-run --save-snapshot          # search + save jobs to snapshot.json
+ *   bun run scripts/test-bot-search.ts --dry-run --from-snapshot          # replay saved jobs, zero API calls
+ *   bun run scripts/test-bot-search.ts --dry-run --from-snapshot=my.json  # replay from a named file
  *
- * --dry-run  Preview results without saving to DB
- * --sources= only run these backends (same as BOT_SEARCH_SOURCES); overrides env for this run
- * --one-location  pass a single location into runSearch (reduces API round-trips)
+ * --dry-run        Preview results without saving to DB
+ * --save-snapshot  After search, write raw jobs to scripts/snapshot.json for later replay
+ * --from-snapshot  Load jobs from scripts/snapshot.json instead of calling search APIs
+ * --one-location   Pass a single location to runSearch (reduces API round-trips)
+ * --sources=       Only run these backends (same as BOT_SEARCH_SOURCES)
  *
  * Required env — at least one backend (see `src/lib/bot/bot-search-sources.ts`):
  *   JSEARCH_API_KEY / JOBS_SEARCH_API_KEY   JSearch + Jobs Search API (shared RapidAPI key OK)
- *
- * Jobs Search API boards default to LinkedIn + Glassdoor + others (no Indeed). Override with
- * JOBS_SEARCH_SITE_NAMES=comma,separated,slugs if needed.
  *
  * Optional:
  *   OPENAI_API_KEY    Enable AI scoring (otherwise jobs are saved without score)
@@ -36,8 +36,21 @@ import {
   effectiveSearchBackendLabels,
 } from '../src/lib/bot/bot-search-sources'
 
+import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { resolve } from 'path'
+import type { SearchResponse } from '../src/lib/bot/types'
+
 const isDryRun = process.argv.includes('--dry-run')
 const oneLocation = process.argv.includes('--one-location')
+const saveSnapshot = process.argv.includes('--save-snapshot')
+const fromSnapshotArg = process.argv.find((a) => a === '--from-snapshot' || a.startsWith('--from-snapshot='))
+const fromSnapshot = !!fromSnapshotArg
+const snapshotFile = (() => {
+  const dir = new URL('.', import.meta.url).pathname
+  const eq = fromSnapshotArg?.split('=')[1]
+  return eq ? resolve(eq) : resolve(dir, 'snapshot.json')
+})()
+
 const targetUserId = process.argv.find(
   (a) =>
     !a.startsWith('--') &&
@@ -154,7 +167,7 @@ async function main() {
     update: {},
   })
 
-  console.log(`  Keywords:  ${botConfig.keywords.join(', ')}`)
+  console.log(`  Keywords:      ${botConfig.keywords.join(', ')}`)
   const locationsForRun = (() => {
     const raw = botConfig.locations.length > 0 ? botConfig.locations : ['Remote']
     if (oneLocation) {
@@ -165,102 +178,186 @@ async function main() {
     return raw
   })()
 
-  console.log(`  Locations: ${locationsForRun.join(', ')}${oneLocation ? ' (subset)' : ''}`)
-  console.log(`  MinScore:  ${botConfig.minScore}`)
+  console.log(`  Locations:     ${locationsForRun.join(', ')}${oneLocation ? ' (subset)' : ''}`)
+  console.log(`  Remote only:   ${botConfig.remoteOnly ? 'yes' : 'no'}`)
+  console.log(`  Experience:    ${botConfig.experienceLevel || 'any'}`)
+  console.log(`  Languages:     ${(botConfig.spokenLanguages ?? []).join(', ') || '(none)'}`)
+  console.log(`  Exclude cos:   ${botConfig.excludeCompanies.join(', ') || '(none)'}`)
+  console.log(`  Exclude kws:   ${botConfig.excludeKeywords.join(', ') || '(none)'}`)
+  console.log(`  MinScore:      ${botConfig.minScore}`)
 
-  // ── 3. Run search ─────────────────────────────────────────────────────────
-  h('Step 3: Run search APIs')
-  if (
-    !sourcesAllow &&
-    !oneLocation &&
-    locationsForRun.length > 2 &&
-    effective.length > 2
-  ) {
-    warn(
-      `Many locations (${locationsForRun.length}) × backends (${effective.length}) can take several minutes — narrow with --sources=jsearch or --one-location`
-    )
-  }
+  // ── 3. Run search (or load snapshot) ──────────────────────────────────────
+  const previewResultsWanted = 45
+  let searchResponse: SearchResponse
 
-  const { runSearch } = await import('../src/lib/bot/adapters/search-client')
-  /** Cap returned jobs for this script (full dedup counts still in meta). */
-  const previewResultsWanted = 10
-
-  let searchResponse
-  try {
-    searchResponse = await runSearch({
-      keywords: botConfig.keywords,
-      locations: locationsForRun,
-      remote_only: botConfig.remoteOnly,
-      exclude_companies: botConfig.excludeCompanies,
-      exclude_keywords: botConfig.excludeKeywords,
-      results_wanted: previewResultsWanted,
-    })
-  } catch (e) {
-    fail(`Search failed: ${e instanceof Error ? e.message : String(e)}`)
-    process.exit(1)
-  }
-
-  ok('Search complete')
-  console.log(`  Platforms OK:   ${searchResponse.meta.platforms_succeeded.join(', ') || 'none'}`)
-  if (Object.keys(searchResponse.meta.platforms_failed).length > 0) {
-    warn(`  Platform issues: ${JSON.stringify(searchResponse.meta.platforms_failed)}`)
-    explainSearchFailures(searchResponse.meta.platforms_failed)
-  }
-  console.log(`  Raw results:   ${searchResponse.meta.total_raw}`)
-  console.log(`  After dedup:   ${searchResponse.meta.total_deduped}`)
-  const fmtSrc = (o: Record<string, number>) =>
-    Object.entries(o)
-      .sort((a, b) => b[1] - a[1])
-      .map(([s, n]) => `${s}=${n}`)
-      .join(', ') || 'none'
-  console.log(`  By source (raw):    ${fmtSrc(searchResponse.meta.by_source_raw)}`)
-  console.log(`  By source (dedup):  ${fmtSrc(searchResponse.meta.by_source_deduped)}`)
-  console.log(
-    `  Returned slice:   ${searchResponse.jobs.length} job(s) (results_wanted=${previewResultsWanted})`
-  )
-
-  if (searchResponse.jobs.length === 0) {
-    const failedMsgs = Object.values(searchResponse.meta.platforms_failed).join('\n')
-    const quotaBlocked = /\b429\b|quota/i.test(failedMsgs)
-    if (quotaBlocked) {
-      warn('No jobs returned — quota/rate limits may have blocked APIs; try again later or broaden keys/plan.')
-    } else {
-      warn(
-        'No jobs returned — narrow keywords/locations, API errors (see Platform issues), or filters excluded every listing.'
-      )
-      info('Put broader roles first in Bot keywords, relax exclude lists, or try fewer locations (--one-location).')
+  if (fromSnapshot) {
+    h('Step 3: Load jobs from snapshot (no API calls)')
+    if (!existsSync(snapshotFile)) {
+      fail(`Snapshot file not found: ${snapshotFile}`)
+      info('Run without --from-snapshot first to capture a snapshot (add --save-snapshot).')
+      process.exit(1)
     }
+    searchResponse = JSON.parse(readFileSync(snapshotFile, 'utf-8'))
+    ok(`Loaded ${searchResponse.jobs.length} jobs from ${snapshotFile}`)
+    console.log(`  Platforms (from snapshot): ${searchResponse.meta.platforms_succeeded.join(', ') || 'none'}`)
+    console.log(`  Total jobs in snapshot: ${searchResponse.jobs.length}`)
   } else {
-    console.log('\n  Sample jobs:')
-    for (const job of searchResponse.jobs.slice(0, 5)) {
-      console.log(`    • ${job.title} @ ${job.company} (${job.location ?? 'N/A'}) [${job.source}]`)
+    h('Step 3: Run search APIs')
+    if (
+      !sourcesAllow &&
+      !oneLocation &&
+      locationsForRun.length > 2 &&
+      effective.length > 2
+    ) {
+      warn(
+        `Many locations (${locationsForRun.length}) × backends (${effective.length}) can take several minutes — narrow with --sources=jsearch or --one-location`
+      )
     }
-    if (searchResponse.jobs.length > 5) {
-      console.log(`    ... and ${searchResponse.jobs.length - 5} more`)
+
+    const { runSearch } = await import('../src/lib/bot/adapters/search-client')
+
+    try {
+      searchResponse = await runSearch({
+        keywords: botConfig.keywords,
+        locations: locationsForRun,
+        remote_only: botConfig.remoteOnly,
+        exclude_companies: botConfig.excludeCompanies,
+        exclude_keywords: botConfig.excludeKeywords,
+        results_wanted: previewResultsWanted,
+        experience_level: botConfig.experienceLevel,
+      })
+    } catch (e) {
+      fail(`Search failed: ${e instanceof Error ? e.message : String(e)}`)
+      process.exit(1)
+    }
+
+    if (saveSnapshot) {
+      writeFileSync(snapshotFile, JSON.stringify(searchResponse, null, 2))
+      ok(`Snapshot saved → ${snapshotFile}`)
+    }
+
+    ok('Search complete')
+    console.log(`  Platforms OK:   ${searchResponse.meta.platforms_succeeded.join(', ') || 'none'}`)
+    if (Object.keys(searchResponse.meta.platforms_failed).length > 0) {
+      warn(`  Platform issues: ${JSON.stringify(searchResponse.meta.platforms_failed)}`)
+      explainSearchFailures(searchResponse.meta.platforms_failed)
+    }
+    console.log(`  Raw results:   ${searchResponse.meta.total_raw}`)
+    console.log(`  After dedup:   ${searchResponse.meta.total_deduped}`)
+    const fmtSrc = (o: Record<string, number>) =>
+      Object.entries(o)
+        .sort((a, b) => b[1] - a[1])
+        .map(([s, n]) => `${s}=${n}`)
+        .join(', ') || 'none'
+    console.log(`  By source (raw):    ${fmtSrc(searchResponse.meta.by_source_raw)}`)
+    console.log(`  By source (dedup):  ${fmtSrc(searchResponse.meta.by_source_deduped)}`)
+    console.log(
+      `  Returned slice:   ${searchResponse.jobs.length} job(s) (results_wanted=${previewResultsWanted})`
+    )
+
+    if (searchResponse.jobs.length === 0) {
+      const failedMsgs = Object.values(searchResponse.meta.platforms_failed).join('\n')
+      const quotaBlocked = /\b429\b|quota/i.test(failedMsgs)
+      if (quotaBlocked) {
+        warn('No jobs returned — quota/rate limits may have blocked APIs; try again later or broaden keys/plan.')
+      } else {
+        warn('No jobs returned — narrow keywords/locations, API errors (see Platform issues), or filters excluded every listing.')
+        info('Put broader roles first in Bot keywords, relax exclude lists, or try fewer locations (--one-location).')
+      }
+    } else {
+      console.log('\n  Sample jobs:')
+      for (const job of searchResponse.jobs.slice(0, 5)) {
+        console.log(`    • ${job.title} @ ${job.company} (${job.location ?? 'N/A'}) [${job.source}]`)
+      }
+      if (searchResponse.jobs.length > 5) {
+        console.log(`    ... and ${searchResponse.jobs.length - 5} more`)
+      }
     }
   }
 
-  // ── 4. AI evaluation spot-check ───────────────────────────────────────────
+  // ── 4. AI evaluation ──────────────────────────────────────────────────────
+  // In dry-run mode we evaluate every returned job so the clamps can be observed
+  // without writing to the DB. Outside dry-run we only spot-check the first,
+  // because Step 6 will do the full evaluation pass via the orchestrator.
   if (searchResponse.jobs.length > 0 && openaiKey) {
-    h('Step 4: AI evaluation (spot-check on first result)')
+    const evalAll = isDryRun
+    h(
+      evalAll
+        ? `Step 4: AI evaluation (evaluating all ${searchResponse.jobs.length} sample jobs — dry-run mode)`
+        : 'Step 4: AI evaluation (spot-check on first result)'
+    )
     const { evaluateJob } = await import('../src/lib/bot/job-evaluator')
-    const sample = searchResponse.jobs[0]
-    try {
-      info(`Evaluating: "${sample.title}" @ ${sample.company}`)
-      const { evaluation: ev } = await evaluateJob(sample, botConfig)
-      ok('Evaluation complete')
-      console.log(`  Score:       ${ev.score}/100`)
-      console.log(`  Apply:       ${ev.shouldApply}`)
-      console.log(`  Reasoning:   ${ev.reasoning}`)
-      console.log(`  Flags:       ${ev.flags.join(', ') || 'none'}`)
-    } catch (e) {
-      const msg =
-        e instanceof Error
-          ? e.message
-          : e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string'
-            ? (e as { message: string }).message
-            : JSON.stringify(e)
-      warn(`AI eval failed: ${msg}`)
+    const jobsToEval = evalAll ? searchResponse.jobs : searchResponse.jobs.slice(0, 1)
+    type Row = {
+      title: string
+      company: string
+      score: number
+      shouldApply: boolean
+      flags: string[]
+      reasoning: string
+      clamps: string[]
+    }
+    const rows: Row[] = []
+    let n = 0
+    for (const sample of jobsToEval) {
+      n++
+      try {
+        info(`(${n}/${jobsToEval.length}) ${sample.title} @ ${sample.company}`)
+        const { evaluation: ev, scoringInputs } = await evaluateJob(sample, botConfig)
+        const clamps: string[] = []
+        if (scoringInputs.stackMismatchClamp?.applied) {
+          clamps.push(
+            `stack ${scoringInputs.stackMismatchClamp.beforeScore}→${scoringInputs.stackMismatchClamp.afterScore}`
+          )
+        }
+        if (scoringInputs.languageMismatchClamp?.applied) {
+          clamps.push(
+            `language ${scoringInputs.languageMismatchClamp.beforeScore}→${scoringInputs.languageMismatchClamp.afterScore}`
+          )
+        }
+        if (scoringInputs.geoMismatchClamp?.applied) {
+          clamps.push(
+            `geo ${scoringInputs.geoMismatchClamp.beforeScore}→${scoringInputs.geoMismatchClamp.afterScore}`
+          )
+        }
+        if (scoringInputs.seniorityClamp?.applied) {
+          clamps.push(
+            `seniority ${scoringInputs.seniorityClamp.beforeScore}→${scoringInputs.seniorityClamp.afterScore}`
+          )
+        }
+        rows.push({
+          title: sample.title,
+          company: sample.company,
+          score: ev.score,
+          shouldApply: ev.shouldApply,
+          flags: ev.flags,
+          reasoning: ev.reasoning,
+          clamps,
+        })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        warn(`AI eval failed for "${sample.title}": ${msg}`)
+      }
+    }
+
+    if (rows.length > 0) {
+      ok(`Evaluated ${rows.length} job(s)`)
+      const sorted = [...rows].sort((a, b) => b.score - a.score)
+      const keep = sorted.filter((r) => r.score >= botConfig.minScore)
+      const drop = sorted.filter((r) => r.score < botConfig.minScore)
+      console.log(`\n  ✅ Would be saved (score ≥ ${botConfig.minScore}):  ${keep.length}`)
+      for (const r of keep) {
+        console.log(
+          `    [${String(r.score).padStart(3)}] ${r.title} @ ${r.company}  ${r.flags.length > 0 ? `· flags: ${r.flags.join(', ')}` : ''}${r.clamps.length > 0 ? ` · clamps: ${r.clamps.join('; ')}` : ''}`
+        )
+      }
+      console.log(`\n  ❌ Would be skipped (score < ${botConfig.minScore}): ${drop.length}`)
+      for (const r of drop) {
+        console.log(
+          `    [${String(r.score).padStart(3)}] ${r.title} @ ${r.company}  ${r.flags.length > 0 ? `· flags: ${r.flags.join(', ')}` : ''}${r.clamps.length > 0 ? ` · clamps: ${r.clamps.join('; ')}` : ''}`
+        )
+        console.log(`          ${r.reasoning.slice(0, 240)}${r.reasoning.length > 240 ? '…' : ''}`)
+      }
     }
   }
 

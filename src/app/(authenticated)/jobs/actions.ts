@@ -1,12 +1,21 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { createJobSchema, updateJobSchema } from '@/lib/validations/job'
 import { JobStatus, ActivityType } from '@prisma/client'
 import { NotificationService } from '@/lib/notification-service'
 import { dismissedRowsForUser } from '@/lib/bot/dismissed-job-imports'
+import { cacheTagsFor } from '@/lib/cache-tags'
+
+function invalidateJobCaches(userId: string) {
+  const tags = cacheTagsFor(userId)
+  // Force immediate expiration so the next render sees the fresh mutation,
+  // matching the old revalidatePath semantics.
+  revalidateTag(tags.jobs, { expire: 0 })
+  revalidateTag(tags.activity, { expire: 0 })
+}
 
 export async function createJob(formData: FormData) {
   try {
@@ -52,6 +61,7 @@ export async function createJob(formData: FormData) {
     },
   })
 
+    invalidateJobCaches(user.id)
     revalidatePath('/jobs')
     revalidatePath(`/jobs/${job.id}`)
     return { success: true, jobId: job.id }
@@ -102,6 +112,7 @@ export async function updateJob(id: string, formData: FormData) {
     },
   })
 
+  invalidateJobCaches(user.id)
   revalidatePath('/jobs')
   revalidatePath(`/jobs/${id}`)
   return { success: true, job }
@@ -175,6 +186,10 @@ export async function updateJobStatus(id: string, status: JobStatus) {
     'manual'
   )
 
+  invalidateJobCaches(user.id)
+  // The notification service may also have created a notification — invalidate
+  // so the bell/sidebar reflect it without a page reload.
+  revalidateTag(cacheTagsFor(user.id).notifications, { expire: 0 })
   revalidatePath('/jobs')
   revalidatePath(`/jobs/${id}`)
   return { success: true, job: updatedJob }
@@ -197,6 +212,7 @@ export async function deleteJob(id: string) {
   await prisma.job.deleteMany({
     where: { id, userId: user.id },
   })
+  invalidateJobCaches(user.id)
   revalidatePath('/jobs')
   revalidatePath(`/jobs/${id}`)
   return { success: true }
@@ -213,6 +229,7 @@ export async function addActivity(jobId: string, description: string, type: Acti
     },
   })
 
+  invalidateJobCaches(user.id)
   revalidatePath('/jobs')
   revalidatePath(`/jobs/${jobId}`)
   return { success: true, activity }
@@ -234,6 +251,7 @@ export async function updateJobNotes(jobId: string, notes: string) {
     },
   })
 
+  invalidateJobCaches(user.id)
   revalidatePath('/jobs')
   revalidatePath(`/jobs/${jobId}`)
   return { success: true }

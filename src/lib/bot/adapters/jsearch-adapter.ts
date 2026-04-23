@@ -20,6 +20,11 @@ export interface JSearchParams {
   datePosted?: string        // all | today | 3days | week | month
   numPages?: number          // 1–20, each page has 10 results
   excludeJobPublishers?: string[]
+  /**
+   * Comma-separated JSearch job_requirements (e.g. `under_3_years_experience,no_experience`).
+   * When set, JSearch filters to listings advertising those experience buckets.
+   */
+  jobRequirements?: string
 }
 
 interface JSearchJob {
@@ -81,6 +86,7 @@ export async function searchJSearch(
     url.searchParams.set('date_posted', params.datePosted ?? 'week')
     if (params.remoteOnly) url.searchParams.set('remote_jobs_only', 'true')
     if (params.employmentType) url.searchParams.set('employment_types', params.employmentType)
+    if (params.jobRequirements) url.searchParams.set('job_requirements', params.jobRequirements)
     if (params.excludeJobPublishers?.length) {
       url.searchParams.set('exclude_job_publishers', params.excludeJobPublishers.join(','))
     }

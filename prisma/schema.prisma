@@ -112,6 +112,8 @@ model Job {
 
   @@index([userId, status])
   @@index([userId, savedAt])
+  @@index([userId, interviewAt])
+  @@index([userId, appliedAt])
 }
 
 /** Fingerprints of jobs the user deleted — bot search skips re-importing the same URL or company+title. */
@@ -212,6 +214,7 @@ model Notification {
 
   @@index([userId, isRead])
   @@index([userId, createdAt])
+  @@index([userId, type, createdAt])
 }
 
 model EmailSyncLog {

@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { createEmailService } from '@/lib/email-service'
 import { EmailClassifier, EmailType } from '@/lib/email-classifier'
@@ -12,6 +12,7 @@ import { NotificationService } from '@/lib/notification-service'
 import { ExtractedEntities } from '@/lib/ai/types'
 import { createHash } from 'crypto'
 import { parseInterviewDateTime } from '@/lib/utils/interview-date-parser'
+import { cacheTagsFor } from '@/lib/cache-tags'
 
 /**
  * Create a unique identifier for an email to prevent duplicate processing
@@ -449,9 +450,16 @@ export async function syncEmails() {
     console.log('✓ Last synced timestamp updated')
 
     console.log('Revalidating paths...')
+    const tags = cacheTagsFor(userId)
+    revalidateTag(tags.jobs, { expire: 0 })
+    revalidateTag(tags.activity, { expire: 0 })
+    revalidateTag(tags.notifications, { expire: 0 })
+    revalidateTag(tags.email, { expire: 0 })
     revalidatePath('/jobs')
     revalidatePath('/today')
     revalidatePath('/board')
+    revalidatePath('/settings/integrations')
+    revalidatePath('/dashboard')
     console.log('✓ Paths revalidated')
 
     const stats = {
@@ -620,6 +628,7 @@ export async function saveEmailIntegration(formData: FormData) {
       },
     })
 
+    revalidateTag(cacheTagsFor(userId).email, { expire: 0 })
     revalidatePath('/settings/integrations')
 
     return { success: true }
@@ -703,6 +712,7 @@ export async function updateAutoSyncSettings(
       },
     })
 
+    revalidateTag(cacheTagsFor(user.id).email, { expire: 0 })
     revalidatePath('/settings/integrations')
     return { success: true }
   } catch (error) {

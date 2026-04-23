@@ -1,9 +1,10 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { JobStatus, ActivityType } from '@prisma/client'
+import { cacheTagsFor } from '@/lib/cache-tags'
 
 export async function updateJobStatusOnBoard(jobId: string, newStatus: JobStatus) {
   const user = await requireAuth()
@@ -63,10 +64,14 @@ export async function updateJobStatusOnBoard(jobId: string, newStatus: JobStatus
     })
   }
 
+  const tags = cacheTagsFor(user.id)
+  revalidateTag(tags.jobs, { expire: 0 })
+  revalidateTag(tags.activity, { expire: 0 })
+
   revalidatePath('/board')
   revalidatePath('/jobs')
   revalidatePath(`/jobs/${jobId}`)
-  
+
   return { success: true, job: updatedJob }
 }
 

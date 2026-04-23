@@ -64,79 +64,85 @@ export function SyncHistory() {
 
   if (isLoading) {
     return (
-      <div className="border border-border rounded-lg p-6 bg-card">
+      <div className="glass glass-subtle rounded-2xl p-5 md:p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Clock className="size-5 text-muted-foreground" />
-          <h3 className="text-lg font-semibold">Sync History</h3>
+          <Clock className="size-4 text-muted-foreground" />
+          <h3 className="text-base font-semibold tracking-tight">Sync history</h3>
         </div>
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">Loading…</p>
       </div>
     )
   }
 
   if (logs.length === 0) {
     return (
-      <div className="border border-border rounded-lg p-6 bg-card">
+      <div className="glass glass-subtle rounded-2xl p-5 md:p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Clock className="size-5 text-muted-foreground" />
-            <h3 className="text-lg font-semibold">Sync History</h3>
+            <Clock className="size-4 text-muted-foreground" />
+            <h3 className="text-base font-semibold tracking-tight">
+              Sync history
+            </h3>
           </div>
           <button
             onClick={fetchLogs}
-            className="text-xs text-muted-foreground hover:text-foreground"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             <RefreshCw className="size-4" />
           </button>
         </div>
-        <p className="text-sm text-muted-foreground">No sync history yet. Syncs will appear here after they run.</p>
+        <p className="text-sm text-muted-foreground">
+          No sync history yet. Syncs will appear here after they run.
+        </p>
       </div>
     )
   }
 
   return (
-    <div className="border border-border rounded-lg p-6 bg-card">
+    <div className="glass glass-subtle rounded-2xl p-5 md:p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Clock className="size-5 text-muted-foreground" />
-          <h3 className="text-lg font-semibold">Sync History</h3>
+          <Clock className="size-4 text-muted-foreground" />
+          <h3 className="text-base font-semibold tracking-tight">
+            Sync history
+          </h3>
         </div>
         <button
           onClick={fetchLogs}
-          className="text-xs text-muted-foreground hover:text-foreground"
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           title="Refresh"
         >
           <RefreshCw className="size-4" />
         </button>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         {logs.map((log) => (
           <div
             key={log.id}
-            className="border border-border rounded-lg p-4 hover:bg-primary-lightest/30 transition-colors"
+            className="rounded-xl border border-border/50 p-4 hover:bg-foreground/[0.03] transition-colors"
           >
-            <div className="flex items-start justify-between mb-2">
+            <div className="flex items-start justify-between mb-2 gap-3 flex-wrap">
               <div className="flex items-center gap-2">
                 {log.success ? (
-                  <CheckCircle2 className="size-4 text-green-500" />
+                  <CheckCircle2 className="size-4 text-success" />
                 ) : (
-                  <XCircle className="size-4 text-red-500" />
+                  <XCircle className="size-4 text-error" />
                 )}
-                <span className="text-sm font-medium">
+                <span className="text-sm font-medium tabular-nums">
                   {formatDate(log.startedAt)}
                 </span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                  {log.source === 'manual' ? 'Manual' : log.source === 'cron' ? 'Auto' : 'Auto'}
+                <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-foreground/[0.06] text-muted-foreground font-medium">
+                  {log.source === 'manual' ? 'Manual' : 'Auto'}
                 </span>
               </div>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground tabular-nums">
                 {formatDuration(log.duration)}
               </span>
             </div>
 
             {!log.success && log.errorMessage && (
-              <p className="text-xs text-red-600 dark:text-red-400 mb-2">
+              <p className="text-xs text-error-text mb-2">
                 Error: {log.errorMessage}
               </p>
             )}

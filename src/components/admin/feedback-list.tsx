@@ -195,12 +195,19 @@ export function FeedbackList({ feedback: initialFeedback }: FeedbackListProps) {
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
-      <div className="flex gap-4 items-center">
+      {/* Filters — glass toolbar pinned feel */}
+      <div className="glass glass-subtle rounded-2xl px-4 py-3 flex gap-4 items-center flex-wrap sticky top-[56px] z-20">
         <div className="flex items-center gap-2">
-          <label className="text-sm text-muted-foreground">Status:</label>
-          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as FeedbackStatus | 'ALL')}>
-            <SelectTrigger className="w-32">
+          <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+            Status
+          </label>
+          <Select
+            value={statusFilter}
+            onValueChange={(v) =>
+              setStatusFilter(v as FeedbackStatus | 'ALL')
+            }
+          >
+            <SelectTrigger className="w-32 rounded-full h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -213,9 +220,14 @@ export function FeedbackList({ feedback: initialFeedback }: FeedbackListProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="text-sm text-muted-foreground">Type:</label>
-          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as FeedbackType | 'ALL')}>
-            <SelectTrigger className="w-32">
+          <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+            Type
+          </label>
+          <Select
+            value={typeFilter}
+            onValueChange={(v) => setTypeFilter(v as FeedbackType | 'ALL')}
+          >
+            <SelectTrigger className="w-32 rounded-full h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -228,13 +240,13 @@ export function FeedbackList({ feedback: initialFeedback }: FeedbackListProps) {
           </Select>
         </div>
 
-        <div className="text-sm text-muted-foreground ml-auto">
-          {filteredFeedback.length} of {feedback.length} feedback items
+        <div className="text-xs text-muted-foreground ml-auto tabular-nums">
+          {filteredFeedback.length} of {feedback.length} items
         </div>
       </div>
 
       {/* Table */}
-      <div className="border border-border rounded-lg overflow-hidden">
+      <div className="glass glass-subtle rounded-2xl overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
@@ -255,12 +267,14 @@ export function FeedbackList({ feedback: initialFeedback }: FeedbackListProps) {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredFeedback.map((item) => {
+              filteredFeedback.map((item, idx) => {
                 const isExpanded = expandedIds.has(item.id)
                 return (
                   <Fragment key={item.id}>
                     <TableRow
-                      className="cursor-pointer"
+                      className={`cursor-pointer transition-colors ${
+                        idx % 2 === 1 ? 'bg-foreground/[0.025]' : ''
+                      } hover:bg-foreground/[0.05]`}
                       onClick={() => {
                         setExpandedIds(prev => {
                           const next = new Set(prev)

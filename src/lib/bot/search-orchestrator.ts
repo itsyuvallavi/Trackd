@@ -216,6 +216,17 @@ export async function runBotSearch(
       return result
     }
 
+    pushLog('info', 'Search request built from /settings/bot', {
+      keywords: botConfig.keywords,
+      locations: botConfig.locations,
+      remote_only: botConfig.remoteOnly,
+      experience_level: botConfig.experienceLevel ?? null,
+      exclude_companies_count: botConfig.excludeCompanies.length,
+      exclude_keywords_count: botConfig.excludeKeywords.length,
+      spoken_languages: botConfig.spokenLanguages ?? [],
+      min_score: botConfig.minScore,
+    })
+
     let searchResponse
     try {
       searchResponse = await runSearch({
@@ -270,12 +281,33 @@ export async function runBotSearch(
       process.env.TRACKD_BOT_SEARCH_VERBOSE === '1' ||
       process.env.TRACKD_BOT_SEARCH_VERBOSE === 'true'
 
-    const allExistingJobs = await prisma.job.findMany({
-      where: { userId },
-      select: { company: true, title: true },
-    })
+    // Scoped dedup: only fetch existing jobs whose company appears in the
+    // current batch. Previously we loaded every job the user had, which grows
+    // linearly with user history and dwarfed the search cost for power users.
+    const batchCompanies = Array.from(
+      new Set(
+        searchResponse.jobs
+          .map((j) => j.company?.trim())
+          .filter((c): c is string => Boolean(c)),
+      ),
+    )
+
+    const existingJobsForDedup = batchCompanies.length
+      ? await prisma.job.findMany({
+          where: {
+            userId,
+            OR: batchCompanies.map((company) => ({
+              company: { equals: company, mode: 'insensitive' as const },
+            })),
+          },
+          select: { company: true, title: true },
+        })
+      : []
+
     const existingTitleKeys = new Set(
-      allExistingJobs.map((j) => `${j.company.toLowerCase().trim()}::${j.title.toLowerCase().trim()}`)
+      existingJobsForDedup.map(
+        (j) => `${j.company.toLowerCase().trim()}::${j.title.toLowerCase().trim()}`,
+      ),
     )
 
     const dismissedRows = await prisma.dismissedJobImport.findMany({

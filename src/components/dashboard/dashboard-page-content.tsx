@@ -6,8 +6,8 @@ import { StatusStats } from './status-stats'
 import { ActivityFeed } from './activity-feed'
 import { NotificationsFeed } from './notifications-feed'
 import { Bell, Activity } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { GlassPanel } from '@/components/ui/glass'
 
 interface Activity {
   id: string
@@ -42,82 +42,88 @@ interface DashboardPageContentProps {
 
 type ViewMode = 'changes' | 'notifications'
 
-export function DashboardPageContent({ 
-  statusCounts, 
-  activities, 
-  notifications 
+const TABS: { id: ViewMode; label: string; icon: typeof Activity }[] = [
+  { id: 'changes', label: 'Recent Activity', icon: Activity },
+  { id: 'notifications', label: 'Notifications', icon: Bell },
+]
+
+export function DashboardPageContent({
+  statusCounts,
+  activities,
+  notifications,
 }: DashboardPageContentProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('changes')
+  const activeIndex = TABS.findIndex((t) => t.id === viewMode)
 
   return (
-    <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-4 md:py-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold mb-2">Dashboard</h1>
+    <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-6 md:py-8">
+      <header className="mb-8">
+        <h1 className="text-3xl font-semibold tracking-tight mb-1">
+          Dashboard
+        </h1>
         <p className="text-sm text-muted-foreground">
-          Overview of your job applications
+          Overview of your job applications.
         </p>
-      </div>
+      </header>
 
-      {/* Status Stats */}
-      <div className="mb-6 md:mb-8">
+      <div className="mb-8">
         <StatusStats counts={statusCounts} />
       </div>
 
-      {/* View Toggle - Activity = timeline; Notifications = inbox (sync alerts, matches, errors) */}
-      <div className="mb-4 space-y-2">
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn(
-              'flex-1 h-9 text-sm transition-all',
-              'hover:bg-background/70 hover:text-foreground',
-              viewMode === 'changes' 
-                ? 'bg-background text-foreground shadow-sm' 
-                : 'bg-transparent text-muted-foreground'
-            )}
-            onClick={() => setViewMode('changes')}
-          >
-            <Activity className="size-4 mr-2" />
-            Recent Activity
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn(
-              'flex-1 h-9 text-sm transition-all',
-              'hover:bg-background/70 hover:text-foreground',
-              viewMode === 'notifications' 
-                ? 'bg-background text-foreground shadow-sm' 
-                : 'bg-transparent text-muted-foreground'
-            )}
-            onClick={() => setViewMode('notifications')}
-          >
-            <Bell className="size-4 mr-2" />
-            Notifications
-          </Button>
+      {/* Segmented tab toggle — animated indicator slides behind the active tab */}
+      <div className="mb-3 space-y-2">
+        <div className="glass glass-subtle inline-flex items-center gap-1 rounded-full p-1 relative">
+          {/* Sliding indicator */}
+          <span
+            aria-hidden
+            className="absolute inset-y-1 rounded-full bg-foreground/8 transition-[left,width] duration-300 ease-[var(--ease-ios)]"
+            style={{
+              left: `calc(${activeIndex} * 50% + 4px)`,
+              width: 'calc(50% - 8px)',
+            }}
+          />
+
+          {TABS.map((tab) => {
+            const Icon = tab.icon
+            const active = tab.id === viewMode
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setViewMode(tab.id)}
+                className={cn(
+                  'relative z-10 flex items-center justify-center gap-2 rounded-full px-4 py-2 min-w-[180px] text-sm font-medium',
+                  'transition-colors duration-200',
+                  active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+                )}
+                aria-pressed={active}
+              >
+                <Icon className="size-4" />
+                {tab.label}
+              </button>
+            )
+          })}
         </div>
-        <p className="text-xs text-muted-foreground px-0.5">
+        <p className="text-xs text-muted-foreground px-1">
           {viewMode === 'changes'
             ? 'Timeline of status changes, emails, and notes across your jobs.'
             : 'Alerts from email sync (new roles, ambiguous matches, errors). Routine job updates appear in Recent Activity.'}
         </p>
       </div>
 
-      {/* Content Area */}
-      <div className="space-y-4">
-        {viewMode === 'changes' ? (
-          <div className="bg-card border border-border rounded-lg p-4 md:p-6">
+      {/* Feed content in a single animated glass panel */}
+      <GlassPanel
+        variant="default"
+        className="p-4 md:p-6 rounded-2xl"
+      >
+        <div key={viewMode} className="trackd-route-enter">
+          {viewMode === 'changes' ? (
             <ActivityFeed activities={activities} isCollapsible={false} />
-          </div>
-        ) : (
-          <div className="bg-card border border-border rounded-lg p-4 md:p-6">
+          ) : (
             <NotificationsFeed notifications={notifications} />
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </GlassPanel>
     </div>
   )
 }
-

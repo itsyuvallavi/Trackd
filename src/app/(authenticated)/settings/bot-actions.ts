@@ -1,7 +1,8 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
+import { cacheTagsFor } from '@/lib/cache-tags'
 import { requireAuth } from '@/lib/auth'
 import { verifyTelegramChatId } from '@/lib/bot/telegram'
 import { executeBotRunForConfig } from '@/lib/bot/execute-bot-run'
@@ -59,7 +60,8 @@ export async function saveBotConfig(data: BotConfigFormData) {
     update: cleaned,
   })
 
-  revalidatePath('/settings/bot')
+  revalidatePath('/bot/settings')
+  revalidatePath('/bot')
   return { success: true }
 }
 
@@ -90,7 +92,19 @@ export async function triggerBotSearch() {
   // server-to-self HTTP (which often returns 401 Unauthorized in production).
   const out = await executeBotRunForConfig(config, 'manual')
 
-  revalidatePath('/settings/bot')
+  // Bust per-user `unstable_cache` reads (same as job/notification mutations).
+  const tags = cacheTagsFor(user.id)
+  revalidateTag(tags.jobs, { expire: 0 })
+  revalidateTag(tags.activity, { expire: 0 })
+  revalidateTag(tags.notifications, { expire: 0 })
+  revalidatePath('/jobs')
+  revalidatePath('/dashboard')
+  revalidatePath('/today')
+  revalidatePath('/board')
+
+  revalidatePath('/bot/settings')
+  revalidatePath('/bot')
+  revalidatePath('/bot/runs')
 
   if (out.error) {
     return { success: false, error: out.error }

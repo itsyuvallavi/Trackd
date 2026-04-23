@@ -118,11 +118,22 @@ export async function searchJobsSearchApiExcel(
     location: string
     resultsWanted: number
     isRemote: boolean
+    /**
+     * Optional free-text hint appended to the search term to bias toward a
+     * seniority bucket (e.g. "senior", "intern"). Derived from the user's
+     * BotConfig.experienceLevel in the caller — no hardcoded value here.
+     */
+    experienceHint?: string | null
   },
   apiKey: string
 ): Promise<{ jobs: SearchJobResult[]; error?: string }> {
-  const search_term = params.searchTerm.trim()
-  if (!search_term) return { jobs: [], error: 'Jobs Search API: empty search_term' }
+  const trimmedTerm = params.searchTerm.trim()
+  if (!trimmedTerm) return { jobs: [], error: 'Jobs Search API: empty search_term' }
+  const hint = params.experienceHint?.trim()
+  const search_term =
+    hint && !new RegExp(`\\b${hint}\\b`, 'i').test(trimmedTerm)
+      ? `${hint} ${trimmedTerm}`
+      : trimmedTerm
 
   const location = params.location.trim() || 'Remote'
   const results_wanted = Math.min(Math.max(params.resultsWanted, 1), 100)

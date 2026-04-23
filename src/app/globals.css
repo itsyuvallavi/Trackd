@@ -4,87 +4,242 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================
+ * Trackd design tokens — minimal, Apple-leaning, cobalt-accented
+ *
+ * Single source of truth: OKLCH everywhere, one light block
+ * (`:root`) and one dark block (`.dark`). The legacy `html.dark`
+ * hex block has been retired in favor of a single `.dark` selector.
+ * ============================================================ */
+
 :root {
-  /* === BACKGROUNDS === */           /* Main app background (bright gray) */           /* Primary text */
-  --card: oklch(1 0 0);                 /* Card backgrounds */
-  --card-foreground: oklch(0.147 0.004 49.25);      /* Card text */
-
-  /* === BLUE PRIMARY === */
-  --primary: oklch(0.216 0.006 56.043);              /* Primary blue - buttons, links, emphasis */
-  --primary-foreground: oklch(0.985 0.001 106.423);   /* Text on primary blue */
-  --primary-hover: #2563EB;        /* Hover state */
-  --primary-light: #DBEAFE;        /* Light blue backgrounds */
-  --primary-lightest: #EFF6FF;     /* Very light blue */
-
-  /* === MUTED/SECONDARY === */
-  --muted: oklch(0.97 0.001 106.424);                /* Subtle backgrounds */
-  --muted-foreground: oklch(0.553 0.013 58.071);     /* Secondary text */
-  --muted-dark: #9CA3AF;           /* Tertiary text */
-
-  /* === BORDERS & INPUTS === */
-  --border: oklch(0.923 0.003 48.717);               /* Light borders */
-  --border-medium: #D1D5DB;        /* Medium borders */
-  --input: oklch(0.923 0.003 48.717);                /* Input backgrounds */
-  --ring: oklch(0.709 0.01 56.259);                 /* Focus rings (blue) */
-
-  /* === ACCENT === */
-  --accent: oklch(0.97 0.001 106.424);               /* Accent backgrounds */
-  --accent-foreground: oklch(0.216 0.006 56.043);    /* Accent text */
-
-  /* === STATUS COLORS === */
-  /* More unique, distinct shades for better visual differentiation */
-  --success: #059669;              /* Emerald green - positive, success (OFFER) */
-  --success-bg: #D1FAE5;
-  --success-text: #065F46;
-
-  --warning: #D97706;              /* Amber orange - warning, overdue (ARCHIVED) */
-  --warning-bg: #FEF3C7;
-  --warning-text: #92400E;
-
-  --error: #DC2626;                /* Crimson red - error, rejected */
-  --error-bg: #FEE2E2;
-  --error-text: #991B1B;
-
-  --info: #2563EB;               /* Indigo blue - info, draft (APPLIED) */
-  --info-bg: #DBEAFE;
-  --info-text: #1E40AF;
-
-  /* Additional status colors */
-  --saved: #64748B;                /* Slate gray - saved */
-  --saved-bg: #F1F5F9;
-  --saved-text: #475569;
-
-  --interview: #7C3AED;            /* Violet purple - interview */
-  --interview-bg: #EDE9FE;
-  --interview-text: #6D28D9;
-
-  /* === SHADOWS === */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-  --shadow-blue: 0 4px 14px 0 rgb(59 130 246 / 0.25);
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.147 0.004 49.25);
+  /* ----------- Surfaces ----------- */
+  --background: oklch(0.985 0.002 260);
+  --foreground: oklch(0.18 0.015 264);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.015 264);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.147 0.004 49.25);
-  --secondary: oklch(0.97 0.001 106.424);
-  --secondary-foreground: oklch(0.216 0.006 56.043);
-  --destructive: oklch(0.577 0.245 27.325);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0;
-  --sidebar: oklch(0.985 0.001 106.423);
-  --sidebar-foreground: oklch(0.147 0.004 49.25);
-  --sidebar-primary: oklch(0.216 0.006 56.043);
-  --sidebar-primary-foreground: oklch(0.985 0.001 106.423);
-  --sidebar-accent: oklch(0.97 0.001 106.424);
-  --sidebar-accent-foreground: oklch(0.216 0.006 56.043);
-  --sidebar-border: oklch(0.923 0.003 48.717);
-  --sidebar-ring: oklch(0.709 0.01 56.259);
+  --popover-foreground: oklch(0.18 0.015 264);
+
+  /* ----------- Accent (single cobalt) ----------- */
+  --primary: oklch(0.62 0.20 262);
+  --primary-foreground: oklch(0.99 0 0);
+  --primary-hover: oklch(0.56 0.20 262);
+  --primary-light: oklch(0.92 0.06 262);
+  --primary-lightest: oklch(0.97 0.03 262);
+
+  /* ----------- Neutrals ----------- */
+  --muted: oklch(0.965 0.003 260);
+  --muted-foreground: oklch(0.50 0.015 264);
+  --muted-dark: oklch(0.65 0.015 264);
+
+  --secondary: oklch(0.965 0.003 260);
+  --secondary-foreground: oklch(0.22 0.015 264);
+
+  --accent: oklch(0.95 0.01 262);
+  --accent-foreground: oklch(0.22 0.015 264);
+
+  /* ----------- Borders / inputs ----------- */
+  --border: oklch(0.18 0.015 264 / 0.08);
+  --border-medium: oklch(0.18 0.015 264 / 0.14);
+  --input: oklch(0.18 0.015 264 / 0.08);
+  --ring: oklch(0.62 0.20 262 / 0.55);
+
+  /* ----------- Status — desaturated, fills are translucent ----------- */
+  --success: oklch(0.62 0.14 155);
+  --success-bg: oklch(0.62 0.14 155 / 0.12);
+  --success-text: oklch(0.40 0.12 155);
+
+  --warning: oklch(0.72 0.15 70);
+  --warning-bg: oklch(0.72 0.15 70 / 0.13);
+  --warning-text: oklch(0.48 0.13 70);
+
+  --error: oklch(0.62 0.20 25);
+  --error-bg: oklch(0.62 0.20 25 / 0.12);
+  --error-text: oklch(0.45 0.18 25);
+
+  --info: oklch(0.62 0.20 262);
+  --info-bg: oklch(0.62 0.20 262 / 0.12);
+  --info-text: oklch(0.42 0.18 262);
+
+  --saved: oklch(0.55 0.02 260);
+  --saved-bg: oklch(0.55 0.02 260 / 0.10);
+  --saved-text: oklch(0.35 0.02 260);
+
+  --interview: oklch(0.58 0.22 295);
+  --interview-bg: oklch(0.58 0.22 295 / 0.12);
+  --interview-text: oklch(0.40 0.20 295);
+
+  --destructive: oklch(0.62 0.20 25);
+
+  /* ----------- Charts ----------- */
+  --chart-1: oklch(0.62 0.20 262);
+  --chart-2: oklch(0.62 0.14 155);
+  --chart-3: oklch(0.58 0.22 295);
+  --chart-4: oklch(0.72 0.15 70);
+  --chart-5: oklch(0.62 0.20 25);
+
+  /* ----------- Sidebar ----------- */
+  --sidebar: oklch(0.985 0.002 260);
+  --sidebar-foreground: oklch(0.18 0.015 264);
+  --sidebar-primary: oklch(0.62 0.20 262);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.95 0.01 262);
+  --sidebar-accent-foreground: oklch(0.22 0.015 264);
+  --sidebar-border: oklch(0.18 0.015 264 / 0.08);
+  --sidebar-ring: oklch(0.62 0.20 262 / 0.55);
+
+  /* ----------- Shape ----------- */
+  --radius: 14px;
+
+  /* ----------- Shadows (soft, layered) ----------- */
+  --shadow-sm: 0 1px 2px -1px oklch(0.18 0.015 264 / 0.08);
+  --shadow-md:
+    0 4px 12px -4px oklch(0.18 0.015 264 / 0.10),
+    0 2px 4px -2px oklch(0.18 0.015 264 / 0.06);
+  --shadow-lg:
+    0 16px 40px -8px oklch(0.18 0.015 264 / 0.14),
+    0 4px 12px -4px oklch(0.18 0.015 264 / 0.08);
+  --shadow-blue:
+    0 10px 30px -8px oklch(0.62 0.20 262 / 0.35),
+    0 4px 10px -4px oklch(0.62 0.20 262 / 0.25);
+
+  /* ----------- Motion tokens ----------- */
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --ease-snappy: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --duration-xs: 120ms;
+  --duration-sm: 180ms;
+  --duration-md: 260ms;
+  --duration-lg: 380ms;
+  --duration-xl: 560ms;
+
+  /* ----------- Glass internals ----------- */
+  --glass-fill: oklch(1 0 0 / 0.58);
+  --glass-fill-strong: oklch(1 0 0 / 0.72);
+  --glass-fill-subtle: oklch(1 0 0 / 0.40);
+  --glass-fill-nav: oklch(1 0 0 / 0.68);
+  --glass-stroke: oklch(0.18 0.015 264 / 0.10);
+  --glass-highlight: oklch(1 0 0 / 0.55);
+  --glass-blur: 20px;
+  --glass-saturate: 160%;
+
+  /* Aurora background tint (light) */
+  --aurora-1: oklch(0.90 0.08 262 / 0.35);
+  --aurora-2: oklch(0.92 0.06 295 / 0.30);
+  --aurora-3: oklch(0.94 0.05 200 / 0.25);
 }
+
+.dark {
+  /* ----------- Surfaces ----------- */
+  --background: oklch(0.145 0.01 264);
+  --foreground: oklch(0.97 0.002 260);
+  --card: oklch(0.20 0.012 264);
+  --card-foreground: oklch(0.97 0.002 260);
+  --popover: oklch(0.20 0.012 264);
+  --popover-foreground: oklch(0.97 0.002 260);
+
+  /* ----------- Accent ----------- */
+  --primary: oklch(0.72 0.18 262);
+  --primary-foreground: oklch(0.14 0.01 264);
+  --primary-hover: oklch(0.78 0.17 262);
+  --primary-light: oklch(0.32 0.14 262);
+  --primary-lightest: oklch(0.22 0.09 262);
+
+  /* ----------- Neutrals ----------- */
+  --muted: oklch(0.24 0.012 264);
+  --muted-foreground: oklch(0.68 0.012 264);
+  --muted-dark: oklch(0.50 0.012 264);
+
+  --secondary: oklch(0.24 0.012 264);
+  --secondary-foreground: oklch(0.97 0.002 260);
+
+  --accent: oklch(0.26 0.018 262);
+  --accent-foreground: oklch(0.97 0.002 260);
+
+  /* ----------- Borders / inputs ----------- */
+  --border: oklch(1 0 0 / 0.08);
+  --border-medium: oklch(1 0 0 / 0.14);
+  --input: oklch(1 0 0 / 0.08);
+  --ring: oklch(0.72 0.18 262 / 0.55);
+
+  /* ----------- Status ----------- */
+  --success: oklch(0.72 0.14 155);
+  --success-bg: oklch(0.72 0.14 155 / 0.16);
+  --success-text: oklch(0.85 0.12 155);
+
+  --warning: oklch(0.80 0.14 70);
+  --warning-bg: oklch(0.80 0.14 70 / 0.16);
+  --warning-text: oklch(0.88 0.12 70);
+
+  --error: oklch(0.72 0.18 25);
+  --error-bg: oklch(0.72 0.18 25 / 0.16);
+  --error-text: oklch(0.88 0.15 25);
+
+  --info: oklch(0.72 0.18 262);
+  --info-bg: oklch(0.72 0.18 262 / 0.16);
+  --info-text: oklch(0.88 0.14 262);
+
+  --saved: oklch(0.68 0.02 260);
+  --saved-bg: oklch(0.68 0.02 260 / 0.14);
+  --saved-text: oklch(0.88 0.01 260);
+
+  --interview: oklch(0.72 0.20 295);
+  --interview-bg: oklch(0.72 0.20 295 / 0.16);
+  --interview-text: oklch(0.88 0.16 295);
+
+  --destructive: oklch(0.72 0.18 25);
+
+  /* ----------- Charts ----------- */
+  --chart-1: oklch(0.72 0.18 262);
+  --chart-2: oklch(0.72 0.14 155);
+  --chart-3: oklch(0.72 0.20 295);
+  --chart-4: oklch(0.80 0.14 70);
+  --chart-5: oklch(0.72 0.18 25);
+
+  /* ----------- Sidebar ----------- */
+  --sidebar: oklch(0.18 0.012 264);
+  --sidebar-foreground: oklch(0.97 0.002 260);
+  --sidebar-primary: oklch(0.72 0.18 262);
+  --sidebar-primary-foreground: oklch(0.14 0.01 264);
+  --sidebar-accent: oklch(0.26 0.018 262);
+  --sidebar-accent-foreground: oklch(0.97 0.002 260);
+  --sidebar-border: oklch(1 0 0 / 0.08);
+  --sidebar-ring: oklch(0.72 0.18 262 / 0.55);
+
+  /* ----------- Shadows ----------- */
+  --shadow-sm: 0 1px 2px -1px oklch(0 0 0 / 0.50);
+  --shadow-md:
+    0 4px 12px -4px oklch(0 0 0 / 0.55),
+    0 2px 4px -2px oklch(0 0 0 / 0.40);
+  --shadow-lg:
+    0 20px 50px -12px oklch(0 0 0 / 0.65),
+    0 6px 14px -6px oklch(0 0 0 / 0.45);
+  --shadow-blue:
+    0 12px 36px -10px oklch(0.72 0.18 262 / 0.50),
+    0 4px 10px -4px oklch(0.72 0.18 262 / 0.35);
+
+  /* ----------- Glass internals ----------- */
+  --glass-fill: oklch(0.24 0.012 264 / 0.55);
+  --glass-fill-strong: oklch(0.22 0.012 264 / 0.72);
+  --glass-fill-subtle: oklch(0.26 0.014 264 / 0.45);
+  --glass-fill-nav: oklch(0.18 0.012 264 / 0.68);
+  --glass-stroke: oklch(1 0 0 / 0.08);
+  --glass-highlight: oklch(1 0 0 / 0.08);
+
+  /* Aurora (dark) */
+  --aurora-1: oklch(0.55 0.22 262 / 0.30);
+  --aurora-2: oklch(0.55 0.22 295 / 0.25);
+  --aurora-3: oklch(0.60 0.12 200 / 0.20);
+
+  color-scheme: dark;
+}
+
+/* ============================================================
+ * Tailwind @theme inline — exposes tokens as utility values
+ * ============================================================ */
 
 @theme inline {
   --color-background: var(--background);
@@ -141,6 +296,7 @@
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
   --shadow-blue: var(--shadow-blue);
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -159,251 +315,30 @@
   --color-secondary: var(--secondary);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 4px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
+  --ease-ios: var(--ease-ios);
+  --ease-emphasized: var(--ease-emphasized);
+  --ease-snappy: var(--ease-snappy);
+  --ease-standard: var(--ease-standard);
 }
 
-/* Dark mode - activated when .dark class is on html element */
-html.dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
-  --card: #171717;
-  --card-foreground: #ededed;
-
-  --primary: #60A5FA;            /* Lighter blue for dark mode */
-  --primary-foreground: #0a0a0a;
-  --primary-hover: #3B82F6;
-  --primary-light: #1E40AF;
-  --primary-lightest: #1E3A8A;
-
-  --muted: #262626;
-  --muted-foreground: #a3a3a3;
-  --muted-dark: #737373;
-
-  --border: #262626;
-  --border-medium: #404040;
-  --input: #171717;
-  --ring: #60A5FA;
-
-  --accent: #262626;
-  --accent-foreground: #ededed;
-
-  /* Status colors for dark mode - more unique shades */
-  --success: #10B981;              /* Emerald green */
-  --success-bg: #065F46;
-  --success-text: #D1FAE5;
-
-  --warning: #F59E0B;              /* Amber orange */
-  --warning-bg: #92400E;
-  --warning-text: #FEF3C7;
-
-  --error: #F87171;                /* Crimson red */
-  --error-bg: #991B1B;
-  --error-text: #FEE2E2;
-
-  --info: #3B82F6;                 /* Indigo blue */
-  --info-bg: #1E40AF;
-  --info-text: #DBEAFE;
-
-  --saved: #94A3B8;                /* Slate gray */
-  --saved-bg: #1E293B;
-  --saved-text: #CBD5E1;
-
-  --interview: #A78BFA;         /* Violet purple */
-  --interview-bg: #6D28D9;
-  --interview-text: #EDE9FE;
-
-  color-scheme: dark;
-}
+/* ============================================================
+ * Base
+ * ============================================================ */
 
 body {
   background: var(--background);
   background-image: none;
-  background-size: auto;
   position: relative;
-}
-
-/* Hide scrollbar but keep scrolling */
-.scrollbar-hide {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
-}
-
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;  /* Chrome, Safari, Opera */
-}
-
-/* Animation utilities */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes slideInFromRight {
-  from {
-    opacity: 0;
-    transform: translateX(1rem);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes slideInFromRightFull {
-  from {
-    opacity: 0;
-    transform: translateX(100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes slideInFromRightSmooth {
-  from {
-    opacity: 0;
-    transform: translateX(100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes slideInFromLeft {
-  from {
-    opacity: 0;
-    transform: translateX(-1rem);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes zoomIn {
-  from {
-    transform: scale(0.8);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-.animate-in {
-  animation-fill-mode: both;
-}
-
-.fade-in {
-  animation-name: fadeIn;
-}
-
-.slide-in-from-right-4 {
-  animation-name: slideInFromRight;
-}
-
-.slide-in-from-right-full {
-  animation-name: slideInFromRightSmooth;
-  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); /* Smooth ease-out */
-  animation-fill-mode: both;
-}
-
-.slide-in-from-left-4 {
-  animation-name: slideInFromLeft;
-}
-
-.zoom-in {
-  animation-name: zoomIn;
-}
-
-.duration-300 {
-  animation-duration: 300ms;
-}
-
-.duration-500 {
-  animation-duration: 500ms;
-}
-
-.duration-700 {
-  animation-duration: 700ms;
-}
-
-/* Mobile safe area support */
-.safe-area-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-.safe-area-top {
-  padding-top: env(safe-area-inset-top, 0px);
-}
-
-/* Touch target minimum size */
-.touch-target {
-  min-width: 44px;
-  min-height: 44px;
-}
-
-/* Mobile-first scrolling containers */
-.mobile-scroll-x {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-}
-
-.mobile-scroll-x::-webkit-scrollbar {
-  display: none;
-}
-
-.snap-start {
-  scroll-snap-align: start;
-}
-
-.dark {
-  --background: oklch(0.147 0.004 49.25);
-  --foreground: oklch(0.985 0.001 106.423);
-  --card: oklch(0.216 0.006 56.043);
-  --card-foreground: oklch(0.985 0.001 106.423);
-  --popover: oklch(0.216 0.006 56.043);
-  --popover-foreground: oklch(0.985 0.001 106.423);
-  --primary: oklch(0.923 0.003 48.717);
-  --primary-foreground: oklch(0.216 0.006 56.043);
-  --secondary: oklch(0.268 0.007 34.298);
-  --secondary-foreground: oklch(0.985 0.001 106.423);
-  --muted: oklch(0.268 0.007 34.298);
-  --muted-foreground: oklch(0.709 0.01 56.259);
-  --accent: oklch(0.268 0.007 34.298);
-  --accent-foreground: oklch(0.985 0.001 106.423);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.553 0.013 58.071);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.216 0.006 56.043);
-  --sidebar-foreground: oklch(0.985 0.001 106.423);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0.001 106.423);
-  --sidebar-accent: oklch(0.268 0.007 34.298);
-  --sidebar-accent-foreground: oklch(0.985 0.001 106.423);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.553 0.013 58.071);
+  font-feature-settings: "ss01", "cv11";
 }
 
 @layer base {
@@ -413,52 +348,252 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Tabular numerics on anything that opts in */
+  [data-tabular], .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
-/* Liquid Glass Effect */
-.liquid-glass {
+/* ============================================================
+ * Scrollbar / safe-area / touch helpers (existing API, keep)
+ * ============================================================ */
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.mobile-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.mobile-scroll-x::-webkit-scrollbar {
+  display: none;
+}
+.snap-start {
+  scroll-snap-align: start;
+}
+
+/* ============================================================
+ * Legacy animation utilities (still referenced across the app)
+ * ============================================================ */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideInFromRight {
+  from { opacity: 0; transform: translateX(1rem); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideInFromRightFull {
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideInFromRightSmooth {
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideInFromLeft {
+  from { opacity: 0; transform: translateX(-1rem); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes zoomIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.animate-in { animation-fill-mode: both; }
+.fade-in { animation-name: fadeIn; }
+.slide-in-from-right-4 { animation-name: slideInFromRight; }
+.slide-in-from-right-full {
+  animation-name: slideInFromRightSmooth;
+  animation-timing-function: var(--ease-snappy);
+  animation-fill-mode: both;
+}
+.slide-in-from-left-4 { animation-name: slideInFromLeft; }
+.zoom-in { animation-name: zoomIn; }
+.duration-300 { animation-duration: 300ms; }
+.duration-500 { animation-duration: 500ms; }
+.duration-700 { animation-duration: 700ms; }
+
+/* ============================================================
+ * Redesign animations
+ * ============================================================ */
+
+@keyframes trackd-breath {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+@keyframes trackd-glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(0.62 0.20 262 / 0.35); }
+  50% { box-shadow: 0 0 0 10px oklch(0.62 0.20 262 / 0); }
+}
+@keyframes trackd-aurora-drift {
+  0% { transform: translate3d(-6%, -4%, 0) rotate(0deg); }
+  50% { transform: translate3d(6%, 4%, 0) rotate(6deg); }
+  100% { transform: translate3d(-6%, -4%, 0) rotate(0deg); }
+}
+@keyframes trackd-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+/* No transform/scale on this root wrapper: any non-none `transform` on an
+   ancestor makes `position: fixed` (activity rail, some popovers) relative to
+   that ancestor instead of the viewport — panels looked “pinned” in the wrong
+   place and the jobs table/empty state looked misaligned. */
+@keyframes trackd-view-transition-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.trackd-breath { animation: trackd-breath 2.4s var(--ease-ios) infinite; }
+.trackd-glow-pulse { animation: trackd-glow-pulse 1.8s var(--ease-ios) infinite; }
+
+/* Route-level transition applied by <PageTransition> */
+.trackd-route-enter {
+  animation: trackd-view-transition-in var(--duration-md) var(--ease-ios) both;
+}
+
+/* ============================================================
+ * Glass system — formalized "Liquid Glass"
+ *
+ * Usage:
+ *   <div class="glass">           — default content panel
+ *   <div class="glass glass-strong">
+ *   <div class="glass glass-subtle">
+ *   <div class="glass glass-nav">  — floating chrome (bars, pills)
+ *
+ * Performance: blur is GPU-expensive. Don't nest `.glass` inside
+ * `.glass`, and don't apply it inside long virtualized lists.
+ * ============================================================ */
+
+.glass {
   position: relative;
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(2px) saturate(180%);
-  -webkit-backdrop-filter: blur(2px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  box-shadow: 
-    0 8px 32px rgba(31, 38, 135, 0.2),
-    inset 0 4px 20px rgba(255, 255, 255, 0.3);
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-stroke);
+  border-radius: var(--radius);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-highlight),
+    0 10px 40px -12px oklch(0.18 0.015 264 / 0.18);
   isolation: isolate;
 }
 
-.dark .liquid-glass {
-  background: rgba(0, 0, 0, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.4),
-    inset 0 4px 20px rgba(255, 255, 255, 0.1);
+.glass-strong {
+  background: var(--glass-fill-strong);
+  --glass-blur: 32px;
+  --glass-saturate: 180%;
 }
 
-.liquid-glass::after {
-  content: '';
+.glass-subtle {
+  background: var(--glass-fill-subtle);
+  --glass-blur: 14px;
+  --glass-saturate: 140%;
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-highlight),
+    0 4px 16px -8px oklch(0.18 0.015 264 / 0.10);
+}
+
+.glass-nav {
+  background: var(--glass-fill-nav);
+  --glass-blur: 24px;
+  --glass-saturate: 180%;
+  /* No outer or inset box-shadow — chrome bars read flatter; borders carry separation */
+  box-shadow: none;
+}
+
+/* Reduced-transparency fallback */
+@media (prefers-reduced-transparency: reduce) {
+  .glass, .glass-strong, .glass-subtle, .glass-nav {
+    background: var(--card);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* No-support fallback */
+@supports not (backdrop-filter: blur(1px)) {
+  .glass, .glass-strong, .glass-subtle, .glass-nav {
+    background: var(--card);
+  }
+}
+
+/* Reduced-motion fallback */
+@media (prefers-reduced-motion: reduce) {
+  .animate-in,
+  .trackd-breath,
+  .trackd-glow-pulse,
+  .trackd-route-enter {
+    animation: none !important;
+  }
+  *, ::before, ::after {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================
+ * Aurora — subtle ambient background used behind glass panels
+ * Applied via <div class="aurora" aria-hidden /> inside a clipped
+ * parent.
+ * ============================================================ */
+
+.aurora {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: inherit;
-  backdrop-filter: blur(1px);
-  -webkit-backdrop-filter: blur(1px);
-  box-shadow: 
-    inset -10px -8px 0px -11px rgba(255, 255, 255, 1),
-    inset 0px -9px 0px -8px rgba(255, 255, 255, 1);
-  opacity: 0.6;
-  z-index: -1;
-  filter: blur(1px) brightness(115%);
-  -webkit-filter: blur(1px) brightness(115%);
+  inset: -20%;
+  z-index: 0;
+  pointer-events: none;
+  filter: blur(80px) saturate(140%);
+  background:
+    radial-gradient(40% 40% at 20% 30%, var(--aurora-1) 0%, transparent 60%),
+    radial-gradient(35% 35% at 80% 20%, var(--aurora-2) 0%, transparent 60%),
+    radial-gradient(45% 45% at 60% 85%, var(--aurora-3) 0%, transparent 60%);
+  animation: trackd-aurora-drift 24s var(--ease-ios) infinite;
+  opacity: 0.9;
 }
 
-.dark .liquid-glass::after {
-  background: rgba(255, 255, 255, 0.05);
-  box-shadow: 
-    inset -10px -8px 0px -11px rgba(255, 255, 255, 0.3),
-    inset 0px -9px 0px -8px rgba(255, 255, 255, 0.3);
+@media (prefers-reduced-motion: reduce) {
+  .aurora { animation: none; }
+}
+
+/* Hairline divider utility */
+.hairline { background-color: var(--border); }
+.hairline-strong { background-color: var(--border-medium); }
+
+/* Shimmer utility for skeletons / loading */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(1 0 0 / 0.06) 50%,
+    transparent 100%
+  );
+  animation: trackd-shimmer 1.8s var(--ease-ios) infinite;
 }

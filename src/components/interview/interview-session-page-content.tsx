@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { GlassPanel } from '@/components/ui/glass'
 import { VoiceChat } from './voice-chat'
 import { SessionSummary } from './session-summary'
 import { ArrowLeft } from 'lucide-react'
@@ -47,17 +48,22 @@ export function InterviewSessionPageContent({
     setSummary(generatedSummary)
   }
 
+  const backButton = (
+    <Button
+      onClick={() => router.push('/interview-prep')}
+      variant="ghost"
+      size="sm"
+      className="h-8 -ml-2 text-muted-foreground hover:text-foreground hover:bg-foreground/5"
+    >
+      <ArrowLeft className="size-4 mr-1.5" />
+      <span className="text-xs md:text-sm">Back to sessions</span>
+    </Button>
+  )
+
   if (summary) {
     return (
-      <div className="space-y-6">
-        <Button
-          onClick={() => router.push('/interview-prep')}
-          variant="outline"
-        >
-          <ArrowLeft className="size-4 mr-2" />
-          Back to Sessions
-        </Button>
-
+      <div className="space-y-4">
+        {backButton}
         <SessionSummary
           summary={summary}
           onRetry={() => router.push('/interview-prep')}
@@ -68,22 +74,14 @@ export function InterviewSessionPageContent({
   }
 
   return (
-    <div className="space-y-6">
-      <Button
-        onClick={() => router.push('/interview-prep')}
-        variant="outline"
-      >
-        <ArrowLeft className="size-4 mr-2" />
-        Back to Sessions
-      </Button>
-
-      <div className="bg-card border border-border rounded-lg h-[600px]">
+    <div className="space-y-4">
+      {backButton}
+      <GlassPanel className="rounded-3xl h-[640px] overflow-hidden p-0">
         <VoiceChat
           sessionId={session.id}
           onSummaryGenerated={handleSummaryGenerated}
         />
-      </div>
+      </GlassPanel>
     </div>
   )
 }
-

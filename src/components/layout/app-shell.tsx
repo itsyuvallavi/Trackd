@@ -1,38 +1,40 @@
-'use client'
-
-import { SimpleTopBar } from './simple-top-bar'
-import { LeftSidebar } from './left-sidebar'
-import { FloatingFeedbackButton } from '@/components/feedback/floating-feedback-button'
-import { NotificationsBell } from './notifications-bell'
+import { getCurrentUser } from '@/lib/auth'
+import { getEmailIntegration } from '@/lib/cached-queries'
+import { AppShellClient } from './app-shell-client'
 
 interface AppShellProps {
   children: React.ReactNode
+  /**
+   * When passed, callers control the email-setup banner themselves. When
+   * omitted, the shell asks the (cross-request cached) email integration
+   * helper and shows the banner when no integration exists.
+   */
   showEmailNotification?: boolean
 }
 
-export function AppShell({ children, showEmailNotification }: AppShellProps) {
+/**
+ * Server-side shell. Hoisting the `emailIntegration` read here removes the
+ * duplicate fetch every authed page used to do purely to drive the banner.
+ * Because `getEmailIntegration` is now `unstable_cache`'d with a per-user tag,
+ * the work is amortized across all authed pages.
+ */
+export async function AppShell({
+  children,
+  showEmailNotification,
+}: AppShellProps) {
+  let resolvedShowEmailNotification = showEmailNotification
+
+  if (resolvedShowEmailNotification === undefined) {
+    const user = await getCurrentUser()
+    if (user) {
+      const emailIntegration = await getEmailIntegration(user.id)
+      resolvedShowEmailNotification = !emailIntegration
+    }
+  }
+
   return (
-    <div className="min-h-screen flex flex-col">
-      <SimpleTopBar 
-        showEmailNotification={showEmailNotification}
-      />
-
-      {/* Mobile Notification Icon - Top Right */}
-      <div className="fixed top-4 right-4 z-[9999] md:hidden safe-area-top">
-        <NotificationsBell showEmailNotification={showEmailNotification} />
-      </div>
-
-      <div className="flex flex-1 relative">
-        {/* Left Sidebar - Fixed, overlays content */}
-        <LeftSidebar />
-
-        {/* Main content area - no margin, sidebar overlays */}
-        <main className="flex-1 flex flex-col relative z-0 pt-0 md:pt-[64px] pb-20 md:pb-0">
-          {children}
-        </main>
-      </div>
-
-      <FloatingFeedbackButton />
-    </div>
+    <AppShellClient showEmailNotification={resolvedShowEmailNotification}>
+      {children}
+    </AppShellClient>
   )
 }

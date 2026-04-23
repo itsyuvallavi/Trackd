@@ -4,6 +4,11 @@ import {
   BOT_SEARCH_RESULTS_WANTED,
   describeJSearchDateWindow,
 } from '@/lib/bot/search-constants'
+import {
+  jobsSearchApiSearchHint,
+  jsearchJobRequirementsFor,
+  normalizeExperienceLevel,
+} from '@/lib/bot/experience-level'
 
 export type BotSearchBackends = {
   jsearch: boolean
@@ -48,6 +53,16 @@ export type BotSearchPreviewModel = {
     salaryMinUsd: number | null
     experienceLabel: string
   }
+  /**
+   * How the user's experienceLevel setting is forwarded to each search backend.
+   * Each value is null when the user chose "Any level" (no filter applied).
+   */
+  experienceForwarding: {
+    /** Value sent as JSearch `job_requirements` (csv of buckets). */
+    jsearchJobRequirements: string | null
+    /** Keyword hint prepended to the Jobs Search API `search_term`. */
+    jobsSearchApiTermPrefix: string | null
+  }
 }
 
 /**
@@ -59,6 +74,12 @@ export function buildBotSearchPreview(input: {
   locations: string[]
   remoteOnly: boolean
   experienceLabel: string
+  /**
+   * Raw BotConfig.experienceLevel value (e.g. `'senior_level'`). Required to
+   * compute how the experience setting is forwarded to each backend — must come
+   * from the same source /settings/bot saves.
+   */
+  experienceLevelRaw: string
   excludeCompanies: string[]
   excludeKeywords: string[]
   salaryMinUsd: number | null
@@ -85,7 +106,16 @@ export function buildBotSearchPreview(input: {
     enabledPlatforms.push('Multi-board jobs (RapidAPI Jobs Search API — getjobs_excel)')
   }
 
-  const jobsSearchPhrase = usedKw.join(' ')
+  const level = normalizeExperienceLevel(input.experienceLevelRaw)
+  const jsearchJobRequirements = jsearchJobRequirementsFor(level)
+  const jobsSearchApiTermPrefix = jobsSearchApiSearchHint(level)
+
+  const termPrefix = jobsSearchApiTermPrefix
+  const jobsSearchPhraseBase = usedKw.join(' ')
+  const jobsSearchPhrase =
+    termPrefix && !new RegExp(`\\b${termPrefix}\\b`, 'i').test(jobsSearchPhraseBase)
+      ? `${termPrefix} ${jobsSearchPhraseBase}`.trim()
+      : jobsSearchPhraseBase
 
   return {
     hasKeywords: usedKw.length > 0,
@@ -104,6 +134,10 @@ export function buildBotSearchPreview(input: {
       minScore: input.minScore,
       salaryMinUsd: input.salaryMinUsd,
       experienceLabel: input.experienceLabel,
+    },
+    experienceForwarding: {
+      jsearchJobRequirements,
+      jobsSearchApiTermPrefix,
     },
   }
 }

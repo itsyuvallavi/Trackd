@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { JobStatus, ActivityType } from '@prisma/client'
 import { NotificationService } from '@/lib/notification-service'
+import { cacheTagsFor } from '@/lib/cache-tags'
 
 export async function POST(
   request: NextRequest,
@@ -131,6 +133,11 @@ export async function POST(
         },
       },
     })
+
+    const tags = cacheTagsFor(user.id)
+    revalidateTag(tags.jobs, { expire: 0 })
+    revalidateTag(tags.activity, { expire: 0 })
+    revalidateTag(tags.notifications, { expire: 0 })
 
     return NextResponse.json({
       success: true,

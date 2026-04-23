@@ -74,15 +74,15 @@ export function NotificationsFeed({ notifications }: NotificationsFeedProps) {
     
     switch (type) {
       case 'NEW_JOB_DETECTED':
-        return 'text-blue-500'
+        return 'text-info'
       case 'AMBIGUOUS_MATCH':
-        return 'text-orange-500'
+        return 'text-warning'
       case 'JOB_UPDATED':
         return 'text-primary'
       case 'SYNC_COMPLETE':
-        return 'text-green-500'
+        return 'text-success'
       case 'SYNC_ERROR':
-        return 'text-red-500'
+        return 'text-error'
       default:
         return 'text-muted-foreground'
     }

@@ -65,12 +65,14 @@ export function ResumeAdvisorContent({ aiConfigured = true }: ResumeAdvisorConte
   const configBanner =
     !aiConfigured ? (
       <div
-        className="mb-4 rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-foreground"
+        className="mb-4 glass glass-subtle rounded-2xl border-warning/30 bg-warning-bg/50 px-4 py-3 text-sm text-foreground"
         role="status"
       >
         Resume analysis is not available: the server is missing{' '}
-        <code className="rounded bg-muted px-1.5 py-0.5 text-xs">OPENAI_API_KEY</code>. Add it to your
-        environment and redeploy to enable uploads and AI feedback.
+        <code className="rounded bg-foreground/[0.06] px-1.5 py-0.5 text-xs">
+          OPENAI_API_KEY
+        </code>
+        . Add it to your environment and redeploy to enable uploads and AI feedback.
       </div>
     ) : null
 
@@ -85,12 +87,16 @@ export function ResumeAdvisorContent({ aiConfigured = true }: ResumeAdvisorConte
               <div className="mb-4">
                 <button
                   onClick={() => setShowUpload(false)}
-                  className="text-sm text-muted-foreground hover:text-foreground mb-4 flex items-center gap-2"
+                  className="text-sm text-muted-foreground hover:text-foreground mb-4 flex items-center gap-2 transition-colors"
                 >
                   ← Back to chat
                 </button>
-                <h1 className="text-2xl font-semibold mb-2">Resume Advisor</h1>
-                <p className="text-sm text-muted-foreground">Upload your resume to get started</p>
+                <h1 className="text-3xl font-semibold tracking-tight mb-1">
+                  Resume advisor
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Upload your resume to get started.
+                </p>
               </div>
               {configBanner}
               <ResumeUpload onResumeUploaded={handleResumeUploaded} disabled={!aiConfigured} />
@@ -120,9 +126,13 @@ export function ResumeAdvisorContent({ aiConfigured = true }: ResumeAdvisorConte
           <div className="w-full max-w-[1160px]">
             {/* Header */}
             <div className="mb-4">
-              <h1 className="text-2xl font-semibold mb-2">Resume Advisor</h1>
+              <h1 className="text-3xl font-semibold tracking-tight mb-1">
+                Resume advisor
+              </h1>
               <p className="text-sm text-muted-foreground">
-                {sessionId ? 'Chat with AI about your resume' : 'Get AI-powered feedback on your resume'}
+                {sessionId
+                  ? 'Chat with AI about your resume.'
+                  : 'Get AI-powered feedback on your resume.'}
               </p>
             </div>
 

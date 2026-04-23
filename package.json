@@ -20,6 +20,8 @@
     "test:live:run": "bun run src/scripts/test-email-sync-live.ts --live",
     "test:bot": "bun run scripts/test-bot-search.ts",
     "test:bot:dry": "bun run scripts/test-bot-search.ts --dry-run",
+    "test:bot:snap": "bun run scripts/test-bot-search.ts --dry-run --save-snapshot",
+    "test:bot:replay": "bun run scripts/test-bot-search.ts --dry-run --from-snapshot",
     "bot:us-report": "bun run scripts/bot-jobs-us-report.ts",
     "reset:jobs": "bun run scripts/wipe-user-job-data.ts",
     "test:auto-apply": "bun run scripts/test-auto-apply-local.ts",

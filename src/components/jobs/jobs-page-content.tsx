@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { JobActionsMenu } from '@/components/jobs/job-actions-menu'
 import { StatusDropdown } from '@/components/jobs/status-dropdown'
@@ -19,7 +19,7 @@ import { EmptyState } from '@/components/jobs/empty-state'
 import { ExtensionPopup } from '@/components/jobs/extension-popup'
 import { Tooltip } from '@/components/ui/tooltip'
 import { STATUS_LABELS } from '@/lib/constants'
-import type { JobSource } from '@prisma/client'
+import type { JobSource, JobStatus } from '@prisma/client'
 import { jobSourceDisplayName } from '@/lib/job-source-display'
 import { JobCardMobile } from '@/components/jobs/job-card-mobile'
 import { useColumnVisibility, type ColumnKey } from '@/components/jobs/column-visibility-settings'
@@ -35,24 +35,15 @@ const AddJobFromUrlModal = dynamic(() => import('@/components/jobs/add-job-from-
   ssr: false,
 })
 
-// Status badge styling - using more unique shades
-const statusStyles = {
-  SAVED: 'bg-slate-500/10 text-slate-300 border-slate-500/20',
-  APPLIED: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20',
-  INTERVIEW: 'bg-violet-500/10 text-violet-300 border-violet-500/20',
-  OFFER: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
-  REJECTED: 'bg-red-600/10 text-red-300 border-red-600/20',
-  ARCHIVED: 'bg-amber-600/10 text-amber-300 border-amber-600/20',
-}
-
-// Status color indicators (for left side of job title) - more unique shades
-const statusColorIndicators = {
-  SAVED: 'bg-slate-500',           // Slate gray
-  APPLIED: 'bg-indigo-500',        // Indigo blue
-  INTERVIEW: 'bg-violet-500',      // Violet purple
-  OFFER: 'bg-emerald-500',         // Emerald green
-  REJECTED: 'bg-red-600',          // Crimson red
-  ARCHIVED: 'bg-amber-600',         // Amber orange
+// Tokenized status accent bar (left of each row) — drives the redesign's
+// colored hairline. All values are OKLCH variables defined in globals.css.
+const statusColorIndicators: Record<string, string> = {
+  SAVED: 'bg-saved',
+  APPLIED: 'bg-info',
+  INTERVIEW: 'bg-interview',
+  OFFER: 'bg-success',
+  REJECTED: 'bg-error',
+  ARCHIVED: 'bg-warning',
 }
 
 interface Job {
@@ -80,6 +71,7 @@ interface DateRange {
 }
 
 export function JobsPageContent({ jobs }: JobsPageContentProps) {
+  const [listJobs, setListJobs] = useState<Job[]>(jobs)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isAddUrlModalOpen, setIsAddUrlModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -87,10 +79,16 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
   const [dateRange, setDateRange] = useState<DateRange>({ from: null, to: null })
   const { visibleColumns, setVisibleColumns, isHydrated } = useColumnVisibility()
 
+  // Keep client list in sync when the server payload changes (e.g. after
+  // add/delete or a completed router.refresh()).
+  useEffect(() => {
+    setListJobs(jobs)
+  }, [jobs])
+
   // Filter jobs based on search query, status, and date range
   // By default, exclude archived and rejected jobs unless explicitly viewing them
   const filteredJobs = useMemo(() => {
-    let filtered = jobs.filter(job => {
+    let filtered = listJobs.filter(job => {
       // If viewing "all" (active applications), exclude archived and rejected jobs
       if (activeStatus === 'all') {
         return job.status !== 'ARCHIVED' && job.status !== 'REJECTED'
@@ -158,10 +156,10 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
     }
 
     return filtered
-  }, [jobs, searchQuery, activeStatus, dateRange])
+  }, [listJobs, searchQuery, activeStatus, dateRange])
 
   // Calculate status counts from active jobs only (excluding ARCHIVED and REJECTED for "all" count)
-  const statusCounts = jobs.reduce((acc, job) => {
+  const statusCounts = listJobs.reduce((acc, job) => {
     const status = job.status as keyof typeof acc
     if (status in acc) {
       acc[status]++
@@ -177,7 +175,7 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
   })
   
   // Calculate total active jobs (excluding ARCHIVED and REJECTED)
-  const totalActiveJobs = jobs.filter(job => 
+  const totalActiveJobs = listJobs.filter(job => 
     job.status !== 'ARCHIVED' && job.status !== 'REJECTED'
   ).length
 
@@ -193,6 +191,15 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
   const handleDateRangeChange = useCallback((range: DateRange) => {
     setDateRange(range)
   }, [])
+
+  const applyStatusToJob = useCallback(
+    (jobId: string, next: JobStatus) => {
+      setListJobs((prev) =>
+        prev.map((j) => (j.id === jobId ? { ...j, status: next } : j))
+      )
+    },
+    []
+  )
 
   return (
     <>
@@ -226,14 +233,14 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
 
       {/* Table */}
       <div>
-          {jobs.length === 0 ? (
+          {listJobs.length === 0 ? (
             <EmptyState
               onManualAdd={() => setIsAddModalOpen(true)}
               onUrlAdd={() => setIsAddUrlModalOpen(true)}
             />
           ) : filteredJobs.length === 0 ? (
-            <div className="text-center py-12 border border-border bg-card">
-              <div className="mx-auto w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-3">
+            <div className="glass glass-subtle rounded-2xl text-center py-12">
+              <div className="mx-auto w-12 h-12 rounded-full bg-foreground/5 flex items-center justify-center mb-3">
                 <Search className="size-6 text-muted-foreground" />
               </div>
               <h3 className="text-sm font-medium text-foreground mb-1">No results found</h3>
@@ -246,12 +253,20 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
               {/* Mobile: Card View */}
               <div className="md:hidden space-y-2">
                 {filteredJobs.map((job, index) => (
-                  <JobCardMobile key={job.id} job={job} index={index} />
+                  <JobCardMobile
+                    key={job.id}
+                    job={job}
+                    index={index}
+                    onStatusOptimistic={(s) => applyStatusToJob(job.id, s)}
+                    onStatusCommitFailed={(revert) =>
+                      applyStatusToJob(job.id, revert)
+                    }
+                  />
                 ))}
               </div>
 
-              {/* Desktop: Table View */}
-              <div className="hidden md:block border border-border bg-card overflow-hidden">
+              {/* Desktop: Cards-in-a-list Table */}
+              <div className="hidden md:block glass glass-subtle rounded-2xl overflow-hidden">
                 {!isHydrated ? (
                   <div className="p-8 text-center text-muted-foreground text-sm">
                     Loading...
@@ -259,7 +274,7 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                 ) : (
                   <Table>
                   <TableHeader>
-                    <TableRow className="hover:bg-transparent border-b border-border">
+                    <TableRow className="hover:bg-transparent border-b border-border/60">
                       {visibleColumns.has('role') && (
                         <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5" style={{ width: '250px', minWidth: '250px', maxWidth: '250px' }}>
                           Role
@@ -302,25 +317,30 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                   {filteredJobs.map((job) => (
                     <TableRow
                       key={job.id}
-                      className="border-b border-border/50 hover:bg-muted/30 transition-colors"
+                      className="border-b border-border/40 last:border-b-0 hover:bg-foreground/[0.03] transition-colors duration-150"
                     >
                       {visibleColumns.has('role') && (
-                        <TableCell className="py-1.5" style={{ width: '250px', minWidth: '250px', maxWidth: '250px' }}>
-                          <div className="flex items-center gap-2">
-                            <div className={`w-0.5 h-4 rounded-full shrink-0 ${statusColorIndicators[job.status as keyof typeof statusColorIndicators]}`} />
+                        <TableCell className="py-2" style={{ width: '250px', minWidth: '250px', maxWidth: '250px' }}>
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              aria-hidden
+                              className={`w-[3px] h-6 rounded-full shrink-0 ${statusColorIndicators[job.status] || 'bg-muted'}`}
+                            />
                             {job.title.length > 30 ? (
                               <Tooltip content={job.title} scrollable={job.title.length > 120}>
-                                <Link 
+                                <Link
                                   href={`/jobs/${job.id}`}
                                   className="text-sm font-medium hover:text-primary transition-colors truncate"
+                                  style={{ viewTransitionName: `job-title-${job.id}` }}
                                 >
                                   {job.title.substring(0, 30)}...
                                 </Link>
                               </Tooltip>
                             ) : (
-                              <Link 
+                              <Link
                                 href={`/jobs/${job.id}`}
                                 className="text-sm font-medium hover:text-primary transition-colors"
+                                style={{ viewTransitionName: `job-title-${job.id}` }}
                               >
                                 {job.title}
                               </Link>
@@ -354,9 +374,15 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                       {visibleColumns.has('status') && (
                         <TableCell className="text-center py-1.5" style={{ width: '120px', minWidth: '120px', maxWidth: '120px' }}>
                           <div className="flex justify-center">
-                            <StatusDropdown 
-                              jobId={job.id} 
-                              currentStatus={job.status as any}
+                            <StatusDropdown
+                              jobId={job.id}
+                              currentStatus={job.status as JobStatus}
+                              onOptimisticStatus={(s) =>
+                                applyStatusToJob(job.id, s)
+                              }
+                              onStatusCommitFailed={(revert) =>
+                                applyStatusToJob(job.id, revert)
+                              }
                             />
                           </div>
                         </TableCell>

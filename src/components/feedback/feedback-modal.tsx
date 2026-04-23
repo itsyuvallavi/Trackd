@@ -108,7 +108,7 @@ export function FeedbackModal({ open, onOpenChange, currentUrl }: FeedbackModalP
 
         {success ? (
           <div className="py-8 text-center">
-            <div className="text-green-600 dark:text-green-400 mb-2">✓</div>
+            <div className="text-success mb-2">✓</div>
             <p className="text-sm font-medium">Thank you! Your feedback has been submitted.</p>
           </div>
         ) : (

@@ -45,10 +45,16 @@ export class AIClient {
 
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
       try {
+        const resolvedModel = options?.model ?? this.config.model
+        const resolvedTemp = options?.temperature ?? this.config.temperature
+        // Reasoning / o-series models and some newer models (e.g. gpt-5-mini) only
+        // accept the default temperature (1). Omit the parameter entirely for those models
+        // so the API doesn't reject the request with a 400.
+        const supportsCustomTemp = !/^(o1|o3|o4|gpt-5)/i.test(resolvedModel)
         const response = await this.client.chat.completions.create({
-          model: options?.model ?? this.config.model,
+          model: resolvedModel,
           messages,
-          temperature: options?.temperature ?? this.config.temperature,
+          ...(supportsCustomTemp ? { temperature: resolvedTemp } : {}),
           max_tokens: options?.maxTokens,
           response_format: options?.responseFormat === 'text' 
             ? undefined 

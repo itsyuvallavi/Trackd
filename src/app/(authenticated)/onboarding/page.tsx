@@ -3,20 +3,34 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { Aurora, GlassPanel } from '@/components/ui/glass'
 import { CheckCircle, Mail, ArrowRight, Sparkles } from 'lucide-react'
 import Link from 'next/link'
+import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
 type OnboardingStep = 'welcome' | 'email' | 'complete'
 
 const STEPS: { key: OnboardingStep; title: string; description: string }[] = [
-  { key: 'welcome', title: 'Welcome to Trackd', description: 'Get started in just a few steps' },
-  { key: 'email', title: 'Email Sync', description: 'Automatically track status updates from emails' },
-  { key: 'complete', title: "You're All Set!", description: 'Start tracking your applications' },
+  {
+    key: 'welcome',
+    title: 'Welcome to Trackd',
+    description: 'Get started in just a few steps',
+  },
+  {
+    key: 'email',
+    title: 'Email Sync',
+    description: 'Automatically track status updates from emails',
+  },
+  {
+    key: 'complete',
+    title: "You're all set",
+    description: 'Start tracking your applications',
+  },
 ]
 
 function getInitialStep(stepParam: string | null): OnboardingStep {
-  if (stepParam && STEPS.find(s => s.key === stepParam)) {
+  if (stepParam && STEPS.find((s) => s.key === stepParam)) {
     return stepParam as OnboardingStep
   }
   return 'welcome'
@@ -27,13 +41,15 @@ function OnboardingContent() {
   const searchParams = useSearchParams()
   const stepParam = searchParams.get('step')
 
-  const [currentStep, setCurrentStep] = useState<OnboardingStep>(() => getInitialStep(stepParam))
+  const [currentStep, setCurrentStep] = useState<OnboardingStep>(() =>
+    getInitialStep(stepParam)
+  )
   const supabase = createClient()
 
   const steps = STEPS
   const currentStepIndex = steps.findIndex((s) => s.key === currentStep)
+  const progress = ((currentStepIndex + 1) / steps.length) * 100
 
-  // Clean up URL if there's a step parameter (after OAuth redirect)
   useEffect(() => {
     if (stepParam) {
       window.history.replaceState({}, '', '/onboarding')
@@ -67,149 +83,125 @@ function OnboardingContent() {
     await handleNext()
   }
 
-  const handleSkipAll = async () => {
-    await markOnboardingComplete()
-    router.push('/jobs')
-  }
-
-
   return (
-    <div className="size-full flex">
-      <div className="flex-1 min-h-screen bg-background">
-        <div className="max-w-4xl mx-auto p-8">
-          {/* Progress Indicator */}
-          <div className="mb-8">
-            <div className="relative flex items-start mb-4">
-              {steps.map((step, index) => (
-                <div key={step.key} className="flex flex-col items-center flex-1 relative z-10">
-                  {/* Circle */}
-                  <div
-                    className={`size-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 shrink-0 ${
-                      index <= currentStepIndex
-                        ? 'bg-primary border-primary text-primary-foreground scale-110 shadow-lg shadow-primary/20'
-                        : 'border-foreground/20 text-foreground/40 scale-100'
-                    }`}
-                  >
-                    {index < currentStepIndex ? (
-                      <CheckCircle className="size-5 animate-in fade-in zoom-in duration-300" />
-                    ) : (
-                      <span className="text-sm font-semibold transition-all duration-300">{index + 1}</span>
-                    )}
-                  </div>
-                  
-                  {/* Text Label */}
-                  <span className="text-xs mt-2 text-center text-muted-foreground h-10 flex items-center justify-center px-1">
-                    {step.title}
-                  </span>
-                  
-                  {/* Connector Line - positioned absolutely between circles */}
-                  {index < steps.length - 1 && (
-                    <div
-                      className={`absolute top-5 left-[calc(50%+1.25rem)] h-0.5 w-[calc(100%-2.5rem)] transition-all duration-700 ease-out ${
-                        index < currentStepIndex ? 'bg-primary' : 'bg-foreground/10'
-                      }`}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+    <div className="dark relative min-h-screen w-full flex items-center justify-center bg-background text-foreground overflow-hidden">
+      <Aurora />
 
-          {/* Step Content */}
-          <div 
-            key={currentStep}
-            className="bg-card border border-border rounded-lg p-8 min-h-[500px] flex flex-col animate-in fade-in slide-in-from-right-4 duration-500"
-          >
-            {currentStep === 'welcome' && (
-              <div className="flex-1 flex flex-col items-center justify-center text-center">
-                <div className="size-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
-                  <Sparkles className="size-10 text-primary" />
+      <div className="relative z-10 w-full max-w-3xl px-4 md:px-6 py-8 md:py-12">
+        {/* Progress rail — cobalt, thin. */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+            <span className="tabular-nums">
+              Step {currentStepIndex + 1} / {steps.length}
+            </span>
+            <span>{steps[currentStepIndex].title}</span>
+          </div>
+          <div className="h-[2px] w-full rounded-full bg-foreground/10 overflow-hidden">
+            <div
+              className="h-full bg-primary transition-[width] duration-700 ease-[var(--ease-ios)]"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Step content — glass card, slide+crossfade between steps */}
+        <GlassPanel
+          key={currentStep}
+          variant="strong"
+          className="rounded-3xl p-6 md:p-10 min-h-[520px] flex flex-col trackd-route-enter"
+        >
+          {currentStep === 'welcome' && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center">
+              <div className="size-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-6">
+                <Sparkles className="size-7 text-primary" />
+              </div>
+              <h1 className="text-4xl font-semibold tracking-tight mb-3">
+                Welcome to Trackd
+              </h1>
+              <p className="text-base text-muted-foreground mb-8 max-w-xl">
+                Your job application tracker that stays up to date automatically.
+                Never maintain a spreadsheet again.
+              </p>
+              <div className="space-y-3 mb-8 text-left max-w-md w-full">
+                <Feature
+                  title="Automatic status tracking"
+                  body="Get updates from your emails automatically."
+                />
+                <Feature
+                  title="One-click job saving"
+                  body="Save jobs from any site with our browser extension."
+                />
+                <Feature
+                  title="Never miss a deadline"
+                  body="Track interviews and follow-ups in one place."
+                />
+              </div>
+              <Button onClick={handleNext} size="lg" className="rounded-full">
+                Get started
+                <ArrowRight className="size-4 ml-2" />
+              </Button>
+            </div>
+          )}
+
+          {currentStep === 'email' && (
+            <div className="flex-1 flex flex-col">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="size-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+                  <Mail className="size-5 text-primary" />
                 </div>
-                <h1 className="text-4xl font-bold mb-4">Welcome to Trackd!</h1>
-                <p className="text-lg text-muted-foreground mb-8 max-w-2xl">
-                  Your job application tracker that automatically stays up to date. Never maintain a spreadsheet again.
-                </p>
-                <div className="space-y-4 mb-8 text-left max-w-md">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle className="size-5 text-primary mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-medium">Automatic Status Tracking</p>
-                      <p className="text-sm text-muted-foreground">
-                        Get updates from your emails automatically
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <CheckCircle className="size-5 text-primary mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-medium">One-Click Job Saving</p>
-                      <p className="text-sm text-muted-foreground">
-                        Save jobs from any website with our browser extension
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <CheckCircle className="size-5 text-primary mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-medium">Never Miss a Deadline</p>
-                      <p className="text-sm text-muted-foreground">
-                        Track interviews and follow-ups in one place
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  <Button onClick={handleNext} size="lg">
-                    Get Started
-                    <ArrowRight className="size-4 ml-2" />
-                  </Button>
+                <div>
+                  <h2 className="text-2xl font-semibold tracking-tight">
+                    Connect your email
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Automatically track status updates from job board emails.
+                  </p>
                 </div>
               </div>
-            )}
 
-            {currentStep === 'email' && (
-              <div className="flex-1 flex flex-col">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="size-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Mail className="size-6 text-primary" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold">Connect Your Email</h2>
-                    <p className="text-muted-foreground">
-                      Automatically track status updates from job board emails
-                    </p>
-                  </div>
+              <div className="flex-1 space-y-5">
+                <div className="rounded-2xl glass glass-subtle p-5">
+                  <h3 className="text-sm font-semibold tracking-tight mb-2 text-foreground/80">
+                    How it works
+                  </h3>
+                  <ul className="space-y-1.5 text-sm text-muted-foreground list-disc list-inside">
+                    <li>
+                      We scan emails from job boards like LinkedIn, Indeed, and
+                      Greenhouse.
+                    </li>
+                    <li>Status updates are automatically tracked.</li>
+                    <li>
+                      You can review and approve changes before they&apos;re
+                      applied.
+                    </li>
+                  </ul>
                 </div>
 
-                <div className="flex-1 space-y-6">
-                  <div className="p-6 border border-border rounded-lg bg-accent/50">
-                    <h3 className="font-semibold mb-2">How it works:</h3>
-                    <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      <li>We scan emails from job boards like LinkedIn, Indeed, Greenhouse</li>
-                      <li>Status updates are automatically tracked</li>
-                      <li>You can review and approve changes before they&apos;re applied</li>
-                    </ul>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm font-medium mb-1">
+                      Easy setup{' '}
+                      <span className="text-muted-foreground font-normal">
+                        (recommended)
+                      </span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      One-click connection — no passwords needed.
+                    </p>
                   </div>
 
-                  {/* OAuth Options */}
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-sm font-medium mb-3">Easy Setup (Recommended)</p>
-                      <p className="text-xs text-muted-foreground mb-4">
-                        One-click connection - no passwords needed
-                      </p>
-                    </div>
-
-                    {/* Google and Microsoft side by side */}
-                    <div className="grid grid-cols-2 gap-3">
-                    {/* Google OAuth Button */}
+                  <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
                       onClick={() => {
                         const redirectTo = '/onboarding?step=complete'
                         window.location.href = `/api/auth/email/oauth?provider=google&redirect_to=${encodeURIComponent(redirectTo)}`
                       }}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2.5 border border-border rounded-lg hover:bg-accent/50 transition-colors group"
+                      className={cn(
+                        'w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl',
+                        'glass glass-subtle hover:bg-foreground/[0.04]',
+                        'transition-[background-color,transform] duration-150 ease-[var(--ease-ios)] hover:-translate-y-0.5'
+                      )}
                     >
                       <svg className="size-5 shrink-0" viewBox="0 0 24 24">
                         <path
@@ -232,112 +224,138 @@ function OnboardingContent() {
                       <span className="font-medium text-sm">Google</span>
                     </button>
 
-                      {/* Outlook OAuth Button */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const redirectTo = '/onboarding?step=complete'
-                          window.location.href = `/api/auth/email/oauth?provider=microsoft&redirect_to=${encodeURIComponent(redirectTo)}`
-                        }}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2.5 border border-border rounded-lg hover:bg-accent/50 transition-colors group"
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const redirectTo = '/onboarding?step=complete'
+                        window.location.href = `/api/auth/email/oauth?provider=microsoft&redirect_to=${encodeURIComponent(redirectTo)}`
+                      }}
+                      className={cn(
+                        'w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl',
+                        'glass glass-subtle hover:bg-foreground/[0.04]',
+                        'transition-[background-color,transform] duration-150 ease-[var(--ease-ios)] hover:-translate-y-0.5'
+                      )}
+                    >
+                      <svg
+                        className="size-5 shrink-0"
+                        viewBox="0 0 24 24"
+                        fill="none"
                       >
-                        <svg className="size-5 shrink-0" viewBox="0 0 24 24" fill="none">
-                          <path
-                            d="M7.5 3h9A4.5 4.5 0 0 1 21 7.5v9a4.5 4.5 0 0 1-4.5 4.5h-9A4.5 4.5 0 0 1 3 16.5v-9A4.5 4.5 0 0 1 7.5 3z"
-                            fill="#0078D4"
-                          />
-                          <path
-                            d="M12 8.25L6 12.75v5.25h12V12.75L12 8.25z"
-                            fill="white"
-                          />
-                          <path
-                            d="M12 8.25l6 4.5V6H6v6.75l6-4.5z"
-                            fill="#28A8EA"
-                          />
-                        </svg>
-                        <span className="font-medium text-sm">Outlook</span>
-                      </button>
-                    </div>
-
-                    {/* Divider */}
-                    <div className="relative my-2">
-                      <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-border"></div>
-                      </div>
-                      <div className="relative flex justify-center text-sm">
-                        <span className="px-2 bg-card text-muted-foreground">Or use a custom email</span>
-                      </div>
-                    </div>
-
-                    {/* IMAP Option */}
-                    <Link href="/settings/integrations" className="block">
-                      <button
-                        type="button"
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2.5 border border-border rounded-lg hover:bg-accent/50 transition-colors group"
-                      >
-                        <Mail className="size-5 shrink-0" />
-                        <span className="font-medium text-sm">Use IMAP (Custom Domain)</span>
-                      </button>
-                    </Link>
-
-                    <p className="text-xs text-muted-foreground text-center">
-                      For custom domains, Google Workspace, Outlook, or any email provider
-                    </p>
+                        <path
+                          d="M7.5 3h9A4.5 4.5 0 0 1 21 7.5v9a4.5 4.5 0 0 1-4.5 4.5h-9A4.5 4.5 0 0 1 3 16.5v-9A4.5 4.5 0 0 1 7.5 3z"
+                          fill="#0078D4"
+                        />
+                        <path
+                          d="M12 8.25L6 12.75v5.25h12V12.75L12 8.25z"
+                          fill="white"
+                        />
+                        <path
+                          d="M12 8.25l6 4.5V6H6v6.75l6-4.5z"
+                          fill="#28A8EA"
+                        />
+                      </svg>
+                      <span className="font-medium text-sm">Outlook</span>
+                    </button>
                   </div>
+
+                  {/* Divider */}
+                  <div className="relative my-2">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-border/60"></div>
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                      <span className="px-2 bg-background/0 text-muted-foreground text-xs">
+                        Or use a custom email
+                      </span>
+                    </div>
+                  </div>
+
+                  <Link href="/settings/integrations" className="block">
+                    <button
+                      type="button"
+                      className={cn(
+                        'w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl',
+                        'glass glass-subtle hover:bg-foreground/[0.04]',
+                        'transition-[background-color,transform] duration-150 ease-[var(--ease-ios)] hover:-translate-y-0.5'
+                      )}
+                    >
+                      <Mail className="size-5 shrink-0" />
+                      <span className="font-medium text-sm">
+                        Use IMAP (custom domain)
+                      </span>
+                    </button>
+                  </Link>
+
+                  <p className="text-xs text-muted-foreground text-center">
+                    For custom domains, Google Workspace, Outlook, or any email
+                    provider.
+                  </p>
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
-
-            {currentStep === 'complete' && (
-              <div className="flex-1 flex flex-col items-center justify-center text-center">
-                <div className="size-20 rounded-full bg-green-500/10 flex items-center justify-center mb-6">
-                  <CheckCircle className="size-10 text-green-600 dark:text-green-400" />
-                </div>
-                <h2 className="text-3xl font-bold mb-4">You&apos;re All Set!</h2>
-                <p className="text-lg text-muted-foreground mb-8 max-w-xl">
-                  You&apos;re ready to start tracking your job applications. Your email is now connected and will automatically sync status updates.
-                </p>
-                <div className="flex gap-3 justify-center">
-                  <Button onClick={handleNext} size="lg">
-                    Go to Dashboard
-                    <ArrowRight className="size-4 ml-2" />
-                  </Button>
-                </div>
+          {currentStep === 'complete' && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center">
+              <div className="size-16 rounded-2xl bg-success-bg border border-success/20 flex items-center justify-center mb-6">
+                <CheckCircle className="size-7 text-success-text" />
               </div>
-            )}
+              <h2 className="text-3xl font-semibold tracking-tight mb-3">
+                You&apos;re all set
+              </h2>
+              <p className="text-base text-muted-foreground mb-8 max-w-xl">
+                You&apos;re ready to start tracking your job applications. Your
+                email is connected and will automatically sync status updates.
+              </p>
+              <Button onClick={handleNext} size="lg" className="rounded-full">
+                Go to jobs
+                <ArrowRight className="size-4 ml-2" />
+              </Button>
+            </div>
+          )}
 
-            {/* Set up later Button */}
-            {currentStep !== 'complete' && currentStep !== 'welcome' && (
-              <div className="mt-8 pt-6 border-t border-border text-center">
-                <button
-                  type="button"
-                  onClick={handleSkip}
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Set up later
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+          {/* Set up later Button */}
+          {currentStep !== 'complete' && currentStep !== 'welcome' && (
+            <div className="mt-8 pt-6 border-t border-border/60 text-center">
+              <button
+                type="button"
+                onClick={handleSkip}
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Set up later
+              </button>
+            </div>
+          )}
+        </GlassPanel>
       </div>
+    </div>
+  )
+}
 
+function Feature({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <CheckCircle className="size-4 text-primary mt-0.5 shrink-0" />
+      <div>
+        <p className="font-medium text-sm text-foreground">{title}</p>
+        <p className="text-xs text-muted-foreground">{body}</p>
+      </div>
     </div>
   )
 }
 
 export default function OnboardingPage() {
   return (
-    <div className="size-full flex">
-      <Suspense fallback={
-        <div className="flex-1 min-h-screen bg-background flex items-center justify-center">
-          <div className="animate-pulse">Loading...</div>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="animate-pulse text-sm text-muted-foreground">
+            Loading…
+          </div>
         </div>
-      }>
-        <OnboardingContent />
-      </Suspense>
-    </div>
+      }
+    >
+      <OnboardingContent />
+    </Suspense>
   )
 }
-

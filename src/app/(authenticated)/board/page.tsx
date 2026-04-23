@@ -3,64 +3,70 @@ import { requireAuth } from '@/lib/auth'
 import { AppShell } from '@/components/layout/app-shell'
 import dynamic from 'next/dynamic'
 import { JobStatus } from '@prisma/client'
-import { getEmailIntegration } from '@/lib/cached-queries'
 import { serializeForClient } from '@/lib/serialize-for-client'
 
-// Lazy load KanbanBoard since it's a heavy component with drag-and-drop
-const KanbanBoard = dynamic(() => import('@/components/board/kanban-board').then(mod => ({ default: mod.KanbanBoard })), {
-  loading: () => <div className="animate-pulse text-center py-8 text-muted-foreground">Loading board...</div>,
-})
+const KanbanBoard = dynamic(
+  () => import('@/components/board/kanban-board').then((mod) => ({ default: mod.KanbanBoard })),
+  {
+    loading: () => (
+      <div className="glass glass-subtle rounded-2xl animate-pulse text-center py-16 text-muted-foreground">
+        Loading board…
+      </div>
+    ),
+  }
+)
 
-export const revalidate = 60 // Revalidate every 60 seconds
+export const revalidate = 60
 
-const COLUMNS: { status: JobStatus; label: string; color: string }[] = [
-  { status: 'SAVED', label: 'Saved', color: 'bg-muted' },
-  { status: 'APPLIED', label: 'Applied', color: 'bg-info-bg' },
-  { status: 'INTERVIEW', label: 'Interview', color: 'bg-purple-100 dark:bg-purple-900/30' },
-  { status: 'OFFER', label: 'Offer', color: 'bg-success-bg' },
-  { status: 'REJECTED', label: 'Rejected', color: 'bg-error-bg' },
-  { status: 'ARCHIVED', label: 'Archived', color: 'bg-warning-bg' },
+// Columns are now defined in the client component itself; this list stays
+// here for completeness but is derived from the redesign tokenized palette.
+const COLUMNS: { status: JobStatus; label: string }[] = [
+  { status: 'SAVED', label: 'Saved' },
+  { status: 'APPLIED', label: 'Applied' },
+  { status: 'INTERVIEW', label: 'Interview' },
+  { status: 'OFFER', label: 'Offer' },
+  { status: 'REJECTED', label: 'Rejected' },
+  { status: 'ARCHIVED', label: 'Archived' },
 ]
 
 export default async function BoardPage() {
   const user = await requireAuth()
 
-  // Fetch jobs and email integration in parallel
-  const [jobs, emailIntegration] = await Promise.all([
-    prisma.job.findMany({
-      where: { userId: user.id },
-      include: {
-        activities: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
+  const jobs = await prisma.job.findMany({
+    where: { userId: user.id },
+    include: {
+      activities: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
       },
-      orderBy: { updatedAt: 'desc' },
-    }),
-    getEmailIntegration(user.id),
-  ])
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 1000,
+  })
 
   const plainJobs = serializeForClient(jobs)
 
-  // Group jobs by status
   const jobsByStatus = COLUMNS.reduce((acc, column) => {
-    acc[column.status] = plainJobs.filter(job => job.status === column.status)
+    acc[column.status] = plainJobs.filter((job) => job.status === column.status)
     return acc
   }, {} as Record<JobStatus, typeof plainJobs>)
 
   const totalJobs = plainJobs.length
-  const activeJobs = plainJobs.filter(j => ['SAVED', 'APPLIED', 'INTERVIEW', 'OFFER'].includes(j.status)).length
+  const activeJobs = plainJobs.filter((j) =>
+    ['SAVED', 'APPLIED', 'INTERVIEW', 'OFFER'].includes(j.status)
+  ).length
 
   return (
-    <AppShell showEmailNotification={!emailIntegration}>
+    <AppShell>
       <div className="flex-1 overflow-auto">
-        <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-4 md:py-6">
-          <div className="mb-6">
-            <h1 className="text-2xl font-semibold mb-2">Board</h1>
+        <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-6 md:py-8">
+          <header className="mb-6">
+            <h1 className="text-3xl font-semibold tracking-tight mb-1">Board</h1>
             <p className="text-sm text-muted-foreground">
-              {totalJobs} total jobs • {activeJobs} active
+              <span className="tabular-nums">{totalJobs}</span> total jobs ·{' '}
+              <span className="tabular-nums">{activeJobs}</span> active
             </p>
-          </div>
+          </header>
 
           <KanbanBoard columns={COLUMNS} jobsByStatus={jobsByStatus} />
         </div>

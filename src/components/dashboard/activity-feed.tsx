@@ -82,7 +82,7 @@ export function ActivityFeed({ activities, onClose, isCollapsible = false }: Act
   const getActivityColor = (type: ActivityType, description?: string | null, fromStatus?: JobStatus | null, toStatus?: JobStatus | null) => {
     // Job creation notes
     if (type === 'NOTE' && description?.toLowerCase().includes('created')) {
-      return 'text-green-500'
+      return 'text-success'
     }
     
     // If activity has status change, use primary color
@@ -94,13 +94,13 @@ export function ActivityFeed({ activities, onClose, isCollapsible = false }: Act
       case 'STATUS_CHANGE':
         return 'text-primary'
       case 'EMAIL_UPDATE':
-        return 'text-blue-500'
+        return 'text-info'
       case 'INTERVIEW':
-        return 'text-purple-500'
+        return 'text-interview'
       case 'OFFER':
-        return 'text-green-500'
+        return 'text-success'
       case 'REJECTION':
-        return 'text-red-500'
+        return 'text-error'
       default:
         return 'text-muted-foreground'
     }
@@ -131,7 +131,7 @@ export function ActivityFeed({ activities, onClose, isCollapsible = false }: Act
     if (isJobCreation) {
       return (
         <div className="flex items-center gap-1.5">
-          <Badge className="text-[10px] bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20">
+          <Badge className="text-[10px] bg-success-bg text-success-text border-success/25">
             Job Added
           </Badge>
         </div>
@@ -140,11 +140,11 @@ export function ActivityFeed({ activities, onClose, isCollapsible = false }: Act
     // For other activity types, show a badge with the activity type label
     const badgeColors: Record<ActivityType, string> = {
       STATUS_CHANGE: 'bg-primary/10 text-primary border-primary/20',
-      EMAIL_UPDATE: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
+      EMAIL_UPDATE: 'bg-info-bg text-info-text border-info/25',
       NOTE: 'bg-muted text-muted-foreground border-border',
-      INTERVIEW: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
-      OFFER: 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20',
-      REJECTION: 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20',
+      INTERVIEW: 'bg-interview-bg text-interview-text border-interview/25',
+      OFFER: 'bg-success-bg text-success-text border-success/25',
+      REJECTION: 'bg-error-bg text-error-text border-error/25',
     }
     
     return (

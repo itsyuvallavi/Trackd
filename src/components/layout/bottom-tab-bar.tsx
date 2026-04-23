@@ -3,16 +3,15 @@
 import { useState, useEffect, memo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Briefcase, FileText, Plus, User, Bot, SlidersHorizontal } from 'lucide-react'
+import { Briefcase, FileText, Plus, User, Bot } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { QuickAddBar } from '@/components/jobs/quick-add-bar'
 import { useBotQueueCount } from '@/lib/bot/use-bot-queue-count'
 
 const navItems = [
   { href: '/jobs', icon: Briefcase, label: 'Jobs' },
+  { href: '/bot', icon: Bot, label: 'Job Search' },
   { href: '/resume-advisor', icon: FileText, label: 'Resume' },
-  { href: '/settings/bot', icon: SlidersHorizontal, label: 'Bot' },
-  { href: '/bot/queue', icon: Bot, label: 'Queue' },
 ]
 
 export const BottomTabBar = memo(function BottomTabBar() {
@@ -32,7 +31,7 @@ export const BottomTabBar = memo(function BottomTabBar() {
   const isProfileActive =
     pathname === '/profile' ||
     pathname.startsWith('/profile/') ||
-    (pathname.startsWith('/settings/') && !pathname.startsWith('/settings/bot'))
+    pathname.startsWith('/settings/')
 
   if (!mounted) {
     return null
@@ -40,20 +39,27 @@ export const BottomTabBar = memo(function BottomTabBar() {
 
   return (
     <>
-      <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] safe-area-bottom md:hidden">
-        <div className="relative flex items-center gap-1.5 bg-background/95 dark:bg-background/95 backdrop-blur-md border border-border rounded-full px-3 py-3 shadow-lg w-fit">
-          {/* Plus Button - Left */}
+      <nav
+        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] safe-area-bottom md:hidden"
+        aria-label="Primary"
+      >
+        <div className="glass glass-nav relative flex items-center gap-1.5 rounded-full px-3 py-2.5 w-fit">
+          {/* Quick add — primary action */}
           <button
             onClick={() => setIsQuickAddOpen(true)}
-            className="flex items-center justify-center w-10 h-10 rounded-full bg-foreground text-background hover:opacity-90 transition-opacity shrink-0"
+            className={cn(
+              'flex items-center justify-center w-10 h-10 rounded-full shrink-0',
+              'bg-primary text-primary-foreground',
+              'transition-transform duration-200 ease-[var(--ease-ios)]',
+              'active:scale-95 hover:brightness-110'
+            )}
             aria-label="Quick add job"
           >
             <Plus className="size-5" strokeWidth={2.5} />
           </button>
 
-          <div className="w-px h-7 bg-border mx-1 shrink-0" />
+          <span aria-hidden className="w-px h-6 bg-border mx-0.5 shrink-0" />
 
-          {/* Navigation Items - Center */}
           {navItems.map((item) => {
             const Icon = item.icon
             const active = isActive(item.href)
@@ -63,49 +69,57 @@ export const BottomTabBar = memo(function BottomTabBar() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "relative flex items-center justify-center gap-2 px-3 py-2.5 rounded-full transition-all duration-200 min-w-[72px] max-w-[90px]",
-                  active 
-                    ? "bg-foreground text-background" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  'relative flex items-center justify-center gap-1.5 rounded-full transition-all duration-200 ease-[var(--ease-ios)]',
+                  'px-3 py-2 min-w-[44px]',
+                  active
+                    ? 'bg-foreground text-background'
+                    : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 <div className="relative shrink-0">
-                  <Icon 
-                    className="size-5" 
-                    strokeWidth={active ? 2.5 : 2}
-                  />
-                  {item.href === '/bot/queue' && queueCount > 0 && (
+                  <Icon className="size-5" strokeWidth={active ? 2.4 : 2} />
+                  {item.href === '/bot' && queueCount > 0 && (
                     <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-4 h-4 px-0.5 rounded-full bg-primary text-primary-foreground text-[9px] font-bold tabular-nums leading-none">
                       {queueCount > 99 ? '99+' : queueCount}
                     </span>
                   )}
                 </div>
-                <span className={cn(
-                  "text-xs font-medium transition-opacity whitespace-nowrap",
-                  active ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
-                )}>
+                <span
+                  className={cn(
+                    'text-xs font-medium whitespace-nowrap transition-[max-width,opacity] duration-200 ease-[var(--ease-ios)]',
+                    active
+                      ? 'opacity-100 max-w-[80px]'
+                      : 'opacity-0 max-w-0 overflow-hidden'
+                  )}
+                >
                   {item.label}
                 </span>
               </Link>
             )
           })}
-          
-          <div className="w-px h-7 bg-border mx-1 shrink-0" />
-          
-          {/* Profile Button - Right */}
+
+          <span aria-hidden className="w-px h-6 bg-border mx-0.5 shrink-0" />
+
           <Link
             href="/profile"
-            className="flex items-center justify-center w-10 h-10 rounded-full bg-foreground text-background hover:opacity-90 transition-opacity shrink-0"
+            className={cn(
+              'flex items-center justify-center w-10 h-10 rounded-full shrink-0',
+              'transition-transform duration-200 ease-[var(--ease-ios)]',
+              'active:scale-95 hover:brightness-110',
+              isProfileActive
+                ? 'bg-foreground text-background'
+                : 'bg-muted text-muted-foreground'
+            )}
             aria-label="Profile"
           >
-            <User className="size-5" strokeWidth={isProfileActive ? 2.5 : 2} />
+            <User className="size-5" strokeWidth={2.2} />
           </Link>
         </div>
       </nav>
 
-      <QuickAddBar 
-        isOpen={isQuickAddOpen} 
-        onClose={() => setIsQuickAddOpen(false)} 
+      <QuickAddBar
+        isOpen={isQuickAddOpen}
+        onClose={() => setIsQuickAddOpen(false)}
       />
     </>
   )

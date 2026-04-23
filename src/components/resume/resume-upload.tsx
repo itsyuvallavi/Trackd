@@ -88,12 +88,13 @@ export function ResumeUpload({ onResumeUploaded, disabled = false }: ResumeUploa
   return (
     <div
       className={cn(
-        'bg-background border border-border rounded-lg shadow-sm p-6 text-center transition-colors',
+        'glass glass-subtle rounded-2xl p-8 text-center relative overflow-hidden',
+        'border border-dashed transition-[border-color,background-color,transform,box-shadow] duration-200 ease-[var(--ease-ios)]',
         !disabled &&
           (dragActive
-            ? 'border-primary bg-primary/5'
-            : 'hover:border-primary/50'),
-        (isUploading || disabled) && 'opacity-50 pointer-events-none'
+            ? 'border-primary/60 bg-primary/5 scale-[1.01] shadow-[0_0_0_8px_oklch(from_var(--primary)_l_c_h_/_0.08)] trackd-glow-pulse'
+            : 'hover:border-primary/40'),
+        (isUploading || disabled) && 'opacity-60 pointer-events-none'
       )}
       onDragEnter={handleDrag}
       onDragLeave={handleDrag}
@@ -112,29 +113,31 @@ export function ResumeUpload({ onResumeUploaded, disabled = false }: ResumeUploa
       {isUploading ? (
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="size-8 text-primary animate-spin" />
-          <p className="text-sm text-muted-foreground">Uploading file...</p>
+          <p className="text-sm text-muted-foreground">Uploading file…</p>
         </div>
       ) : (
         <div className="flex flex-col items-center gap-3">
-          <Upload className="size-10 text-foreground/60" />
-          <p className="text-sm font-medium text-foreground">
+          <div className="size-12 rounded-2xl grid place-items-center bg-foreground/[0.04] border border-border/60">
+            <Upload className="size-5 text-foreground/70" />
+          </div>
+          <p className="text-base font-medium tracking-tight text-foreground">
             Upload your resume
           </p>
           <p className="text-xs text-muted-foreground max-w-sm">
-            Drag and drop a file here, or click to browse
+            Drag and drop a file here, or click to browse.
           </p>
           <Button
             onClick={() => !disabled && fileInputRef.current?.click()}
             variant="outline"
             size="sm"
-            className="mt-1"
+            className="mt-1 rounded-full"
             disabled={disabled}
           >
-            <FileText className="size-3 mr-2" />
-            Choose File
+            <FileText className="size-3.5 mr-1.5" />
+            Choose file
           </Button>
-          <p className="text-xs text-muted-foreground mt-2">
-            Supports: TXT, PDF, DOC, DOCX
+          <p className="text-[11px] text-muted-foreground/70 mt-2">
+            Supports TXT, PDF, DOC, DOCX.
           </p>
         </div>
       )}

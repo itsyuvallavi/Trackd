@@ -14,11 +14,13 @@ export default async function AdminFeedbackPage() {
     redirect('/jobs')
   }
 
-  // Fetch all feedback
+  // Fetch most-recent feedback. Capped to keep the admin view responsive as
+  // volume grows; older items can be surfaced via a future pagination UI.
   const feedback = await prisma.feedback.findMany({
     orderBy: {
       createdAt: 'desc',
     },
+    take: 200,
   })
 
   // Get user profiles for feedback with userId
@@ -48,9 +50,11 @@ export default async function AdminFeedbackPage() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold mb-2">Feedback Management</h1>
+        <h1 className="text-3xl font-semibold tracking-tight mb-1">
+          Feedback management
+        </h1>
         <p className="text-sm text-muted-foreground">
-          Review and manage user feedback submissions
+          Review and manage user feedback submissions.
         </p>
       </div>
       <FeedbackList feedback={serializeForClient(enrichedFeedback)} />

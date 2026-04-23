@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import type { EmailIntegration } from '@prisma/client'
 import { saveEmailIntegration, syncEmails, testEmailConnection, updateAutoSyncSettings } from '@/app/(authenticated)/settings/email-actions'
 import { Button } from '@/components/ui/button'
-import { SyncResultToast } from './sync-result-toast'
+import { SyncResultToast, type SyncResultToastState } from './sync-result-toast'
+import { NOTIFICATIONS_REFRESH_EVENT } from '@/lib/constants'
 import { Clock, RefreshCw } from 'lucide-react'
 
 interface EmailIntegrationFormProps {
@@ -12,14 +14,14 @@ interface EmailIntegrationFormProps {
 }
 
 export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps) {
+  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [isTesting, setIsTesting] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [showIMAPForm, setShowIMAPForm] = useState(!!integration)
   const [showConfig, setShowConfig] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-  const [syncResult, setSyncResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
-  const [showSyncModal, setShowSyncModal] = useState(false)
+  const [syncToast, setSyncToast] = useState<SyncResultToastState>(null)
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(integration?.autoSyncEnabled || false)
   const [autoSyncFrequency, setAutoSyncFrequency] = useState(integration?.autoSyncFrequency || 60)
   const [isUpdatingAutoSync, setIsUpdatingAutoSync] = useState(false)
@@ -74,6 +76,7 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
   const handleSync = async () => {
     setIsSyncing(true)
     setMessage(null)
+    setSyncToast({ phase: 'running' })
 
     try {
       const result = await syncEmails()
@@ -91,37 +94,38 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
         if (result.stats.skippedEmails > 0) {
           message += `Skipped ${result.stats.skippedEmails} emails\n`
         }
-        
-        setSyncResult({
+
+        setSyncToast({
+          phase: 'result',
           type: 'success',
           message,
         })
-        setShowSyncModal(true)
       } else {
-        setSyncResult({
+        setSyncToast({
+          phase: 'result',
           type: 'error',
           message: ('error' in result ? result.error : 'Sync failed. Check console for details.') || 'Sync failed. Check console for details.',
         })
-        setShowSyncModal(true)
       }
     } catch (error) {
       console.error('Sync error:', error)
-      setSyncResult({
+      setSyncToast({
+        phase: 'result',
         type: 'error',
         message: error instanceof Error ? error.message : 'An unexpected error occurred',
       })
-      setShowSyncModal(true)
     } finally {
       setIsSyncing(false)
     }
+    window.dispatchEvent(new CustomEvent(NOTIFICATIONS_REFRESH_EVENT))
+    await router.refresh()
   }
 
   return (
     <>
       <SyncResultToast
-        isOpen={showSyncModal}
-        onClose={() => setShowSyncModal(false)}
-        result={syncResult}
+        state={syncToast}
+        onClose={() => setSyncToast(null)}
       />
       <div className="space-y-6">
       {/* OAuth Options (Primary - Recommended) */}

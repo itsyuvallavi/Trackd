@@ -30,17 +30,30 @@ interface CalendarPageContentProps {
   monthStart: Date
 }
 
-// Helper functions for event type styling
+// Helper functions for event type styling — redesigned with tokenized colors.
 function getEventTypeColor(eventType: CalendarEventType): string {
   switch (eventType) {
     case 'INTERVIEW':
-      return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+      return 'bg-info-bg text-info-text border-info/20'
     case 'OFFER':
-      return 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20'
+      return 'bg-success-bg text-success-text border-success/20'
     case 'FOLLOW_UP':
-      return 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20'
+      return 'bg-warning-bg text-warning-text border-warning/20'
     default:
       return 'bg-muted text-muted-foreground border-border'
+  }
+}
+
+function getEventDotClass(eventType: CalendarEventType): string {
+  switch (eventType) {
+    case 'INTERVIEW':
+      return 'bg-info'
+    case 'OFFER':
+      return 'bg-success'
+    case 'FOLLOW_UP':
+      return 'bg-warning'
+    default:
+      return 'bg-muted-foreground'
   }
 }
 
@@ -132,11 +145,11 @@ export function CalendarPageContent({ events, monthStart }: CalendarPageContentP
     router.refresh()
   }
 
-  // Render improved event card
+  // Glass event pill — compact, color-dotted, minimal.
   const renderEventCard = (event: CalendarEvent, isPastEvent: boolean) => {
-    const EventIcon = getEventTypeIcon(event.type)
     const eventTypeColor = getEventTypeColor(event.type)
-    
+    const dotClass = getEventDotClass(event.type)
+
     return (
       <button
         key={event.id}
@@ -145,115 +158,106 @@ export function CalendarPageContent({ events, monthStart }: CalendarPageContentP
           handleEventClick(event, e.currentTarget)
         }}
         className={cn(
-          'group w-full text-left rounded-lg px-3 py-2.5 transition-all border-2',
-          isPastEvent
-            ? 'bg-muted/30 hover:bg-muted/50 border-border/30 opacity-70'
-            : 'bg-card hover:bg-accent border-border hover:border-primary/30 shadow-sm hover:shadow',
+          'group w-full text-left rounded-lg px-2 py-1.5',
+          'glass glass-subtle border',
+          'transition-[transform,box-shadow,opacity] duration-150 ease-[var(--ease-ios)]',
+          'hover:-translate-y-0.5',
+          isPastEvent && 'opacity-55 hover:opacity-80',
           eventTypeColor
         )}
       >
-        <div className="flex items-start gap-2.5">
-          <div className={cn(
-            'mt-0.5 shrink-0 rounded-md p-1.5',
-            event.type === 'INTERVIEW' && 'bg-blue-500/10',
-            event.type === 'OFFER' && 'bg-green-500/10',
-            event.type === 'FOLLOW_UP' && 'bg-yellow-500/10'
-          )}>
-            <EventIcon className={cn(
-              'size-3.5',
-              event.type === 'INTERVIEW' && 'text-blue-600 dark:text-blue-400',
-              event.type === 'OFFER' && 'text-green-600 dark:text-green-400',
-              event.type === 'FOLLOW_UP' && 'text-yellow-600 dark:text-yellow-400',
-              isPastEvent && 'opacity-60'
-            )} />
-          </div>
+        <div className="flex items-center gap-2">
+          <span
+            aria-hidden
+            className={cn('size-1.5 rounded-full shrink-0', dotClass)}
+          />
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2 mb-1">
-              <p className={cn(
-                'text-xs font-semibold line-clamp-1',
+            <p
+              className={cn(
+                'text-[11px] font-medium line-clamp-1',
                 isPastEvent ? 'text-muted-foreground' : 'text-foreground'
-              )}>
-                {event.title}
-              </p>
-              <Badge
-                className={cn(
-                  'border-0 text-[10px] px-2 py-0.5 shrink-0 font-medium',
-                  event.type === 'INTERVIEW' && 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
-                  event.type === 'OFFER' && 'bg-green-500/10 text-green-600 dark:text-green-400',
-                  event.type === 'FOLLOW_UP' && 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
-                  isPastEvent && 'opacity-60'
-                )}
-              >
-                {getEventTypeLabel(event.type)}
-              </Badge>
-            </div>
-            <p className={cn(
-              'text-xs line-clamp-1 mb-1.5',
-              isPastEvent ? 'text-muted-foreground/70' : 'text-muted-foreground'
-            )}>
-              {event.subtitle}
+              )}
+            >
+              {event.title}
             </p>
-            {event.date && event.type === 'INTERVIEW' && (
-              <p className={cn(
-                'text-[10px] font-medium',
-                event.type === 'INTERVIEW' && 'text-blue-600 dark:text-blue-400',
-                isPastEvent && 'opacity-60'
-              )}>
-                {format(event.date, 'h:mm a')}
-              </p>
-            )}
+            <p className="text-[10px] text-muted-foreground line-clamp-1">
+              {event.subtitle}
+              {event.type === 'INTERVIEW' && event.date && (
+                <>
+                  <span className="mx-1">·</span>
+                  <span className="tabular-nums">
+                    {format(event.date, 'h:mm a')}
+                  </span>
+                </>
+              )}
+            </p>
           </div>
         </div>
       </button>
     )
   }
 
-  // Month View
+  // Month View — hairline grid with cobalt today dot and glass day cells.
   const renderMonthView = (daysToRender: Date[], eventsToShow: CalendarEvent[], monthRef: Date, todayDate: Date) => {
     return (
-      <div className="border border-border rounded-lg overflow-hidden bg-card">
-        <div className="grid grid-cols-7 border-b border-border bg-muted/60">
+      <div className="glass glass-subtle rounded-2xl overflow-hidden">
+        <div className="grid grid-cols-7 border-b border-border/40">
           {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((label) => (
-            <div key={label} className="px-3 py-3 text-center text-xs text-muted-foreground">
+            <div
+              key={label}
+              className="px-3 py-3 text-center text-[11px] uppercase tracking-wider text-muted-foreground font-medium"
+            >
               {label}
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-7">
+        <div
+          key={monthRef.toISOString()}
+          className="grid grid-cols-7 trackd-route-enter"
+        >
           {daysToRender.map((day) => {
             const isCurrentMonth = day.getMonth() === monthRef.getMonth()
             const isToday = isSameDay(day, todayDate)
             const dayEvents = eventsToShow.filter((event) => isSameDay(event.date, day))
             const isEmpty = isCurrentMonth && dayEvents.length === 0
-            
+
             return (
               <div
                 key={day.toISOString()}
                 className={cn(
-                  'min-h-[140px] md:min-h-[120px] border-b border-r border-border/60 last:border-r-0 p-3 md:p-4 align-top relative group',
-                  !isCurrentMonth && 'bg-muted/40 text-muted-foreground/60',
-                  isToday && 'bg-primary-lightest/80',
-                  isCurrentMonth && 'cursor-pointer hover:bg-muted/30 transition-colors',
-                  isEmpty && 'hover:bg-primary-lightest/20'
+                  'min-h-[140px] md:min-h-[120px] p-2.5 md:p-3 align-top relative group',
+                  'border-b border-r border-border/40 last:border-r-0 [&:nth-child(7n)]:border-r-0',
+                  !isCurrentMonth && 'opacity-40',
+                  isCurrentMonth && 'cursor-pointer hover:bg-foreground/[0.03] transition-colors duration-150'
                 )}
                 onClick={() => isCurrentMonth && handleDayClick(day)}
                 title={isEmpty ? 'Click to add interview' : undefined}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <span className={cn('text-xs md:text-sm', !isCurrentMonth && 'opacity-60')}>
+                <div className="flex items-center gap-1.5 mb-2">
+                  {isToday && (
+                    <span
+                      aria-hidden
+                      className="inline-block size-1.5 rounded-full bg-primary trackd-breath"
+                    />
+                  )}
+                  <span
+                    className={cn(
+                      'text-xs md:text-sm tabular-nums',
+                      isToday && 'text-primary font-semibold',
+                      !isCurrentMonth && 'opacity-60'
+                    )}
+                  >
                     {format(day, 'd')}
                   </span>
-                  {isToday && (
-                    <span className="text-[10px] md:text-xs text-primary bg-primary/10 px-2 py-0.5 rounded">
-                      Today
-                    </span>
-                  )}
                 </div>
-                <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                <div
+                  className="space-y-1.5"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {dayEvents.length === 0 && isCurrentMonth && (
-                    <div className="text-center py-2">
-                      <p className="text-[9px] text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity">
-                        Click to add
+                    <div className="py-2 text-center">
+                      <p className="text-[9px] text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                        + Click to add
                       </p>
                     </div>
                   )}
@@ -275,9 +279,9 @@ export function CalendarPageContent({ events, monthStart }: CalendarPageContentP
     <>
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold mb-2">Calendar</h1>
+        <h1 className="text-3xl font-semibold tracking-tight mb-1">Calendar</h1>
         <p className="text-sm text-muted-foreground">
-          Interviews, offers, and important dates. Jobs with scheduled interviews or offer status appear here.
+          Interviews, offers, and important dates.
         </p>
       </div>
 

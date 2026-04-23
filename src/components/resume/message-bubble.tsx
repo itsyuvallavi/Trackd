@@ -36,10 +36,10 @@ export function MessageBubble({ message, sessionId, showResumeCard, isNewMessage
       {/* Avatar */}
       <div
         className={cn(
-          'size-8 rounded-full flex items-center justify-center shrink-0',
+          'size-8 rounded-full flex items-center justify-center shrink-0 ring-1',
           isUser
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-muted text-muted-foreground'
+            ? 'bg-primary/12 text-primary ring-primary/25'
+            : 'bg-foreground/[0.06] text-foreground/70 ring-border/60'
         )}
       >
         {isUser ? (
@@ -58,10 +58,10 @@ export function MessageBubble({ message, sessionId, showResumeCard, isNewMessage
       >
         <div
           className={cn(
-            'rounded-2xl px-4 py-3 shadow-sm',
+            'rounded-2xl px-4 py-3',
             isUser
-              ? 'bg-primary text-primary-foreground rounded-br-sm'
-              : 'bg-muted/50 text-foreground border border-border/50 rounded-bl-sm'
+              ? 'bg-primary/10 text-foreground rounded-br-sm border border-primary/20'
+              : 'glass glass-subtle rounded-bl-sm'
           )}
         >
           <p className="text-sm leading-relaxed whitespace-pre-wrap">{cleanContent}</p>

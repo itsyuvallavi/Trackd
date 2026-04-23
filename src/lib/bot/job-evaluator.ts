@@ -14,20 +14,32 @@ import {
 } from './language-mismatch-clamp'
 import type { StackMismatchClampMeta } from './stack-mismatch-clamp'
 import { applyStackMismatchClamp } from './stack-mismatch-clamp'
+import type { GeoMismatchClampMeta } from './geo-mismatch-clamp'
+import { applyGeoMismatchClamp } from './geo-mismatch-clamp'
+import type { SeniorityClampMeta } from './seniority-clamp'
+import { applySeniorityClamp } from './seniority-clamp'
+import { buildSmartJdExcerpt, type JdFacts } from './jd-excerpt'
 import type { BotConfig } from '@prisma/client'
 import type { SearchJobResult, JobEvaluation } from './types'
 import type { ResumeStructuredData } from './resume/types'
+import { parseUserLocations } from './user-locations'
+import { preFilterJob } from './pre-filter'
 
-const EVALUATOR_MODEL = 'gpt-4o-mini'
+const EVALUATOR_MODEL = 'gpt-5-mini'
 
-/** Enough chars to include qualifications blocks from typical postings (was 1500). */
-const JOB_DESCRIPTION_EVAL_CHARS = 3200
+const EVALUATOR_SYSTEM_PROMPT = `You score job listings for a specific candidate. Be strict. Prefer false negatives (rejecting a maybe-good job) over false positives (recommending a wrong job), because the user manually reviews every job you save.
 
-const EVALUATOR_SYSTEM_PROMPT = `You score job listings for a specific candidate. Be skeptical: a matching job title ("Full Stack Developer") does NOT mean a good match if the posting mandates a different primary stack (e.g. years of Java + Spring) than the resume shows (e.g. TypeScript/React).
+Your ONE job: assess whether the job description's required skills and experience match the candidate's resume and stated keywords. Location and seniority have already been verified by a separate deterministic system before you were called — do NOT re-evaluate them.
 
-Penalize heavily when required skills in the description are absent from the resume. Prefer fewer false positives (annoying wrong matches) over marginal fits.
+Rules:
+1. Score based on SKILL and EXPERIENCE FIT only. Assume location and seniority are already acceptable — they have been pre-checked.
+2. If the description mandates a primary technology ecosystem the candidate's resume does not mention (e.g. N+ years of a specific language/framework), score below 45 unless it is marked optional / "nice to have".
+3. If the description mandates a spoken language NOT in the candidate's language list, it is a significant negative.
+4. Do not inflate the score just because the job title matches keywords — the description must also align.
+5. If the description is short or empty: score from the Title and Company. A title with the user's keywords from a company in their target region is a 76–80. Only go below 50 if the title clearly signals a wrong primary stack (e.g. "PHP Developer" when the resume only shows React/TS).
+6. Never penalise on location or seniority — those are handled elsewhere.
 
-When USER PREFERENCES list languages the candidate speaks, treat any *mandatory* requirement for a different spoken language as a serious mismatch unless the posting clearly marks it optional.`
+Your "reasoning" MUST cite at least one concrete phrase from the description, title, or company. If you cannot cite one, cap the score at 40.`
 
 /** Structured record of what was sent to the model (for BotRunListing.scoringInputs). */
 export type ScoringInputsSnapshot = {
@@ -67,6 +79,12 @@ export type ScoringInputsSnapshot = {
   stackMismatchClamp?: StackMismatchClampMeta
   /** When JD mandates spoken languages outside the user's BotConfig list (see language-mismatch-clamp). */
   languageMismatchClamp?: LanguageMismatchClampMeta
+  /** When JD mandates a location / visa / clearance that conflicts with the user's remote preference. */
+  geoMismatchClamp?: GeoMismatchClampMeta
+  /** When JD's required seniority conflicts with the user's experienceLevel setting. */
+  seniorityClamp?: SeniorityClampMeta
+  /** Structured facts extracted from the FULL JD (audit + UI). */
+  jdFacts?: JdFacts
 }
 
 export type EvaluateJobResult = {
@@ -79,16 +97,54 @@ function buildEvalPrompt(
   config: BotConfig,
   resume: ResumeStructuredData | null
 ): string {
+  const userLocations = config.locations.filter(Boolean)
+  const parsedLoc = parseUserLocations(userLocations)
+
+  // Build a human-readable location line. Expand "Europe" and "EU" inline so the
+  // LLM sees the specific country names and cannot string-match against "Italy" or
+  // "Netherlands" and conclude they are outside the user's list.
+  let locationDisplay: string
+  if (userLocations.length === 0) {
+    locationDisplay = 'Any'
+  } else {
+    const expandedParts = userLocations.map((loc) => {
+      const lower = loc.toLowerCase().trim()
+      if (lower === 'europe' || lower === 'emea' || lower === 'remote europe' || lower === 'remote emea') {
+        return (
+          loc +
+          ' (= ALL European countries: Germany, France, Spain, Italy, UK/England/Scotland/Wales, ' +
+          'Netherlands, Belgium, Ireland, Sweden, Norway, Denmark, Finland, Poland, Austria, ' +
+          'Switzerland, Czechia/Czech Republic, Romania, Hungary, Greece, Bulgaria, Croatia, ' +
+          'Serbia, Portugal, Lithuania, Latvia, Estonia, Slovakia, Slovenia, Luxembourg, Malta, ' +
+          'Cyprus, Iceland, and every other European nation and city therein)'
+        )
+      }
+      if (lower === 'eu') {
+        return (
+          'EU (= all EU member states: Germany, France, Spain, Italy, Netherlands, Belgium, ' +
+          'Ireland, Sweden, Denmark, Finland, Poland, Austria, Czechia, Romania, Hungary, ' +
+          'Greece, Bulgaria, Croatia, Slovenia, Slovakia, Estonia, Latvia, Lithuania, ' +
+          'Luxembourg, Malta, Cyprus, Portugal)'
+        )
+      }
+      return loc
+    })
+    locationDisplay = expandedParts.join(', ')
+  }
+
   const prefs = [
-    `Target roles/keywords: ${config.keywords.join(', ')}`,
-    `Target locations: ${config.locations.join(', ') || 'Any'}`,
+    `Target roles/keywords: ${config.keywords.join(', ') || '(none set)'}`,
+    `Target locations (authoritative — if empty the user accepts anywhere):\n  ${locationDisplay}`,
     `Remote only: ${config.remoteOnly ? 'Yes' : 'No'}`,
-    config.experienceLevel ? `Experience level preference: ${config.experienceLevel}` : null,
+    config.experienceLevel
+      ? `Experience level preference: ${config.experienceLevel}`
+      : `Experience level preference: Any`,
     config.salaryMin ? `Minimum salary: $${config.salaryMin.toLocaleString()}/year` : null,
     config.excludeCompanies.length > 0 ? `Excluded companies: ${config.excludeCompanies.join(', ')}` : null,
+    config.excludeKeywords.length > 0 ? `Excluded description keywords: ${config.excludeKeywords.join(', ')}` : null,
     config.spokenLanguages?.length
       ? `Languages the candidate speaks (postings that *require* other spoken languages as mandatory are a poor fit): ${config.spokenLanguages.join(', ')}`
-      : null,
+      : `Spoken languages: (none set)`,
   ]
     .filter(Boolean)
     .join('\n')
@@ -118,42 +174,43 @@ ${resume.education.map((e) => `  - ${e.degree} in ${e.field ?? 'N/A'} from ${e.i
       ? `Salary: ${job.salary_currency || 'USD'} ${job.salary_min?.toLocaleString() ?? '?'}–${job.salary_max?.toLocaleString() ?? '?'}`
       : 'Salary: Not listed',
     `Job type: ${job.job_type || 'Not specified'}`,
-    `Description: ${(job.description || '').slice(0, JOB_DESCRIPTION_EVAL_CHARS)}`,
   ].join('\n')
 
   const minScore = config.minScore
+  const jd = buildSmartJdExcerpt(job.description)
+  // Compact verbatim list for the bottom reminder line
+  const locationsDisplay = userLocations.length > 0 ? userLocations.join(', ') : 'Any'
 
   return `You are evaluating job listings for a job seeker. Score this job 0-100 and decide if they should apply.
+
+Treat the USER PREFERENCES block below as the source of truth about what the user wants. Do not invent preferences (country, continent, stack) that aren't stated there.
 
 USER PREFERENCES:
 ${prefs}
 ${resumeSection}
-STACK & MUST-HAVE FIT (critical — read the job description carefully):
-- If the posting mandates a **primary ecosystem** (e.g. multiple years of **Java**, **Spring/Hibernate**, **Angular** as a main framework, **.NET/C#**, **native mobile in Swift/Kotlin only**, etc.) and the **candidate resume does not mention** that ecosystem, score **below 45** unless the posting clearly treats it as optional or "nice to have."
-- Do **not** inflate the score because the title says "Full Stack" or matches the user's keywords if the **core stack in the bullets** conflicts with their resume (e.g. TS/React resume vs Java+Angular banking role).
-- Language requirements labeled **mandatory** for languages **not** in the user's spoken-language list above: treat as a **major** negative. English-only requirements are fine if the user lists English.
-
-GEOGRAPHY & REMOTE (apply strictly when judging location):
-- The user is based in the EU (e.g. Portugal) and is happy to work for a US or global company **if the role is fully remote from the EU** (no requirement to live in the US, LATAM-only, or relocate). Do **not** treat "US company" or "US time zones" alone as wrong_location if EU/remote-from-Europe is clearly allowed.
-- **Penalize** (wrong_location and/or lower score) when the listing requires **regular on-site or hybrid** in a specific city (e.g. N days per week in London) that is **not a realistic commute** from the user's base — weekly travel to another country is a poor fit even if that city appeared in their search locations by mistake.
-- **Still penalize** listings that are **exclusive** to a region the user cannot join: e.g. US-only hiring, LATAM-only, must live in [country] with no full EU remote option.
+SKILL FIT (your only job):
+- If the posting mandates a primary ecosystem (e.g. N+ years of a specific language/framework) the candidate resume does not mention, score below 45 unless the posting clearly marks it optional / "nice to have".
+- Do not inflate the score because the title matches the user's keywords when the core bullets demand a different stack.
+- Language requirements labeled mandatory for languages NOT in the candidate's spoken-language list are a major negative. If the user listed no spoken languages, do not penalise on language.
+- Do NOT flag or score-down on location or seniority — those have already been verified in code before you were called.
 
 JOB LISTING:
 ${jobInfo}
 
+${jd.excerpt}
+
 Respond with ONLY a JSON object:
 {
-  "score": <0-100>,
-  "reasoning": "<2-3 sentences explaining the match quality, referencing specific resume experience if available>",
-  "shouldApply": <true only if score >= ${minScore} — the user’s minimum match threshold is ${minScore}/100>,
-  "flags": ["<relevant flag>"],
+  "score": <0-100 based on SKILL FIT only>,
+  "reasoning": "<2-3 sentences about skill/experience match. MUST quote at least one concrete phrase from the description or title. If you cannot quote one, cap at 40.>",
+  "shouldApply": <true only if score >= ${minScore}>,
+  "flags": ["<relevant flags>"],
   "resumeMatch": "<which specific skills/experience from the resume are most relevant, or 'no resume' if none>"
 }
 
-Score guide: 80-100 excellent, 60-79 good, 40-59 possible, 0-39 poor.
-The server will only queue jobs for review when score >= ${minScore} (shouldApply must align).
-Penalize wrong seniority and **mandatory skill/language mismatches** harshly. For location, follow GEOGRAPHY & REMOTE above — do not over-penalize US employers offering legitimate EU-remote work.
-Flags: good_match, salary_too_low, overqualified, underqualified, wrong_location, remote_friendly, requires_visa, contract_only, career_change, stack_mismatch, missing_required_language.`
+Score guide: 80-100 strong skill match, 60-79 reasonable match, 40-59 partial/uncertain, 0-39 wrong primary stack.
+Flags (skill-related only): good_match, salary_too_low, stack_mismatch, missing_required_language, remote_friendly, requires_visa, contract_only, career_change.
+Do NOT use wrong_location, overqualified, or underqualified — those are already handled by code before this call.`
 }
 
 function buildScoringInputsSnapshot(
@@ -162,7 +219,8 @@ function buildScoringInputsSnapshot(
   resume: ResumeStructuredData | null,
   resumeMeta: { id: string | null; label: string | null }
 ): ScoringInputsSnapshot {
-  const desc = (job.description || '').slice(0, JOB_DESCRIPTION_EVAL_CHARS)
+  const jd = buildSmartJdExcerpt(job.description)
+  const desc = jd.excerpt
   return {
     model: EVALUATOR_MODEL,
     minScoreThreshold: Math.max(0, Math.min(100, config.minScore)),
@@ -198,6 +256,7 @@ function buildScoringInputsSnapshot(
       descriptionCharCount: (job.description || '').length,
       descriptionPreview: desc,
     },
+    jdFacts: jd.facts,
   }
 }
 
@@ -237,6 +296,46 @@ async function loadResumeForEvaluation(
 }
 
 export async function evaluateJob(job: SearchJobResult, config: BotConfig): Promise<EvaluateJobResult> {
+  // ── Deterministic pre-filter (runs before the LLM) ──────────────────────
+  // Hard yes/no rules that are 100% reliable. The LLM is unreliable for
+  // geography and seniority checks — code is not.
+  const preFilter = preFilterJob(job, config)
+  if (preFilter.rejected) {
+    const evaluation: JobEvaluation = {
+      score: preFilter.score,
+      reasoning: preFilter.reason,
+      shouldApply: false,
+      flags: [preFilter.flag],
+    }
+    // Build minimal scoringInputs for audit trail (no resume load needed)
+    const minimalInputs: ScoringInputsSnapshot = {
+      model: 'pre-filter',
+      minScoreThreshold: config.minScore,
+      userPreferences: {
+        keywords: [...config.keywords],
+        locations: [...config.locations],
+        remoteOnly: config.remoteOnly,
+        experienceLevel: config.experienceLevel ?? null,
+        salaryMin: config.salaryMin ?? null,
+        excludeCompanies: [...config.excludeCompanies],
+        excludeKeywords: [...config.excludeKeywords],
+        spokenLanguages: [...(config.spokenLanguages ?? [])],
+      },
+      resumeUsed: { resumeId: null, label: null, selection: 'none', skillsSentToPrompt: [], summaryIncluded: false, experienceRolesInPrompt: 0, educationRowsInPrompt: 0 },
+      jobBlockSentToModel: {
+        title: job.title,
+        company: job.company,
+        location: job.location || 'Not specified',
+        remote: job.is_remote ? 'Yes' : job.is_remote === false ? 'No' : 'Not specified',
+        salaryLine: 'Not listed',
+        jobType: job.job_type || 'Not specified',
+        descriptionCharCount: (job.description || '').length,
+        descriptionPreview: '',
+      },
+    }
+    return { evaluation, scoringInputs: minimalInputs }
+  }
+
   const ai = getAIClient()
   const { resume, resumeId, label } = await loadResumeForEvaluation(config.userId, job.title)
   const resumeMeta = { id: resumeId, label }
@@ -248,7 +347,7 @@ export async function evaluateJob(job: SearchJobResult, config: BotConfig): Prom
       { role: 'system', content: EVALUATOR_SYSTEM_PROMPT },
       { role: 'user', content: prompt },
     ],
-    { model: EVALUATOR_MODEL, temperature: 0.2, responseFormat: 'json_object' }
+    { model: EVALUATOR_MODEL, responseFormat: 'json_object' }
   )
 
   const raw = response.data.choices[0]?.message?.content ?? '{}'
@@ -281,6 +380,43 @@ export async function evaluateJob(job: SearchJobResult, config: BotConfig): Prom
   evaluation = langClamp.evaluation
   if (langClamp.clampMeta) {
     scoringInputsFinal = { ...scoringInputsFinal, languageMismatchClamp: langClamp.clampMeta }
+  }
+
+  const geoClamp = applyGeoMismatchClamp(job, config, evaluation, threshold)
+  evaluation = geoClamp.evaluation
+  if (geoClamp.clampMeta) {
+    scoringInputsFinal = { ...scoringInputsFinal, geoMismatchClamp: geoClamp.clampMeta }
+  }
+
+  const seniorityClamp = applySeniorityClamp(job, config, evaluation, threshold)
+  evaluation = seniorityClamp.evaluation
+  if (seniorityClamp.clampMeta) {
+    scoringInputsFinal = { ...scoringInputsFinal, seniorityClamp: seniorityClamp.clampMeta }
+  }
+
+  // Binary gate: if every deterministic clamp passed (none fired a hard cap) and
+  // the LLM's raw score is ≥ 40 (i.e. no strong "totally wrong job" signal), bump
+  // the score to minScore + 1 so it reaches the queue for manual review.
+  // The deterministic clamps are the authoritative yes/no on location, seniority,
+  // stack, language, and US-only signals. A fuzzy LLM score of 70 vs 76 is noise —
+  // it should not be the deciding factor after all binary checks have passed.
+  const anyClampFired =
+    !!stackClamp.clampMeta?.applied ||
+    !!langClamp.clampMeta?.applied ||
+    !!geoClamp.clampMeta?.applied ||
+    !!seniorityClamp.clampMeta?.applied
+
+  if (!anyClampFired && evaluation.score >= 40 && evaluation.score < threshold) {
+    const boostedScore = threshold + 1
+    evaluation = {
+      ...evaluation,
+      score: boostedScore,
+      shouldApply: true,
+      flags: [...evaluation.flags, 'clamp_pass_boost'],
+      reasoning:
+        evaluation.reasoning +
+        ' [All deterministic checks passed (location, seniority, stack, language). Score boosted for manual review.]',
+    }
   }
 
   return {

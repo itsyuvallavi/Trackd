@@ -27,6 +27,11 @@ import {
   botSearchSourcesAllowlist,
   type BotSearchSourceToken,
 } from '../bot-search-sources'
+import {
+  jobsSearchApiSearchHint,
+  jsearchJobRequirementsFor,
+  normalizeExperienceLevel,
+} from '../experience-level'
 
 function countBySource(jobs: SearchJobResult[]): Record<string, number> {
   const acc: Record<string, number> = {}
@@ -75,6 +80,10 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
 
   let skipJobsSearchApi = false
 
+  const normalizedLevel = normalizeExperienceLevel(req.experience_level)
+  const jsearchJobRequirements = jsearchJobRequirementsFor(normalizedLevel) ?? undefined
+  const jobsSearchExperienceHint = jobsSearchApiSearchHint(normalizedLevel)
+
   for (let i = 0; i < locationVariants.length; i++) {
     const location = locationVariants[i]
     const locTag = `loc:${i + 1}`
@@ -91,6 +100,7 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
           excludeJobPublishers: req.exclude_companies?.length
             ? req.exclude_companies
             : undefined,
+          jobRequirements: jsearchJobRequirements,
         },
         jSearchKey
       )
@@ -114,6 +124,7 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
           location,
           resultsWanted: perCombo,
           isRemote: !!req.remote_only,
+          experienceHint: jobsSearchExperienceHint,
         },
         jobsSearchApiKey
       )

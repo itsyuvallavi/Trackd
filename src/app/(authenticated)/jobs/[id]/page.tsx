@@ -20,6 +20,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
     include: {
       activities: {
         orderBy: { createdAt: 'desc' },
+        take: 50,
       },
     },
   })
@@ -28,13 +29,8 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
     notFound()
   }
 
-  // Check if user has email integration
-  const emailIntegration = await prisma.emailIntegration.findFirst({
-    where: { userId: user.id },
-  })
-
   return (
-    <AppShell showEmailNotification={!emailIntegration}>
+    <AppShell>
       <div className="flex-1 overflow-auto">
         <div className="w-full flex justify-center px-3 md:px-8 py-3 md:py-6 pb-16 md:pb-6 min-h-0">
           <div className="w-full max-w-[1160px]">

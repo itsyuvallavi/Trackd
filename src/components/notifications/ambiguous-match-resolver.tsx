@@ -3,9 +3,21 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { AlertCircle, Mail, Calendar, Building2, MapPin, ExternalLink } from 'lucide-react'
+import { GlassPanel, GlassPill } from '@/components/ui/glass'
+import {
+  AlertCircle,
+  Mail,
+  Calendar,
+  Building2,
+  MapPin,
+  ExternalLink,
+  CheckCircle2,
+  Loader2,
+} from 'lucide-react'
 import { JobStatus } from '@prisma/client'
 import Link from 'next/link'
+import { cn } from '@/lib/utils'
+import { STATUS_DOT_COLOR, STATUS_LABELS } from '@/lib/constants'
 
 interface MatchedJob {
   id: string
@@ -36,13 +48,13 @@ export function AmbiguousMatchResolver({
   emailDate,
   matchedJobs,
   suggestedStatus,
-  emailType,
   emailTextBody,
 }: AmbiguousMatchResolverProps) {
   const router = useRouter()
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [resolvedJobId, setResolvedJobId] = useState<string | null>(null)
 
   const handleSelectJob = async (jobId: string) => {
     if (isProcessing) return
@@ -52,26 +64,32 @@ export function AmbiguousMatchResolver({
     setError(null)
 
     try {
-      const response = await fetch(`/api/notifications/${notificationId}/resolve-ambiguous`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          jobId,
-          suggestedStatus,
-        }),
-      })
+      const response = await fetch(
+        `/api/notifications/${notificationId}/resolve-ambiguous`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            jobId,
+            suggestedStatus,
+          }),
+        }
+      )
 
       if (!response.ok) {
         const data = await response.json()
         throw new Error(data.error || 'Failed to resolve ambiguous match')
       }
 
-      const data = await response.json()
-      
-      // Redirect to the job page
-      router.push(`/jobs/${jobId}`)
+      await response.json()
+
+      setResolvedJobId(jobId)
+      // Fade the non-selected rows before navigating away.
+      setTimeout(() => {
+        router.push(`/jobs/${jobId}`)
+      }, 380)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
       setIsProcessing(false)
@@ -94,144 +112,169 @@ export function AmbiguousMatchResolver({
     }
   }
 
-  const getStatusColor = (status: JobStatus) => {
-    const colors = {
-      SAVED: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',
-      APPLIED: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-      INTERVIEW: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-      OFFER: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-      REJECTED: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-      ARCHIVED: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-    }
-    return colors[status] || colors.SAVED
-  }
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <div className="flex items-center gap-3 mb-2">
-          <AlertCircle className="size-6 text-warning" />
-          <h1 className="text-3xl font-bold">Resolve Ambiguous Match</h1>
+        <div className="flex items-center gap-3 mb-1">
+          <div className="shrink-0 size-9 rounded-xl grid place-items-center bg-warning-bg border border-warning/20">
+            <AlertCircle className="size-4 text-warning-text" />
+          </div>
+          <h1 className="text-3xl font-semibold tracking-tight">
+            Resolve ambiguous match
+          </h1>
         </div>
-        <p className="text-muted-foreground">
-          An email could match multiple jobs. Please select which job this email refers to.
+        <p className="text-sm text-muted-foreground ml-12">
+          An email could match multiple jobs. Pick which one it refers to.
         </p>
       </div>
 
       {/* Email Details */}
-      <div className="border border-border rounded-lg p-6 bg-card">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Mail className="size-5" />
-          Email Details
+      <GlassPanel className="rounded-2xl p-5 md:p-6">
+        <h2 className="text-sm font-semibold tracking-tight mb-4 flex items-center gap-2 text-foreground/80">
+          <Mail className="size-4" />
+          Email details
         </h2>
-        <div className="space-y-3 text-sm">
-          <div>
-            <span className="font-medium text-muted-foreground">From:</span>{' '}
-            <span className="text-foreground">{emailFrom}</span>
-          </div>
-          <div>
-            <span className="font-medium text-muted-foreground">Subject:</span>{' '}
-            <span className="text-foreground">{emailSubject}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Calendar className="size-4 text-muted-foreground" />
-            <span className="font-medium text-muted-foreground">Date:</span>{' '}
-            <span className="text-foreground">{formatDate(emailDate)}</span>
-          </div>
+        <dl className="space-y-2.5 text-sm">
+          <Row label="From">
+            <span className="text-foreground break-words">{emailFrom}</span>
+          </Row>
+          <Row label="Subject">
+            <span className="text-foreground break-words">{emailSubject}</span>
+          </Row>
+          <Row label="Date">
+            <span className="text-foreground inline-flex items-center gap-1.5">
+              <Calendar className="size-3.5 text-muted-foreground" />
+              <span className="tabular-nums">{formatDate(emailDate)}</span>
+            </span>
+          </Row>
           {suggestedStatus && (
-            <div>
-              <span className="font-medium text-muted-foreground">Suggested Status:</span>{' '}
-              <span className="text-foreground capitalize">{suggestedStatus.toLowerCase()}</span>
-            </div>
+            <Row label="Suggested">
+              <span className="text-foreground capitalize">
+                {suggestedStatus.toLowerCase()}
+              </span>
+            </Row>
           )}
-        </div>
+        </dl>
         {emailTextBody && (
           <details className="mt-4">
             <summary className="cursor-pointer text-primary hover:underline font-medium text-sm">
               View email content
             </summary>
-            <div className="mt-3 p-4 bg-muted rounded-lg text-sm whitespace-pre-wrap max-h-96 overflow-y-auto border border-border">
+            <div className="mt-3 p-4 rounded-xl bg-foreground/[0.04] text-sm whitespace-pre-wrap max-h-96 overflow-y-auto border border-border/60">
               {emailTextBody}
             </div>
           </details>
         )}
-      </div>
+      </GlassPanel>
 
       {/* Matched Jobs */}
       <div>
-        <h2 className="text-lg font-semibold mb-4">
-          Select the job this email refers to:
+        <h2 className="text-sm font-semibold tracking-tight mb-3 text-foreground/80">
+          Select the job this email refers to
         </h2>
-        <div className="space-y-3">
-          {matchedJobs.map((job) => (
-            <div
-              key={job.id}
-              className={`border rounded-lg p-4 transition-all ${
-                selectedJobId === job.id
-                  ? 'border-primary bg-primary-lightest'
-                  : 'border-border bg-card hover:border-primary/50'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-start gap-3 mb-2">
-                    <Building2 className="size-5 text-muted-foreground mt-0.5 shrink-0" />
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lg text-foreground mb-1">
-                        {job.title}
-                      </h3>
-                      <p className="text-muted-foreground mb-2">{job.company}</p>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        {job.location && (
-                          <div className="flex items-center gap-1">
-                            <MapPin className="size-4" />
-                            <span>{job.location}</span>
-                          </div>
-                        )}
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>
-                          {job.status}
-                        </span>
-                        {job.appliedAt && (
-                          <span suppressHydrationWarning>Applied {new Date(job.appliedAt).toLocaleDateString()}</span>
-                        )}
+        <ul className="space-y-2.5">
+          {matchedJobs.map((job) => {
+            const isSelected = selectedJobId === job.id
+            const isResolvedTarget = resolvedJobId === job.id
+            const isFadingOut =
+              resolvedJobId !== null && resolvedJobId !== job.id
+
+            return (
+              <li
+                key={job.id}
+                className={cn(
+                  'glass glass-subtle rounded-2xl p-4 transition-all duration-300 ease-[var(--ease-ios)]',
+                  isSelected && 'ring-1 ring-primary/40 bg-primary/5',
+                  isFadingOut && 'opacity-0 translate-y-1',
+                  isResolvedTarget && 'ring-1 ring-success/40'
+                )}
+              >
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start gap-3 mb-2">
+                      <div className="shrink-0 size-9 rounded-xl grid place-items-center bg-foreground/[0.04] border border-border/40 mt-0.5">
+                        <Building2 className="size-4 text-muted-foreground" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-base text-foreground break-words">
+                          {job.title}
+                        </h3>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {job.company}
+                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2.5 text-[11px] text-muted-foreground tabular-nums">
+                          {job.location && (
+                            <span className="inline-flex items-center gap-1">
+                              <MapPin className="size-3" />
+                              {job.location}
+                            </span>
+                          )}
+                          <GlassPill
+                            variant="subtle"
+                            className="text-[10px] tabular-nums inline-flex items-center gap-1.5"
+                          >
+                            <span
+                              aria-hidden
+                              className={cn(
+                                'size-1.5 rounded-full',
+                                STATUS_DOT_COLOR[job.status]
+                              )}
+                            />
+                            {STATUS_LABELS[job.status]}
+                          </GlassPill>
+                          {job.appliedAt && (
+                            <span suppressHydrationWarning>
+                              Applied{' '}
+                              {new Date(job.appliedAt).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
+                    {job.url && (
+                      <Link
+                        href={job.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline flex items-center gap-1 mt-2"
+                      >
+                        <ExternalLink className="size-3" />
+                        View job posting
+                      </Link>
+                    )}
                   </div>
-                  {job.url && (
-                    <Link
-                      href={job.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary hover:underline flex items-center gap-1 mt-2"
-                    >
-                      <ExternalLink className="size-3" />
-                      View job posting
-                    </Link>
-                  )}
+                  <Button
+                    onClick={() => handleSelectJob(job.id)}
+                    disabled={isProcessing}
+                    className="shrink-0 rounded-full min-w-[108px]"
+                    variant={isSelected ? 'default' : 'outline'}
+                  >
+                    {isResolvedTarget ? (
+                      <>
+                        <CheckCircle2 className="size-4 mr-1.5" />
+                        Linked
+                      </>
+                    ) : isSelected && isProcessing ? (
+                      <>
+                        <Loader2 className="size-4 mr-1.5 animate-spin" />
+                        Linking…
+                      </>
+                    ) : (
+                      'Select'
+                    )}
+                  </Button>
                 </div>
-                <Button
-                  onClick={() => handleSelectJob(job.id)}
-                  disabled={isProcessing}
-                  className="shrink-0"
-                  variant={selectedJobId === job.id ? 'default' : 'outline'}
-                >
-                  {selectedJobId === job.id && isProcessing
-                    ? 'Processing...'
-                    : selectedJobId === job.id
-                    ? 'Selected'
-                    : 'Select'}
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
+              </li>
+            )
+          })}
+        </ul>
       </div>
 
       {/* Error Message */}
       {error && (
-        <div className="border border-error rounded-lg p-4 bg-error-bg text-error-text">
-          <p className="font-medium">Error</p>
+        <div className="glass glass-subtle rounded-2xl border-error/30 bg-error-bg/50 p-4 text-error-text">
+          <p className="font-medium text-sm">Error</p>
           <p className="text-sm mt-1">{error}</p>
         </div>
       )}
@@ -251,10 +294,28 @@ export function AmbiguousMatchResolver({
             }
           }}
           disabled={isProcessing}
+          className="rounded-full"
         >
           Dismiss
         </Button>
       </div>
+    </div>
+  )
+}
+
+function Row({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex items-baseline gap-3">
+      <dt className="w-20 shrink-0 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+        {label}
+      </dt>
+      <dd className="flex-1 min-w-0">{children}</dd>
     </div>
   )
 }

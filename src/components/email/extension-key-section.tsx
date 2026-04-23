@@ -83,22 +83,26 @@ export function ExtensionKeySection({ initialData }: ExtensionKeySectionProps) {
 
   if (isLoading) {
     return (
-      <div className="border border-border rounded-lg p-6 bg-card">
+      <div className="glass glass-subtle rounded-2xl p-5 md:p-6">
         <div className="flex items-center gap-3 mb-4">
-          <Chrome className="size-6 text-muted-foreground" />
-          <h3 className="text-lg font-semibold">Chrome Extension</h3>
+          <Chrome className="size-5 text-muted-foreground" />
+          <h3 className="text-base font-semibold tracking-tight">
+            Chrome extension
+          </h3>
         </div>
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">Loading…</p>
       </div>
     )
   }
 
   return (
-    <div className="border border-border rounded-lg p-6 bg-card">
-      <div className="flex items-center justify-between mb-4">
+    <div className="glass glass-subtle rounded-2xl p-5 md:p-6">
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <div className="flex items-center gap-3">
-          <Chrome className="size-6" />
-          <h3 className="text-lg font-semibold">Chrome Extension</h3>
+          <Chrome className="size-5" />
+          <h3 className="text-base font-semibold tracking-tight">
+            Chrome extension
+          </h3>
         </div>
         <Button
           variant="outline"

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { GlassPanel, Aurora } from '@/components/ui/glass'
 import { JobSelector } from './job-selector'
 import { VoiceChat } from './voice-chat'
 import { SessionList } from './session-list'
@@ -15,7 +16,7 @@ import {
 } from '@/components/ui/select'
 import { InterviewType, InterviewSessionStatus } from '@prisma/client'
 import { createInterviewSession } from '@/app/(authenticated)/interview-prep/actions'
-import { MessageSquare, Plus } from 'lucide-react'
+import { MessageSquare, Plus, ArrowLeft } from 'lucide-react'
 import { SessionSummary as SummaryType } from '@/lib/interview/types'
 
 interface Job {
@@ -91,13 +92,19 @@ export function InterviewPrepPageContent({
     setSummary(null)
   }
 
+  // Live session — chromeless, focused layout with floating controls.
   if (view === 'session' && currentSessionId) {
     return (
-      <div className="space-y-6">
+      <div className="relative space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Interview Prep</h1>
-          <Button onClick={handleBackToList} variant="outline">
-            Back to Sessions
+          <Button
+            onClick={handleBackToList}
+            variant="ghost"
+            size="sm"
+            className="h-8 -ml-2 text-muted-foreground hover:text-foreground hover:bg-foreground/5"
+          >
+            <ArrowLeft className="size-4 mr-1.5" />
+            <span className="text-xs md:text-sm">Back to sessions</span>
           </Button>
         </div>
 
@@ -108,86 +115,99 @@ export function InterviewPrepPageContent({
             onSave={handleBackToList}
           />
         ) : (
-          <div className="bg-card border border-border rounded-lg h-[600px]">
+          <GlassPanel className="rounded-3xl h-[640px] overflow-hidden p-0">
             <VoiceChat
               sessionId={currentSessionId}
               onSummaryGenerated={handleSummaryGenerated}
             />
-          </div>
+          </GlassPanel>
         )}
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="relative">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-50 -z-10">
+        <Aurora />
+      </div>
+
+      <div className="space-y-8">
         <div>
-          <h1 className="text-2xl font-bold">Interview Prep</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Practice with AI-powered voice interviews
+          <h1 className="text-3xl font-semibold tracking-tight mb-1">
+            Interview prep
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Practice with AI-powered voice interviews.
           </p>
         </div>
-      </div>
 
-      {/* New Session Setup */}
-      <div className="bg-card border border-border rounded-lg p-6 space-y-4">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          <Plus className="size-5" />
-          Start New Session
-        </h2>
+        {/* New Session Setup */}
+        <GlassPanel className="rounded-3xl p-5 md:p-7 space-y-5">
+          <h2 className="text-sm md:text-base font-semibold tracking-tight flex items-center gap-2 text-foreground/80">
+            <Plus className="size-4" />
+            Start new session
+          </h2>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Job (Optional)</label>
-            <JobSelector
-              value={selectedJobId}
-              onValueChange={setSelectedJobId}
-              jobs={jobs}
-            />
-            <p className="text-xs text-muted-foreground">
-              Link to a specific job for personalized questions
-            </p>
+          <div className="grid gap-5 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                Job (optional)
+              </label>
+              <JobSelector
+                value={selectedJobId}
+                onValueChange={setSelectedJobId}
+                jobs={jobs}
+              />
+              <p className="text-xs text-muted-foreground">
+                Link to a specific job for personalized questions.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                Interview type
+              </label>
+              <Select
+                value={interviewType}
+                onValueChange={(value) =>
+                  setInterviewType(value as InterviewType)
+                }
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="MIXED">Mixed (technical + general)</SelectItem>
+                  <SelectItem value="TECHNICAL">Technical</SelectItem>
+                  <SelectItem value="GENERAL">General</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Choose the type of questions the AI will ask.
+              </p>
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Interview Type</label>
-            <Select
-              value={interviewType}
-              onValueChange={(value) => setInterviewType(value as InterviewType)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="MIXED">Mixed (Technical + General)</SelectItem>
-                <SelectItem value="TECHNICAL">Technical</SelectItem>
-                <SelectItem value="GENERAL">General</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Choose the type of interview questions
-            </p>
-          </div>
+          <Button
+            onClick={handleStartNewSession}
+            disabled={isCreatingSession}
+            size="lg"
+            className="w-full rounded-2xl"
+          >
+            <MessageSquare className="size-4 mr-2" />
+            {isCreatingSession
+              ? 'Creating session…'
+              : 'Start interview session'}
+          </Button>
+        </GlassPanel>
+
+        {/* Past Sessions */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold tracking-tight">Past sessions</h2>
+          <SessionList sessions={sessions} />
         </div>
-
-        <Button
-          onClick={handleStartNewSession}
-          disabled={isCreatingSession}
-          size="lg"
-          className="w-full"
-        >
-          <MessageSquare className="size-4 mr-2" />
-          {isCreatingSession ? 'Creating Session...' : 'Start Interview Session'}
-        </Button>
-      </div>
-
-      {/* Past Sessions */}
-      <div>
-        <h2 className="text-lg font-semibold mb-4">Past Sessions</h2>
-        <SessionList sessions={sessions} />
       </div>
     </div>
   )
 }
-

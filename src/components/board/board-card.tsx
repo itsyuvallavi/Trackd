@@ -3,6 +3,8 @@
 import { Job, Activity } from '@prisma/client'
 import { formatRelativeTime } from '@/lib/utils'
 import Link from 'next/link'
+import { MapPin, Clock, Zap } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface BoardCardProps {
   job: Job & { activities: Activity[] }
@@ -14,40 +16,49 @@ export function BoardCard({ job, isDragging = false }: BoardCardProps) {
 
   return (
     <div
-      className={`bg-background border border-foreground/20 rounded-lg p-3 hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing ${
-        isDragging ? 'opacity-50' : ''
-      }`}
+      className={cn(
+        'group glass glass-subtle rounded-xl p-3 cursor-grab active:cursor-grabbing',
+        'transition-[transform,box-shadow,opacity] duration-150 ease-[var(--ease-ios)]',
+        'hover:-translate-y-0.5',
+        isDragging && 'opacity-40'
+      )}
     >
       <Link
         href={`/jobs/${job.id}`}
         className="block"
         onClick={(e) => {
-          // Prevent navigation when dragging
-          if (isDragging) {
-            e.preventDefault()
-          }
+          if (isDragging) e.preventDefault()
         }}
       >
-        <h3 className="font-medium text-sm mb-1 hover:text-blue-600 dark:hover:text-blue-400">
+        <h3
+          className="font-medium text-sm mb-0.5 text-foreground group-hover:text-primary transition-colors line-clamp-2"
+          style={{ viewTransitionName: `job-title-${job.id}` }}
+        >
           {job.title}
         </h3>
-        <p className="text-xs text-foreground/60 mb-2">{job.company}</p>
+        <p className="text-xs text-muted-foreground line-clamp-1">{job.company}</p>
       </Link>
 
-      {job.location && (
-        <p className="text-xs text-foreground/50 mt-2">📍 {job.location}</p>
-      )}
-
-      {lastActivity && (
-        <p className="text-xs text-foreground/40 mt-2">
-          {formatRelativeTime(lastActivity.createdAt)}
-        </p>
-      )}
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+        {job.location && (
+          <span className="inline-flex items-center gap-1">
+            <MapPin className="size-3" />
+            <span className="truncate max-w-[140px]">{job.location}</span>
+          </span>
+        )}
+        {lastActivity && (
+          <span className="inline-flex items-center gap-1">
+            <Clock className="size-3" />
+            {formatRelativeTime(lastActivity.createdAt)}
+          </span>
+        )}
+      </div>
 
       {job.nextAction && (
-        <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
-          ⚡ {job.nextAction}
-        </p>
+        <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-warning">
+          <Zap className="size-3" />
+          <span className="truncate">{job.nextAction}</span>
+        </div>
       )}
     </div>
   )

@@ -15,8 +15,18 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 60, // Cache images for 60 seconds
     qualities: [75, 85], // Allow both quality levels
   },
-  // Packages with native binaries that must not be bundled by webpack
-  serverExternalPackages: ['playwright-core', 'playwright'],
+  // Packages with native binaries or heavy server-only footprints that must
+  // not be bundled by webpack / Turbopack. These are all reachable only from
+  // API routes, server actions, and server modules.
+  serverExternalPackages: [
+    'playwright-core',
+    'playwright',
+    'puppeteer',
+    'mailparser',
+    'imap',
+    'cheerio',
+    'xlsx',
+  ],
 
   // Enable experimental features for better performance
   experimental: {

@@ -147,7 +147,7 @@ export function UserProfileMenu() {
             <div className="border-t border-border mt-1 pt-1">
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-3 px-4 py-2 text-sm text-red-500 hover:bg-accent transition-colors w-full text-left"
+                className="flex items-center gap-3 px-4 py-2 text-sm text-error-text hover:bg-accent transition-colors w-full text-left"
               >
                 <LogOut className="size-4" />
                 Log out

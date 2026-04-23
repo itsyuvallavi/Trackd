@@ -1,23 +1,25 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { syncEmails } from '@/app/(authenticated)/settings/email-actions'
-import { SyncResultToast } from './sync-result-toast'
+import { SyncResultToast, type SyncResultToastState } from './sync-result-toast'
+import { NOTIFICATIONS_REFRESH_EVENT } from '@/lib/constants'
 
 export function SyncEmailsButton() {
+  const router = useRouter()
   const [isSyncing, setIsSyncing] = useState(false)
-  const [syncResult, setSyncResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
-  const [showSyncModal, setShowSyncModal] = useState(false)
+  const [syncToast, setSyncToast] = useState<SyncResultToastState>(null)
 
   const handleSync = async () => {
     setIsSyncing(true)
+    setSyncToast({ phase: 'running' })
 
     try {
       const result = await syncEmails()
 
       if (result.success && 'stats' in result) {
-        // Store full stats for the toast to parse, but we'll simplify the display
         let message = `Fetched ${result.stats.totalEmails} emails since ${new Date(result.stats.syncSince).toLocaleDateString()}\n`
         message += `Processed ${result.stats.processedEmails} job-related emails\n`
         if (result.stats.updatedJobs > 0) {
@@ -35,37 +37,38 @@ export function SyncEmailsButton() {
         if (result.stats.skippedEmails > 0) {
           message += `Skipped ${result.stats.skippedEmails} emails\n`
         }
-        
-        setSyncResult({
+
+        setSyncToast({
+          phase: 'result',
           type: 'success',
           message,
         })
-        setShowSyncModal(true)
       } else {
-        setSyncResult({
+        setSyncToast({
+          phase: 'result',
           type: 'error',
           message: ('error' in result ? result.error : 'Sync failed. Check console for details.') || 'Sync failed. Check console for details.',
         })
-        setShowSyncModal(true)
       }
     } catch (error) {
       console.error('Sync error:', error)
-      setSyncResult({
+      setSyncToast({
+        phase: 'result',
         type: 'error',
         message: error instanceof Error ? error.message : 'An unexpected error occurred',
       })
-      setShowSyncModal(true)
     } finally {
       setIsSyncing(false)
     }
+    window.dispatchEvent(new CustomEvent(NOTIFICATIONS_REFRESH_EVENT))
+    await router.refresh()
   }
 
   return (
     <>
       <SyncResultToast
-        isOpen={showSyncModal}
-        onClose={() => setShowSyncModal(false)}
-        result={syncResult}
+        state={syncToast}
+        onClose={() => setSyncToast(null)}
       />
       <Button
         onClick={handleSync}

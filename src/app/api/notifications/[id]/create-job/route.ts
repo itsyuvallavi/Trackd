@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { JobStatus } from '@prisma/client'
+import { cacheTagsFor } from '@/lib/cache-tags'
 
 /**
  * POST /api/notifications/[id]/create-job
@@ -73,6 +75,7 @@ export async function POST(
         where: { id },
         data: { isRead: true },
       })
+      revalidateTag(cacheTagsFor(user.id).notifications, { expire: 0 })
       return NextResponse.json({
         success: true,
         jobId: existingJob.id,
@@ -112,6 +115,11 @@ export async function POST(
       where: { id },
       data: { isRead: true },
     })
+
+    const tags = cacheTagsFor(user.id)
+    revalidateTag(tags.jobs, { expire: 0 })
+    revalidateTag(tags.activity, { expire: 0 })
+    revalidateTag(tags.notifications, { expire: 0 })
 
     return NextResponse.json({
       success: true,

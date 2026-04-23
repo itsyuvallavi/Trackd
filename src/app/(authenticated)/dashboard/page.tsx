@@ -5,6 +5,10 @@ import { AppShell } from '@/components/layout/app-shell'
 import { DashboardPageContent } from '@/components/dashboard/dashboard-page-content'
 import { JobStatus } from '@prisma/client'
 import { serializeForClient } from '@/lib/serialize-for-client'
+import {
+  getRecentActivities,
+  getRecentNotifications,
+} from '@/lib/cached-queries'
 
 type DashboardProps = ComponentProps<typeof DashboardPageContent>
 
@@ -13,54 +17,17 @@ export const revalidate = 30 // Revalidate every 30 seconds
 export default async function DashboardPage() {
   const user = await requireAuth()
 
-  // Fetch data in parallel
+  // The shell fetches its own banner state; we only need the page-level data.
   const [statusCounts, recentActivities, notificationsRaw] = await Promise.all([
-    // Get status counts
     prisma.job.groupBy({
       by: ['status'],
       where: { userId: user.id },
       _count: true,
     }),
-    // Fetch recent activities (last 50)
-    prisma.activity.findMany({
-      where: { userId: user.id },
-      select: {
-        id: true,
-        type: true,
-        fromStatus: true,
-        toStatus: true,
-        description: true,
-        createdAt: true,
-        job: {
-          select: {
-            id: true,
-            title: true,
-            company: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    }),
-    // Fetch recent notifications (last 50)
-    prisma.notification.findMany({
-      where: { userId: user.id },
-      select: {
-        id: true,
-        type: true,
-        title: true,
-        message: true,
-        metadata: true,
-        isRead: true,
-        actionUrl: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    }),
+    getRecentActivities(user.id, 50),
+    getRecentNotifications(user.id, 50),
   ])
 
-  // Convert groupBy result to status counts map
   const statusCountsMap: Record<JobStatus, number> = {
     SAVED: 0,
     APPLIED: 0,
@@ -74,12 +41,8 @@ export default async function DashboardPage() {
     statusCountsMap[item.status as JobStatus] = item._count
   })
 
-  const emailIntegration = await prisma.emailIntegration.findUnique({
-    where: { userId: user.id },
-  })
-
   return (
-    <AppShell showEmailNotification={!emailIntegration}>
+    <AppShell>
       <div className="flex-1 overflow-auto">
         <DashboardPageContent
           statusCounts={statusCountsMap}

@@ -1,10 +1,11 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { ActivityType } from '@prisma/client'
 import { NotificationService } from '@/lib/notification-service'
+import { cacheTagsFor } from '@/lib/cache-tags'
 
 /**
  * Update interview date and time for a job
@@ -82,6 +83,12 @@ export async function updateInterviewDate(jobId: string, interviewAt: Date | nul
     )
   }
 
+  const tags = cacheTagsFor(user.id)
+  revalidateTag(tags.jobs, { expire: 0 })
+  revalidateTag(tags.activity, { expire: 0 })
+  if (interviewAt) {
+    revalidateTag(tags.notifications, { expire: 0 })
+  }
   revalidatePath('/calendar')
   revalidatePath(`/jobs/${jobId}`)
   revalidatePath('/jobs')

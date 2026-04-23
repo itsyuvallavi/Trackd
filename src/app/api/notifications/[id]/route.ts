@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
+import { cacheTagsFor } from '@/lib/cache-tags'
 
 /**
  * PATCH /api/notifications/[id]
@@ -24,6 +26,8 @@ export async function PATCH(
       },
     })
 
+    const notificationTag = cacheTagsFor(user.id).notifications
+    after(() => revalidateTag(notificationTag, { expire: 0 }))
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error marking notification as read:', error)
@@ -53,6 +57,8 @@ export async function DELETE(
       },
     })
 
+    const notificationTag = cacheTagsFor(user.id).notifications
+    after(() => revalidateTag(notificationTag, { expire: 0 }))
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error deleting notification:', error)

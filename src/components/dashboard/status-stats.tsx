@@ -6,19 +6,28 @@ interface StatusStatsProps {
   activeStatus?: JobStatus
 }
 
-const STATUS_ORDER: JobStatus[] = ['SAVED', 'APPLIED', 'INTERVIEW', 'OFFER', 'REJECTED', 'ARCHIVED']
+const STATUS_ORDER: JobStatus[] = [
+  'SAVED',
+  'APPLIED',
+  'INTERVIEW',
+  'OFFER',
+  'REJECTED',
+  'ARCHIVED',
+]
 
 export function StatusStats({ counts, activeStatus }: StatusStatsProps) {
-  const totalJobs = Object.values(counts).reduce((sum, count) => sum + count, 0)
-  const activeJobs = counts.SAVED + counts.APPLIED + counts.INTERVIEW + counts.OFFER
+  const totalJobs = Object.values(counts).reduce((sum, c) => sum + c, 0)
+  const activeJobs =
+    counts.SAVED + counts.APPLIED + counts.INTERVIEW + counts.OFFER
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <section className="space-y-4">
+      <div className="flex items-baseline justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Overview</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Overview</h2>
           <p className="text-sm text-muted-foreground">
-            {totalJobs} total jobs • {activeJobs} active
+            <span className="tabular-nums">{totalJobs}</span> total jobs ·{' '}
+            <span className="tabular-nums">{activeJobs}</span> active
           </p>
         </div>
       </div>
@@ -28,11 +37,11 @@ export function StatusStats({ counts, activeStatus }: StatusStatsProps) {
             key={status}
             status={status}
             count={counts[status]}
+            total={totalJobs}
             isActive={activeStatus === status}
           />
         ))}
       </div>
-    </div>
+    </section>
   )
 }
-

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
+import { BOT_RUN_COMPLETE_EVENT } from '@/lib/constants'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,19 +52,31 @@ interface QueueJob {
 function ScoreBadge({ score }: { score: number }) {
   const color =
     score >= 80
-      ? 'bg-green-500/10 text-green-600 border-green-500/20'
+      ? 'bg-success-bg text-success-text border-success/25'
       : score >= 60
-        ? 'bg-blue-500/10 text-blue-600 border-blue-500/20'
+        ? 'bg-info-bg text-info-text border-info/25'
         : score >= 40
-          ? 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20'
-          : 'bg-red-500/10 text-red-600 border-red-500/20'
+          ? 'bg-warning-bg text-warning-text border-warning/25'
+          : 'bg-error-bg text-error-text border-error/25'
 
-  const label = score >= 80 ? 'Excellent' : score >= 60 ? 'Good' : score >= 40 ? 'Possible' : 'Weak'
+  const label =
+    score >= 80
+      ? 'Excellent'
+      : score >= 60
+        ? 'Good'
+        : score >= 40
+          ? 'Possible'
+          : 'Weak'
 
   return (
-    <span className={cn('inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full border', color)}>
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full border',
+        color
+      )}
+    >
       <span className="font-bold tabular-nums">{score}</span>
-      <span className="opacity-70">{label}</span>
+      <span className="opacity-75">{label}</span>
     </span>
   )
 }
@@ -178,8 +191,8 @@ function JobCard({
   return (
     <>
     <div className={cn(
-      'rounded-xl border bg-card p-5 flex flex-col gap-4 transition-all',
-      job.duplicate && 'border-yellow-500/30 bg-yellow-500/5'
+      'glass glass-subtle rounded-2xl p-5 flex flex-col gap-4 transition-[box-shadow] duration-200 ease-[var(--ease-ios)]',
+      job.duplicate && 'ring-1 ring-warning/30 bg-warning-bg/30'
     )}>
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
@@ -188,7 +201,7 @@ function JobCard({
             <h3 className="font-semibold text-base truncate">{job.title}</h3>
             {job.botScore !== null && <ScoreBadge score={job.botScore} />}
             {job.duplicate && (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-yellow-600 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full">
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-warning-text bg-warning-bg border border-warning/25 px-2 py-0.5 rounded-full">
                 <AlertTriangle className="size-3" />
                 Already applied
               </span>
@@ -223,7 +236,7 @@ function JobCard({
             href={job.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="shrink-0 rounded-lg p-2 text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+            className="shrink-0 rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-foreground/[0.06] transition-colors"
             title="Open job posting"
           >
             <ExternalLink className="size-4" />
@@ -233,7 +246,7 @@ function JobCard({
 
       {/* Duplicate warning */}
       {job.duplicate && (
-        <div className="flex items-start gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 text-sm text-yellow-700 dark:text-yellow-400">
+        <div className="flex items-start gap-2 rounded-xl bg-warning-bg border border-warning/25 px-3 py-2 text-sm text-warning-text">
           <AlertTriangle className="size-4 mt-0.5 shrink-0" />
           <span>
             You already applied to this position on{' '}
@@ -249,8 +262,8 @@ function JobCard({
 
       {/* AI Reasoning */}
       {job.botReasoning && (
-        <div className="rounded-lg bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground leading-relaxed border border-border/50">
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-foreground/70 uppercase tracking-wide mb-1.5">
+        <div className="rounded-xl bg-foreground/[0.03] px-3 py-2.5 text-sm text-muted-foreground leading-relaxed border border-border/40">
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-foreground/70 uppercase tracking-wider mb-1.5">
             <Bot className="size-3" />
             AI Assessment
           </span>
@@ -260,7 +273,7 @@ function JobCard({
 
       {/* Cover Letter */}
       {coverLetter && showLetter && (
-        <div className="rounded-lg border bg-muted/30 p-4">
+        <div className="rounded-xl border border-border/40 bg-foreground/[0.03] p-4">
           <div className="flex items-center justify-between mb-2 gap-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
               <FileText className="size-3" />
@@ -300,7 +313,7 @@ function JobCard({
 
       {/* Error */}
       {error && (
-        <p className="text-sm text-red-500">{error}</p>
+        <p className="text-sm text-error-text">{error}</p>
       )}
 
       {/* Actions */}
@@ -309,8 +322,8 @@ function JobCard({
           onClick={handleApply}
           disabled={applying || skipping || deleting}
           className={cn(
-            'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-border hover:bg-muted transition-colors',
-            job.duplicate && 'border-yellow-500/30 text-yellow-700',
+            'flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border border-border/60 hover:bg-foreground/[0.05] transition-colors',
+            job.duplicate && 'border-warning/30 text-warning-text',
             (applying || skipping || deleting) && 'opacity-50 cursor-not-allowed'
           )}
         >
@@ -325,7 +338,7 @@ function JobCard({
         <button
           onClick={generateLetter}
           disabled={generating || regeneratingLetter || applying || skipping || deleting}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-border hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border border-border/60 hover:bg-foreground/[0.05] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {generating ? (
             <Loader2 className="size-4 animate-spin" />
@@ -348,7 +361,7 @@ function JobCard({
         <button
           onClick={handleSkip}
           disabled={applying || skipping || deleting}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {skipping ? (
             <Loader2 className="size-4 animate-spin" />
@@ -363,8 +376,8 @@ function JobCard({
           onClick={() => setRemoveDialogOpen(true)}
           disabled={applying || skipping || deleting}
           className={cn(
-            'ml-auto shrink-0 inline-flex items-center justify-center rounded-lg border border-red-500/45 bg-red-500/[0.06] p-2 text-red-600 hover:bg-red-500/12 hover:text-red-700 transition-colors',
-            'dark:text-red-400 dark:hover:text-red-300 disabled:opacity-40 disabled:pointer-events-none'
+            'ml-auto shrink-0 inline-flex items-center justify-center rounded-full border border-error/30 bg-error-bg/50 p-2 text-error-text hover:bg-error-bg transition-colors',
+            'disabled:opacity-40 disabled:pointer-events-none'
           )}
           title="Remove from Trackd"
           aria-label="Remove from Trackd"
@@ -450,6 +463,14 @@ export function BotQueueContent() {
 
   useEffect(() => { load() }, [load])
 
+  useEffect(() => {
+    const onRunComplete = () => {
+      void load()
+    }
+    window.addEventListener(BOT_RUN_COMPLETE_EVENT, onRunComplete)
+    return () => window.removeEventListener(BOT_RUN_COMPLETE_EVENT, onRunComplete)
+  }, [load])
+
   const handleApply = async (jobId: string) => {
     const res = await fetch('/api/bot/apply', {
       method: 'POST',
@@ -488,28 +509,16 @@ export function BotQueueContent() {
   const duplicateCount = jobs.filter((j) => j.duplicate).length
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8 w-full">
-      {/* Page Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Bot className="size-5 text-primary" />
-            <h1 className="text-xl font-semibold">Bot Queue</h1>
-            {!loading && jobs.length > 0 && (
-              <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold tabular-nums">
-                {jobs.length}
-              </span>
-            )}
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Jobs the bot found and approved for you to review
-          </p>
-        </div>
+    <div className="w-full">
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-muted-foreground">
+          Jobs the bot found and approved for you to review.
+        </p>
 
         <button
           onClick={load}
           disabled={loading}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50"
         >
           <RefreshCw className={cn('size-4', loading && 'animate-spin')} />
           Refresh
@@ -518,11 +527,13 @@ export function BotQueueContent() {
 
       {/* Incomplete profile warning */}
       {!profileComplete && !loading && (
-        <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/8 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+        <div className="mb-4 flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning-bg/60 px-4 py-3 text-sm text-warning-text">
           <UserCircle className="size-4 mt-0.5 shrink-0" />
           <span>
-            <strong>Your application profile is incomplete.</strong> The bot needs your phone, location, and work authorization to fill forms automatically.{' '}
-            <Link href="/profile" className="underline hover:text-amber-900 dark:hover:text-amber-200">
+            <strong>Your application profile is incomplete.</strong> The bot
+            needs your phone, location, and work authorization to fill forms
+            automatically.{' '}
+            <Link href="/bot/identity" className="underline hover:text-foreground">
               Complete your profile →
             </Link>
           </span>
@@ -531,12 +542,17 @@ export function BotQueueContent() {
 
       {/* Duplicate notice */}
       {duplicateCount > 0 && (
-        <div className="mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-4 py-3 text-sm text-yellow-700 dark:text-yellow-400">
+        <div className="mb-4 flex items-start gap-2 rounded-2xl bg-warning-bg/60 border border-warning/25 px-4 py-3 text-sm text-warning-text">
           <AlertTriangle className="size-4 mt-0.5 shrink-0" />
           <span>
-            <strong>{duplicateCount} job{duplicateCount > 1 ? 's' : ''}</strong> in your queue{' '}
-            {duplicateCount > 1 ? 'match positions' : 'matches a position'} you already applied to.
-            The bot won&apos;t re-apply automatically.
+            <strong>
+              {duplicateCount} job{duplicateCount > 1 ? 's' : ''}
+            </strong>{' '}
+            in your queue{' '}
+            {duplicateCount > 1
+              ? 'match positions'
+              : 'matches a position'}{' '}
+            you already applied to. The bot won&apos;t re-apply automatically.
           </span>
         </div>
       )}
@@ -548,21 +564,21 @@ export function BotQueueContent() {
           <span>Loading queue…</span>
         </div>
       ) : error ? (
-        <div className="flex items-center justify-center py-20 text-red-500 gap-2">
+        <div className="flex items-center justify-center py-20 text-error-text gap-2">
           <AlertTriangle className="size-5" />
           <span>{error}</span>
         </div>
       ) : jobs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 text-center text-muted-foreground">
-          <Inbox className="size-10 opacity-30" />
+        <div className="glass glass-subtle rounded-2xl flex flex-col items-center justify-center py-16 gap-3 text-center text-muted-foreground">
+          <Inbox className="size-10 opacity-40" />
           <div>
             <p className="font-medium text-foreground">Queue is empty</p>
             <p className="text-sm mt-1">
-              Run the bot from{' '}
-              <a href="/settings/bot" className="underline hover:text-foreground">
-                Settings → Bot
-              </a>{' '}
-              to find new jobs.
+              Use <strong>Run now</strong> above, or tune matchers in{' '}
+              <Link href="/bot/settings" className="underline hover:text-foreground">
+                Settings
+              </Link>
+              .
             </p>
           </div>
         </div>

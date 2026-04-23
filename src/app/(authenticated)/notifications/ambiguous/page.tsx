@@ -46,7 +46,9 @@ export default async function AmbiguousMatchPage({
       },
     })
     
-    // Fallback: if Prisma query doesn't work, fetch all and filter in memory
+    // Fallback: if Prisma query doesn't work, fetch the most recent batch and
+    // filter in memory. Bounded so the worst-case path can't load an entire
+    // user's notification history.
     if (!notification) {
       console.log('Prisma JSON query failed, trying in-memory filter')
       const allNotifications = await prisma.notification.findMany({
@@ -57,6 +59,7 @@ export default async function AmbiguousMatchPage({
         orderBy: {
           createdAt: 'desc',
         },
+        take: 200,
       })
       
       console.log(`Found ${allNotifications.length} ambiguous match notifications`)

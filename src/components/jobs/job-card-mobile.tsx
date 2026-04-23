@@ -1,11 +1,20 @@
 'use client'
 
 import Link from 'next/link'
-import { motion } from 'framer-motion'
 import { StickyNote } from 'lucide-react'
 import { StatusDropdown } from './status-dropdown'
 import { JobActionsMenu } from './job-actions-menu'
+import { cn } from '@/lib/utils'
 import type { JobStatus } from '@prisma/client'
+
+const statusAccent: Record<string, string> = {
+  SAVED: 'bg-saved',
+  APPLIED: 'bg-info',
+  INTERVIEW: 'bg-interview',
+  OFFER: 'bg-success',
+  REJECTED: 'bg-error',
+  ARCHIVED: 'bg-warning',
+}
 
 interface Job {
   id: string
@@ -20,39 +29,57 @@ interface Job {
 interface JobCardMobileProps {
   job: Job
   index?: number
+  onStatusOptimistic?: (status: JobStatus) => void
+  onStatusCommitFailed?: (revertTo: JobStatus) => void
 }
 
-export function JobCardMobile({ job, index = 0 }: JobCardMobileProps) {
+/**
+ * Mobile row — glass card with status accent bar on the left.
+ * The stagger-in animation uses a CSS-only keyframe (delay via style) so
+ * the mobile list doesn't pull in framer-motion just to animate rows.
+ */
+export function JobCardMobile({
+  job,
+  index = 0,
+  onStatusOptimistic,
+  onStatusCommitFailed,
+}: JobCardMobileProps) {
   return (
-    <div className="bg-card border border-border rounded p-3 shadow-sm transition-shadow active:shadow-md">
-      {/* Ultra compact single row — whileTap only on the link so status/actions don’t trigger card scale */}
-      <div className="flex items-center gap-1.5">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            duration: 0.2,
-            delay: index * 0.02,
-            ease: [0.16, 1, 0.3, 1],
-          }}
-          whileTap={{ scale: 0.98 }}
-          className="flex-1 min-w-0"
-        >
-          <Link href={`/jobs/${job.id}`} className="block">
-            <h3 className="text-xs font-medium text-foreground line-clamp-1 hover:text-primary transition-colors">
-              {job.title}
-            </h3>
-            <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">
-              {job.company}{job.location && ` • ${job.location}`}
-            </p>
-          </Link>
-        </motion.div>
+    <div
+      className="glass glass-subtle rounded-2xl p-3 active:scale-[0.99] transition-transform duration-150 ease-[var(--ease-ios)] animate-in fade-in"
+      style={{ animationDelay: `${Math.min(index, 12) * 20}ms`, animationDuration: '260ms' }}
+    >
+      <div className="flex items-center gap-2">
+        <div
+          aria-hidden
+          className={cn(
+            'w-[3px] h-8 rounded-full shrink-0',
+            statusAccent[job.status] || 'bg-muted'
+          )}
+        />
+        <Link href={`/jobs/${job.id}`} className="flex-1 min-w-0 block">
+          <h3
+            className="text-xs font-medium text-foreground line-clamp-1 hover:text-primary transition-colors"
+            style={{ viewTransitionName: `job-title-${job.id}` }}
+          >
+            {job.title}
+          </h3>
+          <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">
+            {job.company}
+            {job.location && ` · ${job.location}`}
+          </p>
+        </Link>
         <div className="flex items-center gap-1 shrink-0">
           {job.notes && (
             <StickyNote className="size-2.5 text-muted-foreground/60" />
           )}
           <div className="min-h-[22px] flex items-center">
-            <StatusDropdown jobId={job.id} currentStatus={job.status as JobStatus} />
+            <StatusDropdown
+              jobId={job.id}
+              currentStatus={job.status as JobStatus}
+              onOptimisticStatus={onStatusOptimistic}
+              onStatusCommitFailed={onStatusCommitFailed}
+            />
           </div>
           <JobActionsMenu
             jobId={job.id}

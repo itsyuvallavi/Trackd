@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
 import { JobStatus } from '@prisma/client'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
+import { cacheTagsFor } from '@/lib/cache-tags'
 
 /**
  * PATCH /api/jobs/[id]/status
@@ -72,7 +73,9 @@ export async function PATCH(
       })
     }
 
-    // Revalidate relevant pages
+    const tags = cacheTagsFor(user.id)
+    revalidateTag(tags.jobs, { expire: 0 })
+    revalidateTag(tags.activity, { expire: 0 })
     revalidatePath('/jobs')
     revalidatePath('/board')
     revalidatePath('/today')

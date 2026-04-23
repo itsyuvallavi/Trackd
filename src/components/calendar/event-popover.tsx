@@ -124,7 +124,7 @@ export function EventPopover({ event, anchor, onClose }: EventPopoverProps) {
         />
       <div
         className={cn(
-          "fixed z-50 bg-card border border-border rounded-lg shadow-lg p-4 w-[320px] animate-in fade-in duration-150 overflow-y-auto",
+          "!fixed z-50 glass glass-strong rounded-2xl p-4 w-[320px] animate-in fade-in duration-150 overflow-y-auto shadow-[var(--shadow-lg)]",
           position.placement === 'top' ? 'slide-in-from-bottom-2' : 'slide-in-from-top-2'
         )}
         style={{
@@ -168,7 +168,7 @@ export function EventPopover({ event, anchor, onClose }: EventPopoverProps) {
       />
       <div
         className={cn(
-          "fixed z-50 bg-card border border-border rounded-lg shadow-lg p-4 w-[280px] animate-in fade-in duration-150 overflow-y-auto",
+          "!fixed z-50 glass glass-strong rounded-2xl p-4 w-[280px] animate-in fade-in duration-150 overflow-y-auto shadow-[var(--shadow-lg)]",
           position.placement === 'top' ? 'slide-in-from-bottom-2' : 'slide-in-from-top-2'
         )}
         style={{
@@ -202,10 +202,10 @@ export function EventPopover({ event, anchor, onClose }: EventPopoverProps) {
         <div className="mb-3">
           <Badge
             className={cn(
-              'border text-xs px-2 py-1',
-              event.type === 'INTERVIEW' && 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
-              event.type === 'OFFER' && 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20',
-              event.type === 'FOLLOW_UP' && 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20',
+              'border text-xs px-2 py-1 rounded-full',
+              event.type === 'INTERVIEW' && 'bg-info-bg text-info-text border-info/20',
+              event.type === 'OFFER' && 'bg-success-bg text-success-text border-success/20',
+              event.type === 'FOLLOW_UP' && 'bg-warning-bg text-warning-text border-warning/20',
               !['INTERVIEW', 'OFFER', 'FOLLOW_UP'].includes(event.type) && STATUS_COLORS[event.status]
             )}
           >

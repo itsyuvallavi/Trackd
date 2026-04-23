@@ -68,15 +68,24 @@ export default async function CalendarPage({
 
   const monthEnd = endOfMonth(monthStart)
 
-  // Fetch all jobs with interview dates OR OFFER status
-  // Include all events, not just current month, for navigation purposes
+  // Fetch jobs relevant to a ±12 month window around the currently-viewed
+  // month so forward/back nav stays instant, but the query is bounded rather
+  // than scanning the user's entire history.
+  const windowStart = new Date(monthStart)
+  windowStart.setMonth(windowStart.getMonth() - 12)
+  const windowEnd = new Date(monthEnd)
+  windowEnd.setMonth(windowEnd.getMonth() + 12)
+
   const jobs = await prisma.job.findMany({
     where: {
       userId: user.id,
       status: { notIn: ['ARCHIVED', 'REJECTED'] },
       OR: [
-        { interviewAt: { not: null } },
-        { status: 'OFFER' }, // Include all OFFER jobs even without interviewAt
+        { interviewAt: { gte: windowStart, lte: windowEnd } },
+        {
+          status: 'OFFER',
+          updatedAt: { gte: windowStart, lte: windowEnd },
+        },
       ],
     },
     select: {
@@ -89,6 +98,7 @@ export default async function CalendarPage({
       updatedAt: true,
     },
     orderBy: { savedAt: 'desc' },
+    take: 500,
   })
 
   const allEvents = buildEvents(jobs)

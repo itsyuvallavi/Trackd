@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Bell, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/tooltip'
 import Link from 'next/link'
 import { NotificationType } from '@prisma/client'
 import { NotificationItem } from '@/components/notifications/notification-item'
+import { NOTIFICATIONS_REFRESH_EVENT } from '@/lib/constants'
 
 interface Notification {
   id: string
@@ -29,19 +30,7 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
   const [unreadCount, setUnreadCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    // Only fetch on mount - no polling to reduce server load
-    fetchNotifications()
-  }, [])
-
-  // Refresh when dropdown is opened
-  useEffect(() => {
-    if (isOpen) {
-      fetchNotifications()
-    }
-  }, [isOpen])
-
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     try {
       const response = await fetch('/api/notifications?limit=20')
       if (response.ok) {
@@ -54,7 +43,27 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    // Only fetch on mount - no polling to reduce server load
+    void fetchNotifications()
+  }, [fetchNotifications])
+
+  // Refresh when dropdown is opened
+  useEffect(() => {
+    if (isOpen) {
+      void fetchNotifications()
+    }
+  }, [isOpen, fetchNotifications])
+
+  useEffect(() => {
+    const onRefresh = () => {
+      void fetchNotifications()
+    }
+    window.addEventListener(NOTIFICATIONS_REFRESH_EVENT, onRefresh)
+    return () => window.removeEventListener(NOTIFICATIONS_REFRESH_EVENT, onRefresh)
+  }, [fetchNotifications])
 
   const markAsRead = async (notificationId: string) => {
     try {
@@ -71,20 +80,33 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
     }
   }
 
-  const dismissNotification = async (notificationId: string, e: React.MouseEvent) => {
+  const dismissNotification = (notificationId: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    try {
-      await fetch(`/api/notifications/${notificationId}`, {
-        method: 'DELETE',
-      })
-      // Remove from local state
-      setNotifications(prev => prev.filter(n => n.id !== notificationId))
-      if (!notifications.find(n => n.id === notificationId)?.isRead) {
-        setUnreadCount(prev => Math.max(0, prev - 1))
-      }
-    } catch (error) {
-      console.error('Error dismissing notification:', error)
+    e.preventDefault()
+    const removed = notifications.find((n) => n.id === notificationId)
+    if (!removed) return
+    // Optimistic: API + revalidateTag can take a long time; don’t block the UI
+    // on the network round-trip.
+    setNotifications((prev) => prev.filter((n) => n.id !== notificationId))
+    if (!removed.isRead) {
+      setUnreadCount((c) => Math.max(0, c - 1))
     }
+    void (async () => {
+      try {
+        const res = await fetch(`/api/notifications/${notificationId}`, {
+          method: 'DELETE',
+        })
+        if (!res.ok) throw new Error('Delete failed')
+      } catch (error) {
+        console.error('Error dismissing notification:', error)
+        setNotifications((prev) =>
+          prev.some((n) => n.id === notificationId) ? prev : [...prev, removed]
+        )
+        if (!removed.isRead) {
+          setUnreadCount((c) => c + 1)
+        }
+      }
+    })()
   }
 
 
