@@ -304,12 +304,18 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                       </TableHead>
                     )}
                     {visibleColumns.has('notes') && (
-                      <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5 text-center" style={{ width: '48px', minWidth: '48px', maxWidth: '48px' }}>
-                        Notes
+                      <TableHead
+                        className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5 px-2 text-center align-middle w-20 min-w-20 max-w-20"
+                        scope="col"
+                      >
+                        <span className="block w-full text-center">Notes</span>
                       </TableHead>
                     )}
-                    <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5 text-center" style={{ width: '64px', minWidth: '64px', maxWidth: '64px' }}>
-                      Actions
+                    <TableHead
+                      className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5 px-2 text-center align-middle w-20 min-w-20 max-w-20"
+                      scope="col"
+                    >
+                      <span className="block w-full text-center">Actions</span>
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -388,20 +394,22 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                         </TableCell>
                       )}
                       {visibleColumns.has('notes') && (
-                        <TableCell className="py-1.5 text-center" style={{ width: '48px', minWidth: '48px', maxWidth: '48px' }}>
+                        <TableCell className="w-20 min-w-20 max-w-20 py-1.5 px-2 text-center align-middle">
                           {job.notes ? (
                             <Tooltip content={job.notes} scrollable>
-                              <div className="flex items-center justify-center">
+                              <div className="flex min-h-6 w-full items-center justify-center">
                                 <CheckCircle2 className="size-4 text-muted-foreground hover:text-foreground transition-colors cursor-help" aria-label="Has notes" />
                               </div>
                             </Tooltip>
                           ) : (
-                            <span className="text-xs text-muted-foreground/50">-</span>
+                            <div className="flex min-h-6 w-full items-center justify-center">
+                              <span className="text-xs text-muted-foreground/50">-</span>
+                            </div>
                           )}
                         </TableCell>
                       )}
-                      <TableCell className="text-center py-1.5" style={{ width: '64px', minWidth: '64px', maxWidth: '64px' }}>
-                        <div className="flex justify-center">
+                      <TableCell className="w-20 min-w-20 max-w-20 py-1.5 px-2 text-center align-middle">
+                        <div className="flex min-h-6 w-full items-center justify-center">
                           <JobActionsMenu
                             jobId={job.id}
                             jobTitle={job.title}

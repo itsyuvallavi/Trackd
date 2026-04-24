@@ -134,82 +134,85 @@
   --aurora-3: oklch(0.94 0.05 200 / 0.25);
 }
 
+/* Dark mode — Supabase dashboard–style (charcoal stack + brand green) */
+/* canvas #1c1c1c • raised #262626 • border #2e2e2e • text #ededed / #8b8b8b • accent #3ecf8e */
 .dark {
   /* ----------- Surfaces ----------- */
-  --background: oklch(0.145 0.01 264);
-  --foreground: oklch(0.97 0.002 260);
-  --card: oklch(0.20 0.012 264);
-  --card-foreground: oklch(0.97 0.002 260);
-  --popover: oklch(0.20 0.012 264);
-  --popover-foreground: oklch(0.97 0.002 260);
+  --background: #1c1c1c;
+  --foreground: #ededed;
+  --card: #262626;
+  --card-foreground: #ededed;
+  --popover: #262626;
+  --popover-foreground: #ededed;
 
-  /* ----------- Accent ----------- */
-  --primary: oklch(0.72 0.18 262);
-  --primary-foreground: oklch(0.14 0.01 264);
-  --primary-hover: oklch(0.78 0.17 262);
-  --primary-light: oklch(0.32 0.14 262);
-  --primary-lightest: oklch(0.22 0.09 262);
+  /* Supabase green: CTAs, key actions, list selection tint base */
+  --primary: #3ecf8e;
+  --primary-foreground: #ffffff;
+  --primary-hover: #5ed4a1;
+  --primary-light: #0f2d1f;
+  --primary-lightest: #0a1f16;
 
   /* ----------- Neutrals ----------- */
-  --muted: oklch(0.24 0.012 264);
-  --muted-foreground: oklch(0.68 0.012 264);
-  --muted-dark: oklch(0.50 0.012 264);
+  --muted: #262626;
+  --muted-foreground: #8b8b8b;
+  --muted-dark: #6f6f6f;
 
-  --secondary: oklch(0.24 0.012 264);
-  --secondary-foreground: oklch(0.97 0.002 260);
+  --secondary: #262626;
+  --secondary-foreground: #ededed;
 
-  --accent: oklch(0.26 0.018 262);
-  --accent-foreground: oklch(0.97 0.002 260);
+  /* Hover / subtle emphasis */
+  --accent: #303030;
+  --accent-foreground: #ededed;
 
-  /* ----------- Borders / inputs ----------- */
-  --border: oklch(1 0 0 / 0.08);
-  --border-medium: oklch(1 0 0 / 0.14);
-  --input: oklch(1 0 0 / 0.08);
-  --ring: oklch(0.72 0.18 262 / 0.55);
+  /* ----------- Borders / inputs (search fields, card edges) ----------- */
+  --border: #2e2e2e;
+  --border-medium: #3a3a3a;
+  --input: #2e2e2e;
+  --ring: rgb(62 207 142 / 0.45);
 
   /* ----------- Status ----------- */
-  --success: oklch(0.72 0.14 155);
-  --success-bg: oklch(0.72 0.14 155 / 0.16);
-  --success-text: oklch(0.85 0.12 155);
+  --success: #3ecf8e;
+  --success-bg: rgb(62 207 142 / 0.14);
+  --success-text: #7ee0b8;
 
-  --warning: oklch(0.80 0.14 70);
-  --warning-bg: oklch(0.80 0.14 70 / 0.16);
-  --warning-text: oklch(0.88 0.12 70);
+  --warning: #d9a32c;
+  --warning-bg: rgb(217 163 44 / 0.15);
+  --warning-text: #e8c86b;
 
-  --error: oklch(0.72 0.18 25);
-  --error-bg: oklch(0.72 0.18 25 / 0.16);
-  --error-text: oklch(0.88 0.15 25);
+  --error: #f44747;
+  --error-bg: rgb(244 71 71 / 0.12);
+  --error-text: #f48771;
 
-  --info: oklch(0.72 0.18 262);
-  --info-bg: oklch(0.72 0.18 262 / 0.16);
-  --info-text: oklch(0.88 0.14 262);
+  --info: #3ab4d4;
+  --info-bg: rgb(58 180 212 / 0.12);
+  --info-text: #7dd3ed;
 
-  --saved: oklch(0.68 0.02 260);
-  --saved-bg: oklch(0.68 0.02 260 / 0.14);
-  --saved-text: oklch(0.88 0.01 260);
+  --saved: #8b949e;
+  --saved-bg: rgb(139 148 158 / 0.12);
+  --saved-text: #c0c4c8;
 
-  --interview: oklch(0.72 0.20 295);
-  --interview-bg: oklch(0.72 0.20 295 / 0.16);
-  --interview-text: oklch(0.88 0.16 295);
+  --interview: #bc86ff;
+  --interview-bg: rgb(188 134 255 / 0.12);
+  --interview-text: #d4b8ff;
 
-  --destructive: oklch(0.72 0.18 25);
+  --destructive: #f44747;
 
   /* ----------- Charts ----------- */
-  --chart-1: oklch(0.72 0.18 262);
-  --chart-2: oklch(0.72 0.14 155);
-  --chart-3: oklch(0.72 0.20 295);
-  --chart-4: oklch(0.80 0.14 70);
-  --chart-5: oklch(0.72 0.18 25);
+  --chart-1: #3ecf8e;
+  --chart-2: #3ab4d4;
+  --chart-3: #bc86ff;
+  --chart-4: #d9a32c;
+  --chart-5: #f44747;
 
-  /* ----------- Sidebar ----------- */
-  --sidebar: oklch(0.18 0.012 264);
-  --sidebar-foreground: oklch(0.97 0.002 260);
-  --sidebar-primary: oklch(0.72 0.18 262);
-  --sidebar-primary-foreground: oklch(0.14 0.01 264);
-  --sidebar-accent: oklch(0.26 0.018 262);
-  --sidebar-accent-foreground: oklch(0.97 0.002 260);
-  --sidebar-border: oklch(1 0 0 / 0.08);
-  --sidebar-ring: oklch(0.72 0.18 262 / 0.55);
+  /* Dashboard rail: same canvas as main (Supabase) */
+  --sidebar: #1c1c1c;
+  --sidebar-foreground: #ededed;
+  --sidebar-primary: #3ecf8e;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #303030;
+  --sidebar-accent-foreground: #ededed;
+  --sidebar-border: #2e2e2e;
+  --sidebar-ring: rgb(62 207 142 / 0.45);
 
   /* ----------- Shadows ----------- */
   --shadow-sm: 0 1px 2px -1px oklch(0 0 0 / 0.50);
@@ -219,24 +222,37 @@
   --shadow-lg:
     0 20px 50px -12px oklch(0 0 0 / 0.65),
     0 6px 14px -6px oklch(0 0 0 / 0.45);
+  /* Primary-tinted shadow (replaces “blue” glow; token name unchanged for compat) */
   --shadow-blue:
-    0 12px 36px -10px oklch(0.72 0.18 262 / 0.50),
-    0 4px 10px -4px oklch(0.72 0.18 262 / 0.35);
+    0 12px 36px -10px rgb(62 207 142 / 0.2),
+    0 4px 10px -4px rgb(62 207 142 / 0.1);
 
-  /* ----------- Glass internals ----------- */
-  --glass-fill: oklch(0.24 0.012 264 / 0.55);
-  --glass-fill-strong: oklch(0.22 0.012 264 / 0.72);
-  --glass-fill-subtle: oklch(0.26 0.014 264 / 0.45);
-  --glass-fill-nav: oklch(0.18 0.012 264 / 0.68);
-  --glass-stroke: oklch(1 0 0 / 0.08);
-  --glass-highlight: oklch(1 0 0 / 0.08);
+  /* Glass: same charcoal band as Supabase top strip */
+  --glass-fill: rgb(28 28 28 / 0.9);
+  --glass-fill-strong: rgb(38 38 38 / 0.92);
+  --glass-fill-subtle: rgb(38 38 38 / 0.55);
+  --glass-fill-nav: rgb(28 28 28 / 0.92);
+  --glass-stroke: rgb(46 46 46 / 0.95);
+  --glass-highlight: rgb(255 255 255 / 0.04);
 
-  /* Aurora (dark) */
-  --aurora-1: oklch(0.55 0.22 262 / 0.30);
-  --aurora-2: oklch(0.55 0.22 295 / 0.25);
-  --aurora-3: oklch(0.60 0.12 200 / 0.20);
+  /* Ambient: brand green (very light, on #1c1c1c) */
+  --aurora-1: rgb(62 207 142 / 0.11);
+  --aurora-2: rgb(58 180 212 / 0.06);
+  --aurora-3: rgb(120 200 255 / 0.04);
 
   color-scheme: dark;
+}
+
+/* Glass outer shadow: in dark mode use black α, not light neutral (avoids milky halos). */
+.dark .glass {
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-highlight),
+    0 10px 40px -12px oklch(0 0 0 / 0.5);
+}
+.dark .glass-subtle {
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-highlight),
+    0 4px 16px -8px oklch(0 0 0 / 0.4);
 }
 
 /* ============================================================
@@ -447,8 +463,8 @@ body {
   50% { opacity: 1; transform: scale(1.04); }
 }
 @keyframes trackd-glow-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 oklch(0.62 0.20 262 / 0.35); }
-  50% { box-shadow: 0 0 0 10px oklch(0.62 0.20 262 / 0); }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 35%, transparent); }
+  50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--primary) 0%, transparent); }
 }
 @keyframes trackd-aurora-drift {
   0% { transform: translate3d(-6%, -4%, 0) rotate(0deg); }
@@ -598,4 +614,12 @@ body {
     transparent 100%
   );
   animation: trackd-shimmer 1.8s var(--ease-ios) infinite;
+}
+.dark .shimmer::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(255 255 255 / 0.04) 50%,
+    transparent 100%
+  );
 }

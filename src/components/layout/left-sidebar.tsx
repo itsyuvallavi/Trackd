@@ -2,8 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useMemo } from 'react'
-import { Briefcase, FileText, Bot } from 'lucide-react'
+import { Briefcase, FileText, Bot, Mail } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BotQueueBadge } from '@/components/bot/bot-queue-badge'
 
@@ -17,27 +16,13 @@ interface NavItem {
 const navItems: NavItem[] = [
   { name: 'Applications', href: '/jobs', icon: Briefcase },
   { name: 'Job Search', href: '/bot', icon: Bot },
+  { name: 'Email sync', href: '/settings/integrations', icon: Mail },
   { name: 'Resume Advisor', href: '/resume-advisor', icon: FileText },
 ]
-
-const ITEM_HEIGHT = 44 // row height in px (matches py-2.5 + icon size)
-const ITEM_GAP = 4 // gap between rows in px
 
 export function LeftSidebar() {
   const pathname = usePathname()
   const router = useRouter()
-
-  const activeIndex = useMemo(() => {
-    return navItems.findIndex((item) => {
-      if (item.disabled) return false
-      return pathname === item.href || pathname?.startsWith(item.href + '/')
-    })
-  }, [pathname])
-
-  const indicatorTop =
-    activeIndex >= 0
-      ? activeIndex * (ITEM_HEIGHT + ITEM_GAP) + ITEM_HEIGHT / 2 - 10
-      : -100
 
   return (
     <aside
@@ -54,43 +39,37 @@ export function LeftSidebar() {
       )}
       aria-label="Primary"
     >
-      <nav className="relative flex min-w-0 w-full max-w-full flex-col gap-1 px-2 pt-6">
-        {/* Sliding active-indicator dot (offset matches nav pt-6) */}
-        <span
-          aria-hidden
-          className={cn(
-            'absolute left-0 w-[3px] h-5 rounded-r-full bg-primary',
-            'transition-[top,opacity] duration-300 ease-[var(--ease-ios)]',
-            activeIndex < 0 ? 'opacity-0' : 'opacity-100'
-          )}
-          style={{ top: `calc(1.5rem + ${indicatorTop}px)` }}
-        />
-
+      <nav className="flex min-w-0 w-full max-w-full flex-col gap-1 pt-6 pr-0">
         {navItems.map((item) => {
           const Icon = item.icon
           const isActive =
             pathname === item.href || pathname?.startsWith(item.href + '/')
           const isDisabled = item.disabled
 
+          const labelClass = cn(
+            'ms-0 min-w-0 overflow-hidden whitespace-nowrap text-sm font-medium',
+            'max-w-0 opacity-0',
+            'transition-[max-width,opacity] duration-300 ease-[var(--ease-ios)]',
+            'group-hover:max-w-[10rem] group-hover:opacity-100'
+          )
+
           if (isDisabled) {
             return (
               <div
                 key={item.href}
                 className={cn(
-                  'relative flex min-w-0 items-center gap-3 px-2.5 py-2.5 rounded-xl',
+                  'relative flex w-full min-w-0 items-center py-2.5 pr-2',
                   'cursor-not-allowed opacity-45'
                 )}
                 title={`${item.name} (Coming soon)`}
               >
-                <Icon className="size-5 text-muted-foreground shrink-0" />
-                <span
-                  className={cn(
-                    'text-sm font-medium text-muted-foreground whitespace-nowrap',
-                    'min-w-0 max-w-0 overflow-hidden opacity-0',
-                    'transition-[max-width,opacity] duration-200 ease-[var(--ease-ios)]',
-                    'group-hover:max-w-[200px] group-hover:opacity-100'
-                  )}
+                <div
+                  className="relative flex min-h-9 w-16 shrink-0 items-center justify-center"
+                  aria-hidden
                 >
+                  <Icon className="size-5 text-muted-foreground" />
+                </div>
+                <span className={cn(labelClass, 'text-muted-foreground')}>
                   {item.name}
                 </span>
               </div>
@@ -103,26 +82,26 @@ export function LeftSidebar() {
               href={item.href}
               onMouseEnter={() => router.prefetch(item.href)}
               className={cn(
-                'relative flex min-w-0 items-center gap-3 px-2.5 py-2.5 rounded-xl',
-                'transition-colors duration-200',
+                'relative flex w-full min-w-0 items-center py-2.5 pr-2',
+                'transition-[background-color,color] duration-200',
                 isActive
                   ? 'bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
               )}
               title={item.name}
             >
-              <Icon className="size-5 shrink-0" />
-              <span
-                className={cn(
-                  'text-sm font-medium whitespace-nowrap',
-                  'min-w-0 max-w-0 overflow-hidden opacity-0',
-                  'transition-[max-width,opacity] duration-200 ease-[var(--ease-ios)]',
-                  'group-hover:max-w-[200px] group-hover:opacity-100'
-                )}
-              >
-                {item.name}
-              </span>
-              {item.href === '/bot' && <BotQueueBadge />}
+              {isActive && (
+                <span
+                  aria-hidden
+                  className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary"
+                />
+              )}
+              {/* Icon rail: same 64px box at all times — no horizontal shift on expand */}
+              <div className="relative flex min-h-9 w-16 shrink-0 items-center justify-center">
+                <Icon className="size-5 shrink-0" />
+                {item.href === '/bot' && <BotQueueBadge />}
+              </div>
+              <span className={labelClass}>{item.name}</span>
             </Link>
           )
         })}
