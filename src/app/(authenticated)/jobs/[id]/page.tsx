@@ -5,8 +5,6 @@ import { AppShell } from '@/components/layout/app-shell'
 import { JobDetailView } from '@/components/jobs/job-detail-view'
 import { serializeForClient } from '@/lib/serialize-for-client'
 
-export const dynamic = 'force-dynamic'
-
 interface JobDetailPageProps {
   params: Promise<{ id: string }>
 }

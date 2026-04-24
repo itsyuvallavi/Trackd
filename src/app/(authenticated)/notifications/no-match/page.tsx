@@ -4,6 +4,8 @@ import { AppShell } from '@/components/layout/app-shell'
 import { NoMatchJobCreator } from '@/components/notifications/no-match-job-creator'
 import { notFound } from 'next/navigation'
 
+const NEW_JOB_FALLBACK_TAKE = 200
+
 export default async function NoMatchPage({
   searchParams,
 }: {
@@ -13,12 +15,8 @@ export default async function NoMatchPage({
   const params = await searchParams
   const { notificationId, emailSubject } = params
 
-  console.log('NoMatchPage - searchParams:', { notificationId, emailSubject, userId: user.id })
-
-  // Fetch the notification
   let notification = null
   if (notificationId) {
-    console.log('Looking up notification by ID:', notificationId)
     notification = await prisma.notification.findFirst({
       where: {
         id: notificationId,
@@ -26,10 +24,7 @@ export default async function NoMatchPage({
         type: 'NEW_JOB_DETECTED',
       },
     })
-    console.log('Notification found by ID:', notification ? 'yes' : 'no')
   } else if (emailSubject) {
-    console.log('Looking up notification by emailSubject:', emailSubject)
-    // Try Prisma JSON path query first
     notification = await prisma.notification.findFirst({
       where: {
         userId: user.id,
@@ -43,10 +38,8 @@ export default async function NoMatchPage({
         createdAt: 'desc',
       },
     })
-    
-    // Fallback: if Prisma query doesn't work, fetch all and filter in memory
+
     if (!notification) {
-      console.log('Prisma JSON query failed, trying in-memory filter')
       const allNotifications = await prisma.notification.findMany({
         where: {
           userId: user.id,
@@ -55,23 +48,17 @@ export default async function NoMatchPage({
         orderBy: {
           createdAt: 'desc',
         },
+        take: NEW_JOB_FALLBACK_TAKE,
       })
-      
-      console.log(`Found ${allNotifications.length} NEW_JOB_DETECTED notifications`)
-      
-      notification = allNotifications.find(n => {
-        const meta = n.metadata as any
-        const decodedSubject = decodeURIComponent(emailSubject)
-        const match = meta?.emailSubject === decodedSubject
-        if (match) {
-          console.log('Found matching notification:', n.id)
-        }
-        return match
-      }) || null
+
+      notification =
+        allNotifications.find((n) => {
+          const meta = n.metadata as { emailSubject?: string } | null
+          const decodedSubject = decodeURIComponent(emailSubject)
+          return meta?.emailSubject === decodedSubject
+        }) || null
     }
   } else {
-    // If neither is provided, try to find the most recent unread unmatched email notification
-    console.log('No notificationId or emailSubject, looking for most recent unread unmatched')
     notification = await prisma.notification.findFirst({
       where: {
         userId: user.id,
@@ -83,17 +70,9 @@ export default async function NoMatchPage({
         createdAt: 'desc',
       },
     })
-    console.log('Most recent unread unmatched found:', notification ? 'yes' : 'no')
   }
 
   if (!notification) {
-    console.error('No-match notification not found', { 
-      notificationId, 
-      emailSubject, 
-      userId: user.id,
-      hasNotificationId: !!notificationId,
-      hasEmailSubject: !!emailSubject
-    })
     notFound()
   }
 

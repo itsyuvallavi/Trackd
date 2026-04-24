@@ -1,9 +1,9 @@
-import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { AppShell } from '@/components/layout/app-shell'
 import dynamic from 'next/dynamic'
-import { JobStatus } from '@prisma/client'
+import { Activity, Job, JobStatus } from '@prisma/client'
 import { serializeForClient } from '@/lib/serialize-for-client'
+import { getUserJobs } from '@/lib/cached-queries'
 
 const KanbanBoard = dynamic(
   () => import('@/components/board/kanban-board').then((mod) => ({ default: mod.KanbanBoard })),
@@ -32,19 +32,19 @@ const COLUMNS: { status: JobStatus; label: string }[] = [
 export default async function BoardPage() {
   const user = await requireAuth()
 
-  const jobs = await prisma.job.findMany({
-    where: { userId: user.id },
-    include: {
-      activities: {
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-      },
-    },
-    orderBy: { updatedAt: 'desc' },
-    take: 1000,
-  })
-
-  const plainJobs = serializeForClient(jobs)
+  // Cached list (tag-invalidated); no per-row activities to avoid huge payloads.
+  // Board cards show "last activity" when present — empty until we add lazy load.
+  const jobs = await getUserJobs(user.id, 200)
+  const withActivities = jobs.map(
+    (j) =>
+      ({
+        ...j,
+        activities: [] as Activity[],
+      }) as Job & { activities: Activity[] }
+  )
+  const plainJobs = serializeForClient(withActivities) as (Job & {
+    activities: Activity[]
+  })[]
 
   const jobsByStatus = COLUMNS.reduce((acc, column) => {
     acc[column.status] = plainJobs.filter((job) => job.status === column.status)

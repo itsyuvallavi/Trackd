@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react'
 import { requireAuth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { getBotResumesList } from '@/lib/cached-queries'
 import { BotResumeManager } from '@/components/bot/bot-resume-manager'
 import { sanitizeJsonClone, serializeForClient } from '@/lib/serialize-for-client'
 
@@ -11,20 +11,7 @@ type BotResumeManagerResumes = ComponentProps<typeof BotResumeManager>['initialR
 export default async function BotResumesPage() {
   const user = await requireAuth()
 
-  const resumes = await prisma.botResume.findMany({
-    where: { userId: user.id },
-    select: {
-      id: true,
-      label: true,
-      matchKeywords: true,
-      isDefault: true,
-      fileName: true,
-      fileUrl: true,
-      structuredData: true,
-      createdAt: true,
-    },
-    orderBy: { createdAt: 'asc' },
-  })
+  const resumes = await getBotResumesList(user.id)
 
   const resumesSafe = resumes.map((r) => ({
     ...r,

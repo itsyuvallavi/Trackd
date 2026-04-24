@@ -17,7 +17,6 @@ async function handleNextQuestion(
     const user = await requireAuth()
     const { id: sessionId } = await params
 
-    // Get session with job context
     const session = await prisma.interviewSession.findFirst({
       where: {
         id: sessionId,
@@ -35,11 +34,6 @@ async function handleNextQuestion(
             interviewAt: true,
           },
         },
-        messages: {
-          orderBy: {
-            timestamp: 'asc',
-          },
-        },
       },
     })
 
@@ -50,9 +44,27 @@ async function handleNextQuestion(
       )
     }
 
-    // Build conversation history
-    const conversationHistory: InterviewMessage[] = session.messages.map(
-      (msg: any) => ({
+    const recentMessageRows = await prisma.interviewMessage.findMany({
+      where: { sessionId },
+      orderBy: { timestamp: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        sessionId: true,
+        role: true,
+        content: true,
+        audioUrl: true,
+        timestamp: true,
+        duration: true,
+        questionType: true,
+        feedback: true,
+      },
+    })
+    const messagesChrono = recentMessageRows.slice().reverse()
+
+    // Build conversation history (most recent 50 messages only)
+    const conversationHistory: InterviewMessage[] = messagesChrono.map(
+      (msg) => ({
         id: msg.id,
         sessionId: msg.sessionId,
         role: msg.role as 'user' | 'assistant' | 'system',

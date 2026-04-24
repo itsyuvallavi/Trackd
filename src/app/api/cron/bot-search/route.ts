@@ -53,7 +53,10 @@ export async function GET(request: Request) {
 
   console.log(`[bot-cron] Running for ${activeConfigs.length} active user(s)`)
 
-  const results: Record<string, { jobsNew: number; jobsApproved: number; error?: string }> = {}
+  const results: Record<
+    string,
+    { jobsNew: number; jobsApproved: number; error?: string }
+  > = {}
 
   for (const config of activeConfigs) {
     const out = await executeBotRunForConfig(config, 'cron')

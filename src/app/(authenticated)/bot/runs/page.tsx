@@ -1,5 +1,5 @@
 import { requireAuth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { getBotRunsList } from '@/lib/cached-queries'
 import { BotRunsPanel } from '@/components/bot/bot-runs-panel'
 import { sanitizeJsonClone, serializeForClient } from '@/lib/serialize-for-client'
 
@@ -8,23 +8,7 @@ export const metadata = { title: 'Job Search runs — Trackd' }
 export default async function BotRunsPage() {
   const user = await requireAuth()
 
-  const recentRuns = await prisma.botRun.findMany({
-    where: { userId: user.id },
-    orderBy: { startedAt: 'desc' },
-    take: 25,
-    select: {
-      id: true,
-      status: true,
-      source: true,
-      jobsFound: true,
-      jobsNew: true,
-      jobsApproved: true,
-      startedAt: true,
-      completedAt: true,
-      duration: true,
-      errors: true,
-    },
-  })
+  const recentRuns = await getBotRunsList(user.id)
 
   const recentRunsSafe = recentRuns.map((r) => ({
     ...r,

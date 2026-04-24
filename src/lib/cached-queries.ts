@@ -1,4 +1,5 @@
 import { unstable_cache } from 'next/cache'
+import { JobStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getPublicJobTableColumnNames } from '@/lib/prisma-job-columns'
 import { cacheTagsFor } from '@/lib/cache-tags'
@@ -41,7 +42,7 @@ export const getUserProfile = (userId: string) =>
       }),
     ['getUserProfile', userId],
     {
-      tags: [`user:${userId}:profile`],
+      tags: [cacheTagsFor(userId).profile],
       revalidate: 5 * ONE_MINUTE,
     },
   )()
@@ -207,3 +208,319 @@ export const getUserJobs = async (userId: string, limit = 100) => {
     },
   )()
 }
+
+/** Group-by status counts (dashboard, today header). */
+export const getUserStatusCounts = (userId: string) =>
+  unstable_cache(
+    async () => {
+      const rows = await prisma.job.groupBy({
+        by: ['status'],
+        where: { userId },
+        _count: true,
+      })
+      const statusCountsMap: Record<JobStatus, number> = {
+        SAVED: 0,
+        APPLIED: 0,
+        INTERVIEW: 0,
+        OFFER: 0,
+        REJECTED: 0,
+        ARCHIVED: 0,
+      }
+      for (const item of rows) {
+        statusCountsMap[item.status as JobStatus] = item._count
+      }
+      return statusCountsMap
+    },
+    ['getUserStatusCounts', userId],
+    {
+      tags: [cacheTagsFor(userId).jobs],
+      revalidate: ONE_MINUTE,
+    },
+  )()
+
+export type TodayTimeOfDay = 'morning' | 'afternoon' | 'evening'
+
+export interface TodayBucketRow {
+  job: {
+    id: string
+    title: string
+    company: string
+    status: JobStatus
+    savedAt: string
+    interviewAt: string | null
+    nextAction: string | null
+    appliedAt: string | null
+  }
+  reason: string
+  timeOfDay: TodayTimeOfDay
+}
+
+/**
+ * Today page model: keyed by calendar day (UTC) so cache rolls over at midnight
+ * and stays aligned with the “what needs attention today” logic.
+ */
+export const getTodayPageData = (userId: string) => {
+  const dateKey = new Date().toISOString().slice(0, 10)
+  return unstable_cache(
+    async () => {
+      const today = new Date()
+      const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+
+      const [statusCounts, activeJobs] = await Promise.all([
+        prisma.job.groupBy({
+          by: ['status'],
+          where: { userId },
+          _count: true,
+        }),
+        prisma.job.findMany({
+          where: {
+            userId,
+            status: { in: ['SAVED', 'APPLIED', 'INTERVIEW'] },
+          },
+          select: {
+            id: true,
+            title: true,
+            company: true,
+            status: true,
+            savedAt: true,
+            interviewAt: true,
+            nextAction: true,
+            appliedAt: true,
+          },
+          orderBy: { savedAt: 'desc' },
+          take: 500,
+        }),
+      ])
+
+      const statusCountsMap: Record<JobStatus, number> = {
+        SAVED: 0,
+        APPLIED: 0,
+        INTERVIEW: 0,
+        OFFER: 0,
+        REJECTED: 0,
+        ARCHIVED: 0,
+      }
+      statusCounts.forEach((item) => {
+        statusCountsMap[item.status as JobStatus] = item._count
+      })
+
+      const bucketForDate = (d: Date): TodayTimeOfDay => {
+        const h = d.getHours()
+        if (h < 12) return 'morning'
+        if (h < 18) return 'afternoon'
+        return 'evening'
+      }
+
+      const items: TodayBucketRow[] = []
+
+      for (const job of activeJobs) {
+        const daysSinceSaved = Math.floor(
+          (today.getTime() - job.savedAt.getTime()) / (1000 * 60 * 60 * 24)
+        )
+
+        if (
+          job.status === 'INTERVIEW' &&
+          job.interviewAt &&
+          new Date(job.interviewAt).toDateString() === today.toDateString()
+        ) {
+          const when = new Date(job.interviewAt)
+          items.push({
+            job: {
+              id: job.id,
+              title: job.title,
+              company: job.company,
+              status: job.status,
+              savedAt: job.savedAt.toISOString(),
+              interviewAt: job.interviewAt ? job.interviewAt.toISOString() : null,
+              nextAction: job.nextAction,
+              appliedAt: job.appliedAt ? job.appliedAt.toISOString() : null,
+            },
+            reason: `Interview at ${when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
+            timeOfDay: bucketForDate(when),
+          })
+          continue
+        }
+
+        if (job.status === 'SAVED' && daysSinceSaved > 7) {
+          items.push({
+            job: {
+              id: job.id,
+              title: job.title,
+              company: job.company,
+              status: job.status,
+              savedAt: job.savedAt.toISOString(),
+              interviewAt: job.interviewAt ? job.interviewAt.toISOString() : null,
+              nextAction: job.nextAction,
+              appliedAt: job.appliedAt ? job.appliedAt.toISOString() : null,
+            },
+            reason: `Saved ${daysSinceSaved} days ago — follow up`,
+            timeOfDay: 'morning',
+          })
+          continue
+        }
+
+        if (job.status === 'SAVED' && daysSinceSaved >= 3 && daysSinceSaved <= 7) {
+          items.push({
+            job: {
+              id: job.id,
+              title: job.title,
+              company: job.company,
+              status: job.status,
+              savedAt: job.savedAt.toISOString(),
+              interviewAt: job.interviewAt ? job.interviewAt.toISOString() : null,
+              nextAction: job.nextAction,
+              appliedAt: job.appliedAt ? job.appliedAt.toISOString() : null,
+            },
+            reason: `Saved ${daysSinceSaved} days ago`,
+            timeOfDay: 'afternoon',
+          })
+          continue
+        }
+
+        if (
+          job.status === 'APPLIED' &&
+          job.appliedAt &&
+          new Date(job.appliedAt) >= sevenDaysAgo
+        ) {
+          items.push({
+            job: {
+              id: job.id,
+              title: job.title,
+              company: job.company,
+              status: job.status,
+              savedAt: job.savedAt.toISOString(),
+              interviewAt: job.interviewAt ? job.interviewAt.toISOString() : null,
+              nextAction: job.nextAction,
+              appliedAt: job.appliedAt ? job.appliedAt.toISOString() : null,
+            },
+            reason: `Applied recently — check inbox`,
+            timeOfDay: 'evening',
+          })
+          continue
+        }
+
+        if (job.nextAction) {
+          items.push({
+            job: {
+              id: job.id,
+              title: job.title,
+              company: job.company,
+              status: job.status,
+              savedAt: job.savedAt.toISOString(),
+              interviewAt: job.interviewAt ? job.interviewAt.toISOString() : null,
+              nextAction: job.nextAction,
+              appliedAt: job.appliedAt ? job.appliedAt.toISOString() : null,
+            },
+            reason: job.nextAction,
+            timeOfDay: 'afternoon',
+          })
+        }
+      }
+
+      const byBucket: Record<TodayTimeOfDay, TodayBucketRow[]> = {
+        morning: [],
+        afternoon: [],
+        evening: [],
+      }
+      for (const item of items) {
+        byBucket[item.timeOfDay].push(item)
+      }
+
+      return {
+        statusCountsMap,
+        byBucket,
+        totalNeedingAttention: items.length,
+      }
+    },
+    ['getTodayPageData', userId, dateKey],
+    {
+      tags: [cacheTagsFor(userId).jobs],
+      revalidate: 60 * 2,
+    },
+  )()
+}
+
+/** Full bot config row — shared by bot layout + /bot/settings. */
+export const getBotConfigByUserId = (userId: string) =>
+  unstable_cache(
+    async () =>
+      prisma.botConfig.findUnique({
+        where: { userId },
+      }),
+    ['getBotConfig', userId],
+    {
+      tags: [cacheTagsFor(userId).bot],
+      revalidate: 5 * ONE_MINUTE,
+    },
+  )()
+
+/** Last run shown in the bot status strip. */
+export const getBotLastRunForStrip = (userId: string) =>
+  unstable_cache(
+    async () =>
+      prisma.botRun.findFirst({
+        where: { userId },
+        orderBy: { startedAt: 'desc' },
+        select: {
+          startedAt: true,
+          jobsNew: true,
+          jobsApproved: true,
+        },
+      }),
+    ['getBotLastRun', userId],
+    {
+      tags: [cacheTagsFor(userId).bot],
+      revalidate: ONE_MINUTE,
+    },
+  )()
+
+export const getBotResumesList = (userId: string) =>
+  unstable_cache(
+    async () =>
+      prisma.botResume.findMany({
+        where: { userId },
+        select: {
+          id: true,
+          label: true,
+          matchKeywords: true,
+          isDefault: true,
+          fileName: true,
+          fileUrl: true,
+          structuredData: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ['getBotResumes', userId],
+    {
+      tags: [cacheTagsFor(userId).bot],
+      revalidate: ONE_MINUTE,
+    },
+  )()
+
+export const getBotRunsList = (userId: string) =>
+  unstable_cache(
+    async () =>
+      prisma.botRun.findMany({
+        where: { userId },
+        orderBy: { startedAt: 'desc' },
+        take: 25,
+        select: {
+          id: true,
+          status: true,
+          source: true,
+          jobsFound: true,
+          jobsNew: true,
+          jobsApproved: true,
+          startedAt: true,
+          completedAt: true,
+          duration: true,
+          errors: true,
+        },
+      }),
+    ['getBotRuns', userId],
+    {
+      tags: [cacheTagsFor(userId).bot],
+      revalidate: ONE_MINUTE,
+    },
+  )()

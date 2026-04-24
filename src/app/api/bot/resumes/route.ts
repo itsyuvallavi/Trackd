@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { cacheTagsFor } from '@/lib/cache-tags'
 import { createClient } from '@supabase/supabase-js'
 import { parseResumePdf } from '@/lib/bot/resume/parser'
 
@@ -144,6 +146,9 @@ export async function POST(req: NextRequest) {
     },
   })
 
+  const botTag = cacheTagsFor(user.id).bot
+  after(() => revalidateTag(botTag, { expire: 0 }))
+
   return NextResponse.json(resume)
 }
 
@@ -170,6 +175,8 @@ export async function DELETE(req: NextRequest) {
     if (del.count === 0) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
+    const botTag = cacheTagsFor(user.id).bot
+    after(() => revalidateTag(botTag, { expire: 0 }))
     return NextResponse.json({ success: true })
   } catch (e) {
     console.error('[api/bot/resumes] DELETE failed:', e)

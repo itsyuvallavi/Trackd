@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation'
 import { cache } from 'react'
+import { unstable_cache, revalidateTag } from 'next/cache'
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
+import { cacheTagsFor } from '@/lib/cache-tags'
 
 /**
  * Get current Supabase auth user on the server.
@@ -25,41 +27,72 @@ export const getCurrentUser = cache(async () => {
 })
 
 /**
+ * Cross-request: skip DB work if we already know a profile row exists.
+ */
+function profileRowExistsCache(userId: string) {
+  return unstable_cache(
+    async () => {
+      const p = await prisma.profile.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      })
+      return p != null
+    },
+    ['profileRowExists', userId],
+    {
+      tags: [cacheTagsFor(userId).profileMeta],
+      revalidate: 3600,
+    },
+  )()
+}
+
+/**
  * Ensure user profile exists in database.
  * Cached to prevent duplicate profile checks within same request.
  */
-const ensureProfileExists = cache(async (userId: string, email: string, metadata: Record<string, unknown>) => {
+const ensureProfileExists = cache(
+  async (userId: string, email: string, metadata: Record<string, unknown>) => {
   try {
+    if (await profileRowExistsCache(userId)) {
+      return
+    }
+
     const existingProfile = await prisma.profile.findUnique({
       where: { id: userId }
     })
 
-    if (!existingProfile) {
-      // Check if there's an orphaned profile with this email (from deleted user)
-      const orphanedProfile = await prisma.profile.findUnique({
-        where: { email: email }
-      })
+    if (existingProfile) {
+      revalidateTag(cacheTagsFor(userId).profileMeta, { expire: 0 })
+      return
+    }
 
-      if (orphanedProfile) {
-        await prisma.profile.delete({
-          where: { id: orphanedProfile.id }
-        })
-      }
+    // Check if there's an orphaned profile with this email (from deleted user)
+    const orphanedProfile = await prisma.profile.findUnique({
+      where: { email: email }
+    })
 
-      // Create new profile
-      await prisma.profile.create({
-        data: {
-          id: userId,
-          email: email,
-          name:
-            (metadata?.full_name as string) ??
-            (metadata?.name as string) ??
-            (metadata?.display_name as string) ??
-            null,
-          avatarUrl: (metadata?.avatar_url as string) ?? null,
-        },
+    if (orphanedProfile) {
+      await prisma.profile.delete({
+        where: { id: orphanedProfile.id }
       })
     }
+
+    // Create new profile
+    await prisma.profile.create({
+      data: {
+        id: userId,
+        email: email,
+        name:
+          (metadata?.full_name as string) ??
+          (metadata?.name as string) ??
+          (metadata?.display_name as string) ??
+          null,
+        avatarUrl: (metadata?.avatar_url as string) ?? null,
+      },
+    })
+
+    revalidateTag(cacheTagsFor(userId).profileMeta, { expire: 0 })
+    revalidateTag(cacheTagsFor(userId).profile, { expire: 0 })
   } catch (error) {
     console.error('Error ensuring profile exists:', error)
     // Continue even if profile creation fails - non-blocking

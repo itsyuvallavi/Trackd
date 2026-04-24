@@ -2,7 +2,8 @@
 
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
+import { cacheTagsFor } from '@/lib/cache-tags'
 
 export async function updateProfile(formData: FormData) {
   const user = await requireAuth()
@@ -24,6 +25,9 @@ export async function updateProfile(formData: FormData) {
     },
   })
 
+  const tags = cacheTagsFor(user.id)
+  revalidateTag(tags.profile, { expire: 0 })
+  revalidateTag(tags.profileMeta, { expire: 0 })
   revalidatePath('/profile')
 }
 

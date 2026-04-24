@@ -131,6 +131,10 @@ export function getResumeAIConfig(): AIConfig {
  * 
  * GPT-4.1 (if available):
  * - Input: $2.00, Output: $8.00
+ * 
+ * GPT-5 mini (e.g. job evaluator):
+ * - Input: $0.25, Output: $2.00
+ *   https://platform.openai.com/docs/models/gpt-5-mini
  */
 export function calculateCost(
   model: string,
@@ -149,6 +153,9 @@ export function calculateCost(
   } else if (model.includes('gpt-4.1')) {
     INPUT_COST_PER_MILLION = 2.00
     OUTPUT_COST_PER_MILLION = 8.00
+  } else if (model.includes('gpt-5-mini')) {
+    INPUT_COST_PER_MILLION = 0.25
+    OUTPUT_COST_PER_MILLION = 2.0
   } else if (model.includes('gpt-5.4-mini')) {
     INPUT_COST_PER_MILLION = 0.75
     OUTPUT_COST_PER_MILLION = 4.5

@@ -1,12 +1,20 @@
 'use client'
 
 import { useState, useEffect, memo } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { Briefcase, FileText, Plus, User, Bot } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { QuickAddBar } from '@/components/jobs/quick-add-bar'
 import { useBotQueueCount } from '@/lib/bot/use-bot-queue-count'
+
+const QuickAddBar = dynamic(
+  () =>
+    import('@/components/jobs/quick-add-bar').then((m) => ({
+      default: m.QuickAddBar,
+    })),
+  { ssr: false, loading: () => null }
+)
 
 const navItems = [
   { href: '/jobs', icon: Briefcase, label: 'Jobs' },
@@ -16,6 +24,7 @@ const navItems = [
 
 export const BottomTabBar = memo(function BottomTabBar() {
   const pathname = usePathname()
+  const router = useRouter()
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const queueCount = useBotQueueCount()
@@ -68,6 +77,7 @@ export const BottomTabBar = memo(function BottomTabBar() {
               <Link
                 key={item.href}
                 href={item.href}
+                onMouseEnter={() => router.prefetch(item.href)}
                 className={cn(
                   'relative flex items-center justify-center gap-1.5 rounded-full transition-all duration-200 ease-[var(--ease-ios)]',
                   'px-3 py-2 min-w-[44px]',
@@ -102,6 +112,7 @@ export const BottomTabBar = memo(function BottomTabBar() {
 
           <Link
             href="/profile"
+            onMouseEnter={() => router.prefetch('/profile')}
             className={cn(
               'flex items-center justify-center w-10 h-10 rounded-full shrink-0',
               'transition-transform duration-200 ease-[var(--ease-ios)]',

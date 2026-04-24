@@ -1,5 +1,5 @@
 import { requireAuth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { getBotConfigByUserId } from '@/lib/cached-queries'
 import { BotSettingsContent } from '@/components/bot/bot-settings-content'
 import { serializeForClient } from '@/lib/serialize-for-client'
 import {
@@ -16,9 +16,7 @@ export const metadata = { title: 'Job Search settings — Trackd' }
 export default async function BotSettingsPage() {
   const user = await requireAuth()
 
-  const botConfig = await prisma.botConfig.findUnique({
-    where: { userId: user.id },
-  })
+  const botConfig = await getBotConfigByUserId(user.id)
 
   const telegramConfigured = !!process.env.TELEGRAM_BOT_TOKEN
   const searchServiceConfigured = botSearchHasQueryableBackend()

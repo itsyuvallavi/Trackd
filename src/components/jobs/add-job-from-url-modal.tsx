@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { scrapeJobUrl, ScrapedJobData } from '@/app/(authenticated)/jobs/scrape-actions'
+import { scrapeJobUrlClient } from '@/lib/jobs/scrape-client'
+import type { ScrapedJobData } from '@/lib/jobs/scrape-job-url'
 import { createJob } from '@/app/(authenticated)/jobs/actions'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -43,7 +44,7 @@ export function AddJobFromUrlModal({ isOpen, onClose }: AddJobFromUrlModalProps)
     setIsScraping(true)
 
     try {
-      const result = await scrapeJobUrl(url)
+      const result = await scrapeJobUrlClient(url)
 
       if (result.success && result.data) {
         setScrapedData(result.data)

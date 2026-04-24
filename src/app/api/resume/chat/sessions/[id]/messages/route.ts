@@ -38,12 +38,21 @@ async function handleGetMessages(
         sessionId,
       },
       orderBy: {
-        timestamp: 'asc',
+        timestamp: 'desc',
+      },
+      take: 200,
+      select: {
+        id: true,
+        sessionId: true,
+        role: true,
+        content: true,
+        timestamp: true,
       },
     })
+    const messagesAsc = messages.slice().reverse()
 
     return NextResponse.json({ 
-      messages,
+      messages: messagesAsc,
       hasImprovedResume: !!session.improvedResumeText,
     })
   } catch (error) {
@@ -113,15 +122,23 @@ async function handlePostMessage(
       },
     })
 
-    // Get conversation history
-    const messages = await prisma.resumeMessage.findMany({
+    const RESUME_CONTEXT_LIMIT = 80
+    const recent = await prisma.resumeMessage.findMany({
       where: {
         sessionId,
       },
       orderBy: {
-        timestamp: 'asc',
+        timestamp: 'desc',
+      },
+      take: RESUME_CONTEXT_LIMIT,
+      select: {
+        id: true,
+        role: true,
+        content: true,
+        timestamp: true,
       },
     })
+    const messages = recent.slice().reverse()
 
     // Generate AI response
     if (!session.resumeFileUrl && !session.openaiFileId) {

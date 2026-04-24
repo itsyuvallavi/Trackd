@@ -60,6 +60,8 @@ export async function saveBotConfig(data: BotConfigFormData) {
     update: cleaned,
   })
 
+  const tags = cacheTagsFor(user.id)
+  revalidateTag(tags.bot, { expire: 0 })
   revalidatePath('/bot/settings')
   revalidatePath('/bot')
   return { success: true }
@@ -88,20 +90,19 @@ export async function triggerBotSearch() {
     }
   }
 
-  // Run in-process so we do not depend on CRON_SECRET, NEXT_PUBLIC_APP_URL, or
-  // server-to-self HTTP (which often returns 401 Unauthorized in production).
+  // Must await in-request: `after()` work is not reliable for long jobs on serverless
+  // (runtime can freeze/end before search + OpenAI completes), so runs would appear to "finish" with no work.
   const out = await executeBotRunForConfig(config, 'manual')
 
-  // Bust per-user `unstable_cache` reads (same as job/notification mutations).
   const tags = cacheTagsFor(user.id)
   revalidateTag(tags.jobs, { expire: 0 })
   revalidateTag(tags.activity, { expire: 0 })
   revalidateTag(tags.notifications, { expire: 0 })
+  revalidateTag(tags.bot, { expire: 0 })
   revalidatePath('/jobs')
   revalidatePath('/dashboard')
   revalidatePath('/today')
   revalidatePath('/board')
-
   revalidatePath('/bot/settings')
   revalidatePath('/bot')
   revalidatePath('/bot/runs')

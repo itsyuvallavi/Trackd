@@ -10,17 +10,18 @@ import { serializeForClient } from '@/lib/serialize-for-client'
 export default async function IntegrationsPage() {
   const user = await requireAuth()
 
-  const integration = await prisma.emailIntegration.findUnique({
-    where: { userId: user.id },
-  })
-
-  const extensionKey = await prisma.extensionKey.findUnique({
-    where: { userId: user.id },
-    select: {
-      keyPrefix: true,
-      lastUsedAt: true,
-    },
-  })
+  const [integration, extensionKey] = await Promise.all([
+    prisma.emailIntegration.findUnique({
+      where: { userId: user.id },
+    }),
+    prisma.extensionKey.findUnique({
+      where: { userId: user.id },
+      select: {
+        keyPrefix: true,
+        lastUsedAt: true,
+      },
+    }),
+  ])
 
   const integrationForClient = integration
     ? serializeForClient(integration)

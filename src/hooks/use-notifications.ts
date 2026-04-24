@@ -1,10 +1,11 @@
 'use client'
 
 import useSWR from 'swr'
+import { NotificationType } from '@prisma/client'
 
-export interface Notification {
+export interface NotificationSWR {
   id: string
-  type: string
+  type: NotificationType
   title: string
   message: string
   metadata: unknown
@@ -13,51 +14,58 @@ export interface Notification {
   createdAt: string
 }
 
-interface NotificationsResponse {
-  notifications: Notification[]
+export interface NotificationsResponse {
+  notifications: NotificationSWR[]
   unreadCount: number
 }
 
 interface UseNotificationsOptions {
-  // Enable automatic polling (disabled by default to reduce server load)
+  /** Must match the list fetch (default 20). */
+  limit?: number
+  /** Enable automatic polling (disabled by default to reduce server load) */
   enablePolling?: boolean
-  // Polling interval in milliseconds (default: 60 seconds)
+  /** Polling interval in milliseconds (default: 60 seconds) */
   pollingInterval?: number
 }
 
 /**
- * SWR hook for fetching and caching notifications
- * Used for the notification bell to show instant counts
- * Polling is disabled by default to reduce database load
+ * SWR hook for fetching and caching notifications (bell + list).
+ * Polling is off by default.
  */
 export function useNotifications(options: UseNotificationsOptions = {}) {
-  const { enablePolling = false, pollingInterval = 60000 } = options
-  
-  const { data, error, isLoading, mutate } = useSWR<NotificationsResponse>(
-    '/api/notifications',
-    {
-      // Only poll if explicitly enabled
+  const {
+    limit = 20,
+    enablePolling = false,
+    pollingInterval = 60_000,
+  } = options
+
+  const key = `/api/notifications?limit=${limit}`
+
+  const { data, error, isLoading, isValidating, mutate } =
+    useSWR<NotificationsResponse>(key, {
       refreshInterval: enablePolling ? pollingInterval : 0,
       revalidateOnMount: true,
-    }
-  )
+    })
 
   return {
     notifications: data?.notifications ?? [],
     unreadCount: data?.unreadCount ?? 0,
     isLoading,
+    isValidating,
     error,
     mutate,
+    key,
   }
 }
 
 /**
- * Hook for just the unread count (lighter weight)
- * Polling is disabled by default to reduce database load
+ * Hook for just the unread count (lighter weight separate endpoint).
  */
-export function useUnreadNotificationCount(options: UseNotificationsOptions = {}) {
-  const { enablePolling = false, pollingInterval = 60000 } = options
-  
+export function useUnreadNotificationCount(
+  options: { enablePolling?: boolean; pollingInterval?: number } = {}
+) {
+  const { enablePolling = false, pollingInterval = 60_000 } = options
+
   const { data, error, isLoading, mutate } = useSWR<{ count: number }>(
     '/api/notifications/count',
     {
@@ -75,34 +83,33 @@ export function useUnreadNotificationCount(options: UseNotificationsOptions = {}
 }
 
 /**
- * Mark notification as read and update cache
+ * Mark notification as read and update SWR cache (optimistic).
  */
 export async function markNotificationAsRead(
   mutate: ReturnType<typeof useNotifications>['mutate'],
   notificationId: string
 ) {
-  // Optimistically update
-  mutate(
-    (currentData) => {
-      if (!currentData) return currentData
+  await mutate(
+    (current) => {
+      if (!current) return current
       return {
-        ...currentData,
-        notifications: currentData.notifications.map((n) =>
+        ...current,
+        notifications: current.notifications.map((n) =>
           n.id === notificationId ? { ...n, isRead: true } : n
         ),
-        unreadCount: Math.max(0, currentData.unreadCount - 1),
+        unreadCount: Math.max(0, current.unreadCount - 1),
       }
     },
     { revalidate: false }
   )
 
   try {
-    await fetch(`/api/notifications/${notificationId}/read`, {
-      method: 'POST',
+    const res = await fetch(`/api/notifications/${notificationId}`, {
+      method: 'PATCH',
     })
-    mutate()
+    if (!res.ok) throw new Error('PATCH failed')
+    await mutate()
   } catch {
-    mutate()
+    await mutate()
   }
 }
-

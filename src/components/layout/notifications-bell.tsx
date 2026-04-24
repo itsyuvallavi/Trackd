@@ -5,20 +5,12 @@ import { Bell, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/tooltip'
 import Link from 'next/link'
-import { NotificationType } from '@prisma/client'
 import { NotificationItem } from '@/components/notifications/notification-item'
 import { NOTIFICATIONS_REFRESH_EVENT } from '@/lib/constants'
-
-interface Notification {
-  id: string
-  type: NotificationType
-  title: string
-  message: string
-  metadata: any
-  isRead: boolean
-  actionUrl: string | null
-  createdAt: string
-}
+import {
+  useNotifications,
+  type NotificationsResponse,
+} from '@/hooks/use-notifications'
 
 interface NotificationsBellProps {
   showEmailNotification?: boolean
@@ -26,31 +18,18 @@ interface NotificationsBellProps {
 
 export function NotificationsBell({ showEmailNotification }: NotificationsBellProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [notifications, setNotifications] = useState<Notification[]>([])
-  const [unreadCount, setUnreadCount] = useState(0)
-  const [isLoading, setIsLoading] = useState(true)
+  const {
+    notifications,
+    unreadCount,
+    isLoading,
+    mutate,
+  } = useNotifications({ limit: 20 })
 
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const response = await fetch('/api/notifications?limit=20')
-      if (response.ok) {
-        const data = await response.json()
-        setNotifications(data.notifications || [])
-        setUnreadCount(data.unreadCount || 0)
-      }
-    } catch (error) {
-      console.error('Error fetching notifications:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
+  const fetchNotifications = useCallback(() => {
+    return mutate()
+  }, [mutate])
 
-  useEffect(() => {
-    // Only fetch on mount - no polling to reduce server load
-    void fetchNotifications()
-  }, [fetchNotifications])
-
-  // Refresh when dropdown is opened
+  // Refresh when dropdown is opened (SWR cache may be stale)
   useEffect(() => {
     if (isOpen) {
       void fetchNotifications()
@@ -70,13 +49,22 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
       await fetch(`/api/notifications/${notificationId}`, {
         method: 'PATCH',
       })
-      // Update local state
-      setNotifications(prev =>
-        prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
+      await mutate(
+        (current) => {
+          if (!current) return current
+          return {
+            ...current,
+            notifications: current.notifications.map((n) =>
+              n.id === notificationId ? { ...n, isRead: true } : n
+            ),
+            unreadCount: Math.max(0, current.unreadCount - 1),
+          }
+        },
+        { revalidate: false }
       )
-      setUnreadCount(prev => Math.max(0, prev - 1))
     } catch (error) {
       console.error('Error marking notification as read:', error)
+      await mutate()
     }
   }
 
@@ -86,32 +74,44 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
     const removed = notifications.find((n) => n.id === notificationId)
     if (!removed) return
     // Optimistic: API + revalidateTag can take a long time; don’t block the UI
-    // on the network round-trip.
-    setNotifications((prev) => prev.filter((n) => n.id !== notificationId))
-    if (!removed.isRead) {
-      setUnreadCount((c) => Math.max(0, c - 1))
+    const prevSnapshot: NotificationsResponse = {
+      notifications: [...notifications],
+      unreadCount,
     }
+    void mutate(
+      (current) => {
+        if (!current) return current
+        return {
+          ...current,
+          notifications: current.notifications.filter(
+            (n) => n.id !== notificationId
+          ),
+          unreadCount: !removed.isRead
+            ? Math.max(0, current.unreadCount - 1)
+            : current.unreadCount,
+        }
+      },
+      { revalidate: false }
+    )
     void (async () => {
       try {
         const res = await fetch(`/api/notifications/${notificationId}`, {
           method: 'DELETE',
         })
         if (!res.ok) throw new Error('Delete failed')
+        await mutate()
       } catch (error) {
         console.error('Error dismissing notification:', error)
-        setNotifications((prev) =>
-          prev.some((n) => n.id === notificationId) ? prev : [...prev, removed]
+        await mutate(
+          () => prevSnapshot,
+          { revalidate: false }
         )
-        if (!removed.isRead) {
-          setUnreadCount((c) => c + 1)
-        }
       }
     })()
   }
 
-
-  const hasNotifications = unreadCount > 0 || notifications.length > 0 || showEmailNotification
-  // Show red dot if there are unread notifications OR if email notification should be shown
+  const hasNotifications =
+    unreadCount > 0 || notifications.length > 0 || showEmailNotification
   const showRedDot = unreadCount > 0 || showEmailNotification
 
   return (
@@ -174,7 +174,7 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
                   notifications.map((notification) => (
                     <NotificationItem
                       key={notification.id}
-                      notification={notification}
+                      notification={notification as never}
                       onMarkAsRead={markAsRead}
                       onDismiss={dismissNotification}
                       onClose={() => setIsOpen(false)}
@@ -189,5 +189,3 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
     </div>
   )
 }
-
-

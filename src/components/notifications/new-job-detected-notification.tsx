@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { NotificationType } from '@prisma/client'
 import { Sparkles } from 'lucide-react'
 import { CheckCircle2, X } from 'lucide-react'
@@ -28,6 +29,8 @@ export function NewJobDetectedNotification({
   onDismiss,
   onClose,
 }: NewJobDetectedNotificationProps) {
+  const router = useRouter()
+
   const handleCreateJob = async () => {
     try {
       const metadata = notification.metadata as any
@@ -39,7 +42,7 @@ export function NewJobDetectedNotification({
       
       if (isUnmatchedEmail) {
         // Always use notificationId for reliability (ignore old actionUrl format)
-        window.location.href = `/notifications/no-match?notificationId=${notification.id}`
+        router.push(`/notifications/no-match?notificationId=${notification.id}`)
         onClose()
         return
       }
@@ -51,17 +54,17 @@ export function NewJobDetectedNotification({
       if (response.ok) {
         const data = await response.json()
         if (data.jobId) {
-          window.location.href = `/jobs/${data.jobId}`
+          router.push(`/jobs/${data.jobId}`)
         } else {
           onMarkAsRead(notification.id)
-          window.location.reload() // Refresh to update notification list
+          router.refresh()
         }
         onClose()
       } else {
         const data = await response.json()
         // If insufficient info error, redirect to no-match page
         if (data.redirectTo) {
-          window.location.href = data.redirectTo
+          router.push(data.redirectTo)
           onClose()
         } else {
           console.error('Error creating job:', data.error)

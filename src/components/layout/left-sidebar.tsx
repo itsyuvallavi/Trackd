@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useMemo } from 'react'
 import { Briefcase, FileText, Bot } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -25,6 +25,7 @@ const ITEM_GAP = 4 // gap between rows in px
 
 export function LeftSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
 
   const activeIndex = useMemo(() => {
     return navItems.findIndex((item) => {
@@ -100,6 +101,7 @@ export function LeftSidebar() {
             <Link
               key={item.href}
               href={item.href}
+              onMouseEnter={() => router.prefetch(item.href)}
               className={cn(
                 'relative flex min-w-0 items-center gap-3 px-2.5 py-2.5 rounded-xl',
                 'transition-colors duration-200',

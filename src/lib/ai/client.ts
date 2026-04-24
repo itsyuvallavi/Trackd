@@ -13,6 +13,22 @@ import { getAIConfig, getResumeAIConfig, calculateCost } from './config'
 import { AIConfig } from './types'
 import { AIResponse } from './types'
 
+/**
+ * GPT-5 family and O-series reject `max_tokens`; they require `max_completion_tokens`.
+ * @see https://platform.openai.com/docs/guides/migrating-to-new-models
+ */
+function tokenLimitCreateParams(
+  model: string,
+  maxTokens: number | undefined
+): { max_tokens: number } | { max_completion_tokens: number } | Record<string, never> {
+  if (maxTokens == null) return {}
+  const m = model.toLowerCase()
+  const useCompletionCap = m.includes('gpt-5') || /^o[0-9]/.test(m)
+  return useCompletionCap
+    ? { max_completion_tokens: maxTokens }
+    : { max_tokens: maxTokens }
+}
+
 export class AIClient {
   private client: OpenAI
   private config: AIConfig
@@ -55,7 +71,7 @@ export class AIClient {
           model: resolvedModel,
           messages,
           ...(supportsCustomTemp ? { temperature: resolvedTemp } : {}),
-          max_tokens: options?.maxTokens,
+          ...tokenLimitCreateParams(resolvedModel, options?.maxTokens),
           response_format: options?.responseFormat === 'text' 
             ? undefined 
             : { type: 'json_object' }, // Default to JSON, allow text for resume generation
@@ -98,6 +114,31 @@ export class AIClient {
     }
 
     throw this.createAIError(lastError || new Error('Unknown error'), false)
+  }
+
+  /**
+   * Streaming chat completion (collect full text; use for TTFB-sensitive routes
+   * that can pipe `ReadableStream` to the client later).
+   */
+  async *chatCompletionStream(
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+    options?: {
+      model?: string
+      maxTokens?: number
+    }
+  ): AsyncGenerator<string, void, undefined> {
+    const resolvedModel = options?.model ?? this.config.model
+    const stream = await this.client.chat.completions.create({
+      model: resolvedModel,
+      messages,
+      stream: true,
+      ...tokenLimitCreateParams(resolvedModel, options?.maxTokens),
+    })
+
+    for await (const chunk of stream) {
+      const t = chunk.choices[0]?.delta?.content
+      if (t) yield t
+    }
   }
 
   /**

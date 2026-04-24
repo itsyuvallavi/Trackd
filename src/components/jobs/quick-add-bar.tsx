@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
+import { LazyMotion, domAnimation, m, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import { createJob } from '@/app/(authenticated)/jobs/actions'
 import { Input } from '@/components/ui/input'
@@ -63,11 +63,12 @@ export function QuickAddBar({ isOpen, onClose }: QuickAddBarProps) {
   }
 
   return (
+    <LazyMotion features={domAnimation} strict>
     <AnimatePresence>
       {isOpen && (
         <>
           {/* Backdrop */}
-          <motion.div
+          <m.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -77,7 +78,7 @@ export function QuickAddBar({ isOpen, onClose }: QuickAddBarProps) {
           />
 
           {/* Quick Add Bar */}
-          <motion.div
+          <m.div
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
@@ -143,10 +144,11 @@ export function QuickAddBar({ isOpen, onClose }: QuickAddBarProps) {
                 </div>
               </form>
             </div>
-          </motion.div>
+          </m.div>
         </>
       )}
     </AnimatePresence>
+    </LazyMotion>
   )
 }
 

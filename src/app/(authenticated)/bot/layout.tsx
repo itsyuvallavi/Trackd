@@ -1,6 +1,6 @@
 import { requireAuth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
 import { AppShell } from '@/components/layout/app-shell'
+import { getBotConfigByUserId, getBotLastRunForStrip } from '@/lib/cached-queries'
 import { BotStatusStrip } from '@/components/bot/bot-status-strip'
 import { BotTabs } from '@/components/bot/bot-tabs'
 import { botSearchHasQueryableBackend } from '@/lib/bot/bot-search-sources'
@@ -15,6 +15,12 @@ const FREQUENCY_LABELS: Record<BotSearchFrequency, string> = {
   WEEKLY: 'Weekly (Mondays 8AM UTC)',
 }
 
+/** `unstable_cache` round-trips through JSON; `Date` becomes an ISO string. */
+function toIsoString(value: Date | string): string {
+  if (typeof value === 'string') return value
+  return value.toISOString()
+}
+
 export default async function BotLayout({
   children,
 }: {
@@ -23,19 +29,8 @@ export default async function BotLayout({
   const user = await requireAuth()
 
   const [botConfig, lastRun] = await Promise.all([
-    prisma.botConfig.findUnique({
-      where: { userId: user.id },
-      select: { isActive: true, searchFrequency: true, keywords: true },
-    }),
-    prisma.botRun.findFirst({
-      where: { userId: user.id },
-      orderBy: { startedAt: 'desc' },
-      select: {
-        startedAt: true,
-        jobsNew: true,
-        jobsApproved: true,
-      },
-    }),
+    getBotConfigByUserId(user.id),
+    getBotLastRunForStrip(user.id),
   ])
 
   const searchServiceConfigured = botSearchHasQueryableBackend()
@@ -68,7 +63,7 @@ export default async function BotLayout({
                 lastRun={
                   lastRun
                     ? {
-                        startedAt: lastRun.startedAt.toISOString(),
+                        startedAt: toIsoString(lastRun.startedAt),
                         jobsNew: lastRun.jobsNew,
                         jobsApproved: lastRun.jobsApproved,
                       }

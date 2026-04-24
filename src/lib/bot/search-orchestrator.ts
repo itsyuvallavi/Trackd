@@ -269,14 +269,6 @@ export async function runBotSearch(
     const jobsWithUrls = searchResponse.jobs.filter((j) => j.url?.trim())
     const urls = jobsWithUrls.map((j) => j.url!.trim().replace(/\/$/, ''))
 
-    const existingJobs = await prisma.job.findMany({
-      where: { userId, url: { in: urls } },
-      select: { url: true, status: true },
-    })
-    const existingUrls = new Set(
-      existingJobs.map((j) => j.url?.trim().replace(/\/$/, '') ?? '').filter(Boolean)
-    )
-
     const verboseDedup =
       process.env.TRACKD_BOT_SEARCH_VERBOSE === '1' ||
       process.env.TRACKD_BOT_SEARCH_VERBOSE === 'true'
@@ -292,28 +284,37 @@ export async function runBotSearch(
       ),
     )
 
-    const existingJobsForDedup = batchCompanies.length
-      ? await prisma.job.findMany({
-          where: {
-            userId,
-            OR: batchCompanies.map((company) => ({
-              company: { equals: company, mode: 'insensitive' as const },
-            })),
-          },
-          select: { company: true, title: true },
-        })
-      : []
+    const [existingJobs, existingJobsForDedup, dismissedRows] = await Promise.all([
+      prisma.job.findMany({
+        where: { userId, url: { in: urls } },
+        select: { url: true, status: true },
+      }),
+      batchCompanies.length
+        ? prisma.job.findMany({
+            where: {
+              userId,
+              OR: batchCompanies.map((company) => ({
+                company: { equals: company, mode: 'insensitive' as const },
+              })),
+            },
+            select: { company: true, title: true },
+          })
+        : Promise.resolve(
+            [] as { company: string; title: string }[],
+          ),
+      prisma.dismissedJobImport.findMany({
+        where: { userId },
+        select: { fingerprint: true },
+      }),
+    ])
 
-    const existingTitleKeys = new Set(
-      existingJobsForDedup.map(
-        (j) => `${j.company.toLowerCase().trim()}::${j.title.toLowerCase().trim()}`,
-      ),
+    const existingUrls = new Set(
+      existingJobs.map((j) => j.url?.trim().replace(/\/$/, '') ?? '').filter(Boolean)
     )
 
-    const dismissedRows = await prisma.dismissedJobImport.findMany({
-      where: { userId },
-      select: { fingerprint: true },
-    })
+    const existingTitleKeys = new Set(
+      existingJobsForDedup.map((j) => companyTitleKey({ company: j.company, title: j.title })),
+    )
     const dismissedFp = new Set(dismissedRows.map((r) => r.fingerprint))
 
     const seenInBatch = new Set<string>()

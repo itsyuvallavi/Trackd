@@ -114,6 +114,8 @@ model Job {
   @@index([userId, savedAt])
   @@index([userId, interviewAt])
   @@index([userId, appliedAt])
+  @@index([userId, status, updatedAt])
+  @@index([tags], type: Gin)
 }
 
 /** Fingerprints of jobs the user deleted — bot search skips re-importing the same URL or company+title. */

@@ -347,7 +347,7 @@ export async function evaluateJob(job: SearchJobResult, config: BotConfig): Prom
       { role: 'system', content: EVALUATOR_SYSTEM_PROMPT },
       { role: 'user', content: prompt },
     ],
-    { model: EVALUATOR_MODEL, responseFormat: 'json_object' }
+    { model: EVALUATOR_MODEL, responseFormat: 'json_object', maxTokens: 1500 }
   )
 
   const raw = response.data.choices[0]?.message?.content ?? '{}'

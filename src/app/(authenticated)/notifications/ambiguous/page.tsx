@@ -5,6 +5,8 @@ import { AmbiguousMatchResolver } from '@/components/notifications/ambiguous-mat
 import { notFound } from 'next/navigation'
 import { serializeForClient } from '@/lib/serialize-for-client'
 
+const AMBIGUOUS_FALLBACK_TAKE = 200
+
 export default async function AmbiguousMatchPage({
   searchParams,
 }: {
@@ -14,12 +16,8 @@ export default async function AmbiguousMatchPage({
   const params = await searchParams
   const { emailSubject, notificationId } = params
 
-  console.log('AmbiguousMatchPage - searchParams:', { notificationId, emailSubject, userId: user.id })
-
-  // If notificationId is provided, fetch the notification
   let notification = null
   if (notificationId) {
-    console.log('Looking up notification by ID:', notificationId)
     notification = await prisma.notification.findFirst({
       where: {
         id: notificationId,
@@ -27,11 +25,7 @@ export default async function AmbiguousMatchPage({
         type: 'AMBIGUOUS_MATCH',
       },
     })
-    console.log('Notification found by ID:', notification ? 'yes' : 'no')
   } else if (emailSubject) {
-    console.log('Looking up notification by emailSubject:', emailSubject)
-    // Otherwise, find the most recent ambiguous match notification with this subject
-    // Try Prisma JSON path query first
     notification = await prisma.notification.findFirst({
       where: {
         userId: user.id,
@@ -45,12 +39,8 @@ export default async function AmbiguousMatchPage({
         createdAt: 'desc',
       },
     })
-    
-    // Fallback: if Prisma query doesn't work, fetch the most recent batch and
-    // filter in memory. Bounded so the worst-case path can't load an entire
-    // user's notification history.
+
     if (!notification) {
-      console.log('Prisma JSON query failed, trying in-memory filter')
       const allNotifications = await prisma.notification.findMany({
         where: {
           userId: user.id,
@@ -59,24 +49,17 @@ export default async function AmbiguousMatchPage({
         orderBy: {
           createdAt: 'desc',
         },
-        take: 200,
+        take: AMBIGUOUS_FALLBACK_TAKE,
       })
-      
-      console.log(`Found ${allNotifications.length} ambiguous match notifications`)
-      
-      notification = allNotifications.find(n => {
-        const meta = n.metadata as any
-        const decodedSubject = decodeURIComponent(emailSubject)
-        const match = meta?.emailSubject === decodedSubject
-        if (match) {
-          console.log('Found matching notification:', n.id)
-        }
-        return match
-      }) || null
+
+      notification =
+        allNotifications.find((n) => {
+          const meta = n.metadata as { emailSubject?: string } | null
+          const decodedSubject = decodeURIComponent(emailSubject)
+          return meta?.emailSubject === decodedSubject
+        }) || null
     }
   } else {
-    // If neither is provided, try to find the most recent unread ambiguous match
-    console.log('No notificationId or emailSubject, looking for most recent unread')
     notification = await prisma.notification.findFirst({
       where: {
         userId: user.id,
@@ -87,17 +70,9 @@ export default async function AmbiguousMatchPage({
         createdAt: 'desc',
       },
     })
-    console.log('Most recent unread found:', notification ? 'yes' : 'no')
   }
 
   if (!notification) {
-    console.error('Ambiguous match notification not found', { 
-      notificationId, 
-      emailSubject, 
-      userId: user.id,
-      hasNotificationId: !!notificationId,
-      hasEmailSubject: !!emailSubject
-    })
     notFound()
   }
 
@@ -111,8 +86,7 @@ export default async function AmbiguousMatchPage({
     emailTextBody?: string
   }
 
-  // Fetch full job details for the matched jobs
-  const jobIds = metadata.matchedJobs.map(job => job.id)
+  const jobIds = metadata.matchedJobs.map((job) => job.id)
   const jobs = await prisma.job.findMany({
     where: {
       id: { in: jobIds },
@@ -133,9 +107,8 @@ export default async function AmbiguousMatchPage({
     },
   })
 
-  // Ensure jobs are in the same order as matchedJobs
   const orderedJobs = metadata.matchedJobs
-    .map(matched => jobs.find(job => job.id === matched.id))
+    .map((matched) => jobs.find((job) => job.id === matched.id))
     .filter(Boolean) as typeof jobs
 
   return (

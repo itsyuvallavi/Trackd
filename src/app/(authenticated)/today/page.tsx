@@ -1,43 +1,18 @@
-import { prisma } from '@/lib/prisma'
-import { requireAuth } from '@/lib/auth'
 import { STATUS_LABELS, STATUS_DOT_COLOR } from '@/lib/constants'
 import { AppShell } from '@/components/layout/app-shell'
 import { StatusStats } from '@/components/dashboard/status-stats'
-import { GlassCard, GlassPanel, GlassPill, Aurora } from '@/components/ui/glass'
+import { GlassPanel, GlassPill, Aurora } from '@/components/ui/glass'
 import { JobStatus } from '@prisma/client'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Sunrise, Sun, Moon, Sparkles } from 'lucide-react'
+import { requireAuth } from '@/lib/auth'
+import { getTodayPageData } from '@/lib/cached-queries'
 
 export const revalidate = 30
 
 type TimeOfDay = 'morning' | 'afternoon' | 'evening'
-
-interface TodayJob {
-  id: string
-  title: string
-  company: string
-  status: JobStatus
-  savedAt: Date
-  interviewAt: Date | null
-  nextAction: string | null
-  appliedAt: Date | null
-}
-
-interface GroupedJob {
-  job: TodayJob
-  /** short, human-friendly reason this appears today */
-  reason: string
-  timeOfDay: TimeOfDay
-}
-
-function bucketForDate(date: Date): TimeOfDay {
-  const h = date.getHours()
-  if (h < 12) return 'morning'
-  if (h < 18) return 'afternoon'
-  return 'evening'
-}
 
 const BUCKETS: { id: TimeOfDay; label: string; icon: typeof Sunrise }[] = [
   { id: 'morning', label: 'Morning', icon: Sunrise },
@@ -47,129 +22,8 @@ const BUCKETS: { id: TimeOfDay; label: string; icon: typeof Sunrise }[] = [
 
 export default async function TodayPage() {
   const user = await requireAuth()
-  const today = new Date()
-  const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
-
-  const [statusCounts, activeJobs] = await Promise.all([
-    prisma.job.groupBy({
-      by: ['status'],
-      where: { userId: user.id },
-      _count: true,
-    }),
-    prisma.job.findMany({
-      where: {
-        userId: user.id,
-        status: { in: ['SAVED', 'APPLIED', 'INTERVIEW'] },
-      },
-      select: {
-        id: true,
-        title: true,
-        company: true,
-        status: true,
-        savedAt: true,
-        interviewAt: true,
-        nextAction: true,
-        appliedAt: true,
-      },
-      orderBy: { savedAt: 'desc' },
-      take: 500,
-    }),
-  ])
-
-  const statusCountsMap: Record<JobStatus, number> = {
-    SAVED: 0,
-    APPLIED: 0,
-    INTERVIEW: 0,
-    OFFER: 0,
-    REJECTED: 0,
-    ARCHIVED: 0,
-  }
-  statusCounts.forEach((item) => {
-    statusCountsMap[item.status as JobStatus] = item._count
-  })
-
-  // Build a single flat list of items that need attention today, each with
-  // a human-readable reason and a time-of-day bucket. We prefer the
-  // actual scheduled time (interviewAt) and fall back to a reasonable
-  // default when none exists.
-  const items: GroupedJob[] = []
-
-  for (const job of activeJobs) {
-    const daysSinceSaved = Math.floor(
-      (today.getTime() - job.savedAt.getTime()) / (1000 * 60 * 60 * 24)
-    )
-
-    // Interview scheduled for today
-    if (
-      job.status === 'INTERVIEW' &&
-      job.interviewAt &&
-      new Date(job.interviewAt).toDateString() === today.toDateString()
-    ) {
-      const when = new Date(job.interviewAt)
-      items.push({
-        job,
-        reason: `Interview at ${when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
-        timeOfDay: bucketForDate(when),
-      })
-      continue
-    }
-
-    // Overdue follow-up on a saved job
-    if (job.status === 'SAVED' && daysSinceSaved > 7) {
-      items.push({
-        job,
-        reason: `Saved ${daysSinceSaved} days ago — follow up`,
-        timeOfDay: 'morning',
-      })
-      continue
-    }
-
-    // Due soon on a saved job
-    if (
-      job.status === 'SAVED' &&
-      daysSinceSaved >= 3 &&
-      daysSinceSaved <= 7
-    ) {
-      items.push({
-        job,
-        reason: `Saved ${daysSinceSaved} days ago`,
-        timeOfDay: 'afternoon',
-      })
-      continue
-    }
-
-    // Recently applied and worth a check-in
-    if (
-      job.status === 'APPLIED' &&
-      job.appliedAt &&
-      new Date(job.appliedAt) >= sevenDaysAgo
-    ) {
-      items.push({
-        job,
-        reason: `Applied recently — check inbox`,
-        timeOfDay: 'evening',
-      })
-      continue
-    }
-
-    // Has an explicit next action
-    if (job.nextAction) {
-      items.push({
-        job,
-        reason: job.nextAction,
-        timeOfDay: 'afternoon',
-      })
-    }
-  }
-
-  const byBucket: Record<TimeOfDay, GroupedJob[]> = {
-    morning: [],
-    afternoon: [],
-    evening: [],
-  }
-  for (const item of items) byBucket[item.timeOfDay].push(item)
-
-  const totalNeedingAttention = items.length
+  const { statusCountsMap, byBucket, totalNeedingAttention } =
+    await getTodayPageData(user.id)
 
   return (
     <AppShell>
@@ -260,10 +114,10 @@ export default async function TodayPage() {
                                   aria-hidden
                                   className={cn(
                                     'inline-block size-1.5 rounded-full',
-                                    STATUS_DOT_COLOR[job.status]
+                                    STATUS_DOT_COLOR[job.status as JobStatus]
                                   )}
                                 />
-                                {STATUS_LABELS[job.status]}
+                                {STATUS_LABELS[job.status as JobStatus]}
                               </GlassPill>
                             </Link>
                           </li>

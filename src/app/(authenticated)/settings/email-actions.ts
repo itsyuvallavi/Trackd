@@ -455,12 +455,8 @@ export async function syncEmails() {
     revalidateTag(tags.activity, { expire: 0 })
     revalidateTag(tags.notifications, { expire: 0 })
     revalidateTag(tags.email, { expire: 0 })
-    revalidatePath('/jobs')
-    revalidatePath('/today')
-    revalidatePath('/board')
     revalidatePath('/settings/integrations')
-    revalidatePath('/dashboard')
-    console.log('✓ Paths revalidated')
+    console.log('✓ Tag + integrations path revalidated')
 
     const stats = {
       totalEmails: emails.length,

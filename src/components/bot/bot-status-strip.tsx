@@ -70,13 +70,17 @@ export function BotStatusStrip({
         window.dispatchEvent(new CustomEvent(BOT_RUN_COMPLETE_EVENT))
         window.dispatchEvent(new CustomEvent(NOTIFICATIONS_REFRESH_EVENT))
         await router.refresh()
+        setToast({
+          kind: 'done',
+          ok: true,
+          msg: 'Search finished — your lists are updating.',
+        })
+        return
       }
       setToast({
         kind: 'done',
-        ok: res.success,
-        msg: res.success
-          ? 'Search finished — your lists are updating.'
-          : res.error ?? 'Search failed.',
+        ok: false,
+        msg: 'error' in res && res.error ? res.error : 'Search failed.',
       })
     })
   }

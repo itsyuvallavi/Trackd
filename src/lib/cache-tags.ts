@@ -11,6 +11,12 @@ export const cacheTagsFor = (userId: string) => ({
   activity: `user:${userId}:activity`,
   notifications: `user:${userId}:notifications`,
   email: `user:${userId}:email`,
+  /** Bot config + bot-list reads (queue, settings, runs list). */
+  bot: `user:${userId}:bot`,
+  /** `ensureProfileExists` fast path — invalidated on profile changes. */
+  profileMeta: `user:${userId}:profile-meta`,
+  /** `getUserProfile` cache (full row). */
+  profile: `user:${userId}:profile`,
 }) as const
 
 export type UserCacheTags = ReturnType<typeof cacheTagsFor>

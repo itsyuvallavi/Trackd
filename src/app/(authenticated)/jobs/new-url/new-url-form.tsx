@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { scrapeJobUrl, ScrapedJobData } from '../scrape-actions'
+import { scrapeJobUrlClient } from '@/lib/jobs/scrape-client'
+import type { ScrapedJobData } from '@/lib/jobs/scrape-job-url'
 import { createJob } from '../actions'
 import { Button } from '@/components/ui/button'
 import { GlassPanel, GlassPill, Aurora } from '@/components/ui/glass'
@@ -51,7 +52,7 @@ export function NewUrlForm() {
     setIsScraping(true)
 
     try {
-      const result = await scrapeJobUrl(url)
+      const result = await scrapeJobUrlClient(url)
 
       if (result.success && result.data) {
         setScrapedData(result.data)

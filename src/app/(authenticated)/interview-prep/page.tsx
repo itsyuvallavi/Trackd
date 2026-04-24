@@ -9,50 +9,49 @@ export const revalidate = 60
 export default async function InterviewPrepPage() {
   const user = await requireAuth()
 
-  // Fetch user's jobs for job selector
-  const jobs = await prisma.job.findMany({
-    where: {
-      userId: user.id,
-      status: {
-        in: ['SAVED', 'APPLIED', 'INTERVIEW'],
-      },
-    },
-    select: {
-      id: true,
-      title: true,
-      company: true,
-      status: true,
-    },
-    orderBy: {
-      savedAt: 'desc',
-    },
-    take: 50,
-  })
-
-  // Fetch recent interview sessions
-  const sessions = await prisma.interviewSession.findMany({
-    where: {
-      userId: user.id,
-    },
-    include: {
-      job: {
-        select: {
-          id: true,
-          title: true,
-          company: true,
+  const [jobs, sessions] = await Promise.all([
+    prisma.job.findMany({
+      where: {
+        userId: user.id,
+        status: {
+          in: ['SAVED', 'APPLIED', 'INTERVIEW'],
         },
       },
-      _count: {
-        select: {
-          messages: true,
+      select: {
+        id: true,
+        title: true,
+        company: true,
+        status: true,
+      },
+      orderBy: {
+        savedAt: 'desc',
+      },
+      take: 50,
+    }),
+    prisma.interviewSession.findMany({
+      where: {
+        userId: user.id,
+      },
+      include: {
+        job: {
+          select: {
+            id: true,
+            title: true,
+            company: true,
+          },
+        },
+        _count: {
+          select: {
+            messages: true,
+          },
         },
       },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-    take: 20,
-  })
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 20,
+    }),
+  ])
 
   return (
     <AppShell>
