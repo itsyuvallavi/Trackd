@@ -6,16 +6,25 @@ import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/tooltip'
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark')
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
-    // Check localStorage for saved theme preference
-    const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null
-    const initialTheme = savedTheme || 'light'
+    const savedTheme = localStorage.getItem('theme')
+    let initialTheme: 'light' | 'dark'
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      initialTheme = savedTheme
+    } else if (savedTheme === 'system') {
+      initialTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light'
+    } else {
+      initialTheme = 'dark'
+    }
     setTheme(initialTheme)
-    applyTheme(initialTheme)
+    // Do not call applyTheme here — the layout script already set the class, and
+    // writing localStorage would clear a stored `system` preference.
   }, [])
 
   const applyTheme = (newTheme: 'light' | 'dark') => {

@@ -33,18 +33,31 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${publicSans.variable} ${geistMono.variable}`}
+      className={`${publicSans.variable} ${geistMono.variable} dark`}
     >
       <head>
         <script
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                const theme = localStorage.getItem('theme') || 'light';
-                if (theme === 'dark') {
+                try {
+                  var t = localStorage.getItem('theme');
+                  var root = document.documentElement;
+                  if (t === 'light') {
+                    root.classList.remove('dark');
+                  } else if (t === 'dark') {
+                    root.classList.add('dark');
+                  } else if (t === 'system') {
+                    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                      root.classList.add('dark');
+                    } else {
+                      root.classList.remove('dark');
+                    }
+                  } else {
+                    root.classList.add('dark');
+                  }
+                } catch (e) {
                   document.documentElement.classList.add('dark');
-                } else {
-                  document.documentElement.classList.remove('dark');
                 }
               })();
             `,

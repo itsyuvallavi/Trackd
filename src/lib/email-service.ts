@@ -1,5 +1,6 @@
 import Imap from 'imap'
 import { simpleParser, ParsedMail } from 'mailparser'
+import { alignEmailSyncLowerBound } from '@/lib/email-sync-window'
 
 export interface EmailMessage {
   id: string
@@ -153,12 +154,14 @@ export class EmailService {
                   }
 
                   const emailMessage = this.parsedMailToEmailMessage(parsed)
-                  // Filter by exact timestamp since IMAP SINCE only supports date, not time
-                  // Only include emails that are actually after the syncSince timestamp
-                  if (emailMessage.date >= since) {
+                  // IMAP SINCE is date-granular; compare against day-aligned lower bound
+                  const lower = alignEmailSyncLowerBound(since)
+                  if (emailMessage.date >= lower) {
                     messages.push(emailMessage)
                   } else {
-                    console.log(`Filtered out email "${emailMessage.subject}" - date ${emailMessage.date.toISOString()} is before syncSince ${since.toISOString()}`)
+                    console.log(
+                      `Filtered out email "${emailMessage.subject}" - date ${emailMessage.date.toISOString()} is before window start ${lower.toISOString()}`,
+                    )
                   }
                   pendingMessages--
 

@@ -3,16 +3,22 @@
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { createEmailService } from '@/lib/email-service'
+import {
+  fetchEmailsSinceForIntegration,
+  verifyGmailConnection,
+  verifyMicrosoftConnection,
+} from '@/lib/fetch-emails-integration'
 import { EmailClassifier, EmailType } from '@/lib/email-classifier'
 import { AIClassifier } from '@/lib/ai-email-classifier'
 import { AIJobMatcher } from '@/lib/ai-job-matcher'
-import { ActivityType, JobStatus, Prisma } from '@prisma/client'
+import { ActivityType, EmailProvider, JobStatus, Prisma } from '@prisma/client'
 import { requireAuth } from '@/lib/auth'
 import { NotificationService } from '@/lib/notification-service'
 import { ExtractedEntities } from '@/lib/ai/types'
 import { createHash } from 'crypto'
 import { parseInterviewDateTime } from '@/lib/utils/interview-date-parser'
 import { cacheTagsFor } from '@/lib/cache-tags'
+import { alignEmailSyncLowerBound } from '@/lib/email-sync-window'
 
 /**
  * Create a unique identifier for an email to prevent duplicate processing
@@ -86,42 +92,38 @@ export async function syncEmails() {
       return { success: false, error: 'Email integration not configured' }
     }
 
-    // Determine the date to sync from
-    // Always use incremental sync (since lastSyncedAt) to avoid double-scanning
-    // If lastSyncedAt is in the future (data issue), reset it to 90 days ago
-    // If never synced, start from 90 days ago for initial sync
+    // Determine the date to sync from.
+    // IMAP SINCE / Gmail after: are calendar-day only; align to local midnight so
+    // same-day messages before lastSyncedAt are not dropped after a mid-day sync.
     let syncSince: Date
     if (!integration.lastSyncedAt) {
-      // First sync: go back 90 days
-      syncSince = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-      console.log('📅 First sync: fetching emails from last 90 days')
+      syncSince = alignEmailSyncLowerBound(
+        new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+      )
+      console.log('📅 First sync: fetching emails from last 90 days (day-aligned lower bound)')
     } else {
       const lastSync = new Date(integration.lastSyncedAt)
       const now = new Date()
-      // If lastSyncedAt is in the future (data corruption/timezone issue), reset to 90 days ago
       if (lastSync > now) {
         console.log(`⚠️  lastSyncedAt is in the future (${lastSync.toISOString()}), resetting to 90 days ago`)
-        syncSince = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-        // Also update the database to fix the corrupted date
+        syncSince = alignEmailSyncLowerBound(
+          new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+        )
         await prisma.emailIntegration.update({
           where: { userId },
           data: { lastSyncedAt: syncSince },
         })
+        console.log(`📅 Sync window from ${syncSince.toISOString()} (reset)`)
       } else {
-        syncSince = lastSync
+        syncSince = alignEmailSyncLowerBound(lastSync)
+        console.log(
+          `📅 Incremental sync: window from ${syncSince.toISOString()} (day-aligned; last run ${lastSync.toISOString()})`,
+        )
       }
-      console.log(`📅 Incremental sync: fetching emails since ${syncSince.toISOString()}`)
     }
 
-    // Fetch emails using the user's IMAP settings
-    const emailService = createEmailService({
-      host: integration.imapHost!,
-      port: integration.imapPort!,
-      user: integration.imapUsername!,
-      password: integration.imapPassword!,
-    })
     console.log('Starting email fetch...')
-    const emails = await emailService.fetchEmailsSince(syncSince)
+    const emails = await fetchEmailsSinceForIntegration(integration, syncSince)
     console.log(`✓ Fetched ${emails.length} emails since ${syncSince}`)
     console.log('Emails array:', emails.slice(0, 2).map(e => ({ subject: e.subject, from: e.from }))) // Log first 2 for debugging
 
@@ -654,14 +656,27 @@ export async function testEmailConnection() {
       }
     }
 
-    const emailService = createEmailService({
-      host: integration.imapHost!,
-      port: integration.imapPort!,
-      user: integration.imapUsername!,
-      password: integration.imapPassword!,
-    })
-
-    await emailService.testConnection()
+    if (integration.provider === EmailProvider.IMAP) {
+      if (
+        !integration.imapHost ||
+        !integration.imapPort ||
+        !integration.imapUsername ||
+        !integration.imapPassword
+      ) {
+        return { success: false, error: 'IMAP settings are incomplete' }
+      }
+      const emailService = createEmailService({
+        host: integration.imapHost,
+        port: integration.imapPort,
+        user: integration.imapUsername,
+        password: integration.imapPassword,
+      })
+      await emailService.testConnection()
+    } else if (integration.provider === EmailProvider.GMAIL_OAUTH) {
+      await verifyGmailConnection(integration)
+    } else if (integration.provider === EmailProvider.MICROSOFT_OAUTH) {
+      await verifyMicrosoftConnection(integration)
+    }
     return { success: true }
   } catch (error) {
     return {

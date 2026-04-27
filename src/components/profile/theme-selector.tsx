@@ -7,15 +7,17 @@ import { Button } from '@/components/ui/button'
 type Theme = 'light' | 'dark' | 'system'
 
 export function ThemeSelector() {
-  const [theme, setTheme] = useState<Theme>('system')
+  const [theme, setTheme] = useState<Theme>('dark')
   const [mounted, setMounted] = useState(false)
-  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
+  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('dark')
 
   useEffect(() => {
     setMounted(true)
-    // Check localStorage for saved theme preference
     const savedTheme = localStorage.getItem('theme') as Theme | null
-    const initialTheme = savedTheme || 'system'
+    const initialTheme: Theme =
+      savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'system'
+        ? savedTheme
+        : 'dark'
     setTheme(initialTheme)
     applyTheme(initialTheme)
   }, [])
@@ -55,7 +57,7 @@ export function ThemeSelector() {
       const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
       setResolvedTheme(systemTheme)
       applyThemeDirectly(systemTheme)
-      localStorage.removeItem('theme') // Remove to use system
+      localStorage.setItem('theme', 'system')
     } else {
       setResolvedTheme(newTheme)
       applyThemeDirectly(newTheme)

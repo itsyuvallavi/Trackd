@@ -2,23 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Briefcase, FileText, Bot, Mail } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BotQueueBadge } from '@/components/bot/bot-queue-badge'
-
-interface NavItem {
-  name: string
-  href: string
-  icon: React.ComponentType<{ className?: string }>
-  disabled?: boolean
-}
-
-const navItems: NavItem[] = [
-  { name: 'Applications', href: '/jobs', icon: Briefcase },
-  { name: 'Job Search', href: '/bot', icon: Bot },
-  { name: 'Email sync', href: '/settings/integrations', icon: Mail },
-  { name: 'Resume Advisor', href: '/resume-advisor', icon: FileText },
-]
+import { PRIMARY_NAV_ITEMS } from '@/components/layout/primary-nav'
 
 export function LeftSidebar() {
   const pathname = usePathname()
@@ -40,7 +26,7 @@ export function LeftSidebar() {
       aria-label="Primary"
     >
       <nav className="flex min-w-0 w-full max-w-full flex-col gap-1 pt-6 pr-0">
-        {navItems.map((item) => {
+        {PRIMARY_NAV_ITEMS.map((item) => {
           const Icon = item.icon
           const isActive =
             pathname === item.href || pathname?.startsWith(item.href + '/')

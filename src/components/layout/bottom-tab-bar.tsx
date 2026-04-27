@@ -4,9 +4,10 @@ import { useState, useEffect, memo } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Briefcase, FileText, Plus, User, Bot } from 'lucide-react'
+import { Plus, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useBotQueueCount } from '@/lib/bot/use-bot-queue-count'
+import { PRIMARY_NAV_ITEMS } from '@/components/layout/primary-nav'
 
 const QuickAddBar = dynamic(
   () =>
@@ -15,12 +16,6 @@ const QuickAddBar = dynamic(
     })),
   { ssr: false, loading: () => null }
 )
-
-const navItems = [
-  { href: '/jobs', icon: Briefcase, label: 'Jobs' },
-  { href: '/bot', icon: Bot, label: 'Job Search' },
-  { href: '/resume-advisor', icon: FileText, label: 'Resume' },
-]
 
 export const BottomTabBar = memo(function BottomTabBar() {
   const pathname = usePathname()
@@ -38,9 +33,7 @@ export const BottomTabBar = memo(function BottomTabBar() {
   }
 
   const isProfileActive =
-    pathname === '/profile' ||
-    pathname.startsWith('/profile/') ||
-    pathname.startsWith('/settings/')
+    pathname === '/profile' || pathname.startsWith('/profile/')
 
   if (!mounted) {
     return null
@@ -69,7 +62,7 @@ export const BottomTabBar = memo(function BottomTabBar() {
 
           <span aria-hidden className="w-px h-6 bg-border mx-0.5 shrink-0" />
 
-          {navItems.map((item) => {
+          {PRIMARY_NAV_ITEMS.map((item) => {
             const Icon = item.icon
             const active = isActive(item.href)
 
@@ -80,7 +73,7 @@ export const BottomTabBar = memo(function BottomTabBar() {
                 onMouseEnter={() => router.prefetch(item.href)}
                 className={cn(
                   'relative flex items-center justify-center gap-1.5 rounded-full transition-all duration-200 ease-[var(--ease-ios)]',
-                  'px-3 py-2 min-w-[44px]',
+                  'px-2.5 sm:px-3 py-2 min-w-[40px] sm:min-w-[44px]',
                   active
                     ? 'bg-foreground text-background'
                     : 'text-muted-foreground hover:text-foreground'
@@ -98,11 +91,11 @@ export const BottomTabBar = memo(function BottomTabBar() {
                   className={cn(
                     'text-xs font-medium whitespace-nowrap transition-[max-width,opacity] duration-200 ease-[var(--ease-ios)]',
                     active
-                      ? 'opacity-100 max-w-[80px]'
+                      ? 'opacity-100 max-w-[72px] sm:max-w-[80px]'
                       : 'opacity-0 max-w-0 overflow-hidden'
                   )}
                 >
-                  {item.label}
+                  {item.shortLabel}
                 </span>
               </Link>
             )

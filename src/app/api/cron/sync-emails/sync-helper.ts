@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { createEmailService } from '@/lib/email-service'
+import { fetchEmailsSinceForIntegration } from '@/lib/fetch-emails-integration'
 import { EmailClassifier, EmailType } from '@/lib/email-classifier'
 import { AIClassifier } from '@/lib/ai-email-classifier'
 import { AIJobMatcher } from '@/lib/ai-job-matcher'
@@ -7,6 +7,7 @@ import { ActivityType, JobStatus } from '@prisma/client'
 import { NotificationService } from '@/lib/notification-service'
 import { createHash } from 'crypto'
 import { parseInterviewDateTime } from '@/lib/utils/interview-date-parser'
+import { alignEmailSyncLowerBound } from '@/lib/email-sync-window'
 
 // Feature flags
 const USE_AI_CLASSIFIER = process.env.ENABLE_AI_CLASSIFICATION === 'true'
@@ -78,42 +79,35 @@ export async function syncEmailsForUser(userId: string) {
       return { success: false, error: 'Email integration not configured or inactive' }
     }
 
-    // Determine the date to sync from
     let syncSince: Date
     if (!integration.lastSyncedAt) {
-      // First sync: go back 90 days
-      syncSince = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-      console.log('📅 First sync: fetching emails from last 90 days')
+      syncSince = alignEmailSyncLowerBound(
+        new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+      )
+      console.log('📅 First sync: fetching emails from last 90 days (day-aligned lower bound)')
     } else {
       const lastSync = new Date(integration.lastSyncedAt)
       const now = new Date()
       if (lastSync > now) {
         console.log(`⚠️  lastSyncedAt is in the future, resetting to 90 days ago`)
-        syncSince = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+        syncSince = alignEmailSyncLowerBound(
+          new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+        )
         await prisma.emailIntegration.update({
           where: { userId },
           data: { lastSyncedAt: syncSince },
         })
+        console.log(`📅 Sync window from ${syncSince.toISOString()} (reset)`)
       } else {
-        syncSince = lastSync
+        syncSince = alignEmailSyncLowerBound(lastSync)
+        console.log(
+          `📅 Incremental sync: window from ${syncSince.toISOString()} (day-aligned; last run ${lastSync.toISOString()})`,
+        )
       }
-      console.log(`📅 Incremental sync: fetching emails since ${syncSince.toISOString()}`)
     }
 
-    // Only process integrations with IMAP config
-    if (!integration.imapHost || !integration.imapPort || !integration.imapUsername || !integration.imapPassword) {
-      return { success: false, error: 'Missing IMAP configuration' }
-    }
-
-    // Fetch emails using the user's IMAP settings
-    const emailService = createEmailService({
-      host: integration.imapHost,
-      port: integration.imapPort,
-      user: integration.imapUsername,
-      password: integration.imapPassword,
-    })
     console.log('Starting email fetch...')
-    const emails = await emailService.fetchEmailsSince(syncSince)
+    const emails = await fetchEmailsSinceForIntegration(integration, syncSince)
     console.log(`✓ Fetched ${emails.length} emails since ${syncSince}`)
 
     // Get all user's jobs for matching (include contact info for better matching)
