@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { EmailProvider } from '@prisma/client'
 import { requireAuth } from '@/lib/auth'
+import { safeEmailOAuthRedirectPath, verifyEmailOAuthState } from '@/lib/email-oauth-state'
 
 /**
  * OAuth callback handler for email integration
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
   
   // Helper to create absolute redirect URLs
   const createRedirectUrl = (path: string, params?: Record<string, string>) => {
-    const url = new URL(path, baseUrl)
+    const url = new URL(safeEmailOAuthRedirectPath(path), baseUrl)
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         url.searchParams.set(key, value)
@@ -62,16 +63,15 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  let state
-  try {
-    state = JSON.parse(stateParam)
-  } catch {
+  const verifiedState = verifyEmailOAuthState(stateParam)
+
+  if (!verifiedState.ok) {
     return NextResponse.redirect(
       createRedirectUrl('/settings/integrations', { error: 'Invalid state parameter' })
     )
   }
 
-  const { provider, redirectTo, userId: stateUserId } = state
+  const { provider, redirectTo, userId: stateUserId } = verifiedState.payload
   
   // Verify that the userId in state matches the authenticated user
   // This prevents users from connecting OAuth to other users' accounts
@@ -294,4 +294,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-

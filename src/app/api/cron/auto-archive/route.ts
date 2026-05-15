@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { archiveInactiveJobsForAllUsers } from '@/lib/auto-archive'
+import { isCronRequestAuthorized } from '@/lib/cron-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,24 +9,9 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(request: Request) {
   try {
-    const vercelCronHeader = request.headers.get('x-vercel-cron')
-    const authHeader = request.headers.get('authorization')
-
-    if (process.env.NODE_ENV === 'production') {
-      const hasVercelCron = vercelCronHeader === '1' || request.headers.get('x-vercel-signature')
-      const hasValidSecret =
-        process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`
-
-      if (!hasVercelCron && !hasValidSecret) {
-        console.error('Unauthorized auto-archive cron access attempt')
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-      }
-    } else {
-      if (process.env.CRON_SECRET) {
-        if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
-      }
+    if (!isCronRequestAuthorized(request.headers)) {
+      console.error('Unauthorized auto-archive cron access attempt')
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const autoArchiveEnabled = process.env.AUTO_ARCHIVE_ENABLED !== 'false'

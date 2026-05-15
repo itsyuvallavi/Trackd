@@ -1,0 +1,35 @@
+{
+  "data": {
+    "jobs": [
+      {
+        "title": "Backend Engineer",
+        "company": "Platform Co",
+        "url": "https://jobs.example.com/platform/backend",
+        "location": "Remote - US",
+        "description": "Remote Node.js platform role.",
+        "site": "LinkedIn",
+        "postedDate": "2026-05-10",
+        "employmentType": "Full-time",
+        "salaryMin": 130000,
+        "salaryMax": 170000,
+        "salaryCurrency": "USD",
+        "companyLogo": "https://jobs.example.com/platform/logo.png"
+      },
+      {
+        "title": "Missing Company",
+        "url": "https://jobs.example.com/missing-company",
+        "site": "Indeed"
+      },
+      {
+        "source": "ZipRecruiter",
+        "job": {
+          "jobTitle": "QA Engineer",
+          "companyName": "Quality Works",
+          "jobUrl": "https://jobs.example.com/quality/qa",
+          "formattedLocation": "New York, NY",
+          "jobDescription": "Test reliable product workflows."
+        }
+      }
+    ]
+  }
+}

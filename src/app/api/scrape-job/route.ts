@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createHash } from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { withTimeout } from '@/lib/with-timeout'
+import { fetchPublicHttpText, validatePublicHttpUrl } from '@/lib/url-security'
+import { hashExtensionKey, isValidExtensionKeyFormat } from '@/lib/extension-jobs'
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 async function handleScrapeJob(request: NextRequest): Promise<NextResponse> {
   try {
@@ -12,7 +14,36 @@ async function handleScrapeJob(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Missing extension key' }, { status: 401 })
     }
 
-    const keyHash = createHash('sha256').update(key).digest('hex')
+    if (!isValidExtensionKeyFormat(key)) {
+      return NextResponse.json({ error: 'Invalid extension key format' }, { status: 400 })
+    }
+
+    const keyHash = hashExtensionKey(key)
+
+    const rateLimitResult = checkRateLimit(
+      `extension:key:${keyHash.slice(0, 16)}`,
+      RATE_LIMITS.extension.limit,
+      RATE_LIMITS.extension.window
+    )
+
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        {
+          error: 'Rate limit exceeded',
+          message: 'Too many requests from extension. Please try again later.',
+        },
+        {
+          status: 429,
+          headers: {
+            'X-RateLimit-Limit': RATE_LIMITS.extension.limit.toString(),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': rateLimitResult.resetAt.toString(),
+            'Retry-After': Math.ceil((rateLimitResult.resetAt - Date.now()) / 1000).toString(),
+          },
+        }
+      )
+    }
+
     const extensionKey = await prisma.extensionKey.findUnique({
       where: { keyHash }
     })
@@ -27,31 +58,13 @@ async function handleScrapeJob(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'URL is required' }, { status: 400 })
     }
 
-    // Validate URL and prevent SSRF attacks
-    let parsedUrl: URL
-    try {
-      parsedUrl = new URL(url)
-    } catch {
-      return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 })
-    }
-
-    // Only allow http/https protocols
-    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-      return NextResponse.json({ error: 'Only HTTP and HTTPS URLs are allowed' }, { status: 400 })
-    }
-
-    // Block private/internal IP addresses and localhost
-    const hostname = parsedUrl.hostname.toLowerCase()
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
-    const isPrivateIP = /^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)/.test(hostname)
-    const isInternalDomain = hostname.endsWith('.local') || hostname.endsWith('.internal')
-    
-    if (isLocalhost || isPrivateIP || isInternalDomain) {
-      return NextResponse.json({ error: 'Internal URLs are not allowed' }, { status: 400 })
+    const initialUrl = validatePublicHttpUrl(url)
+    if (!initialUrl.ok) {
+      return NextResponse.json({ error: initialUrl.error }, { status: 400 })
     }
 
     // LinkedIn requires JavaScript execution and authentication - server-side scraping won't work
-    if (hostname.includes('linkedin.com')) {
+    if (initialUrl.url.hostname.toLowerCase().includes('linkedin.com')) {
       return NextResponse.json({ 
         error: 'LinkedIn jobs cannot be imported via URL. Please navigate to the LinkedIn job page and use the extension\'s automatic extraction instead.',
         success: false,
@@ -59,67 +72,28 @@ async function handleScrapeJob(request: NextRequest): Promise<NextResponse> {
       }, { status: 400 })
     }
 
-    // Fetch the page with timeout and size limits
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
-    
-    let html = ''
-    
-    try {
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        },
-        signal: controller.signal,
-        // Limit redirects to prevent redirect-based SSRF
-        redirect: 'follow',
-      })
+    const fetched = await fetchPublicHttpText(initialUrl.url.toString(), {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      timeoutMs: 10000,
+      maxBytes: 5 * 1024 * 1024,
+      maxRedirects: 5,
+    })
 
-      clearTimeout(timeoutId)
+    if (!fetched.ok) {
+      return NextResponse.json({ error: fetched.error }, { status: fetched.status })
+    }
 
-      // Check content length header if available (limit to 5MB)
-      const contentLength = response.headers.get('content-length')
-      if (contentLength && parseInt(contentLength, 10) > 5 * 1024 * 1024) {
-        return NextResponse.json({ error: 'Response too large' }, { status: 400 })
-      }
-
-      if (!response.ok) {
-        return NextResponse.json({ 
-          error: 'Failed to fetch URL',
-          success: false 
-        }, { status: 400 })
-      }
-
-      // Read response with size limit (5MB max)
-      const reader = response.body?.getReader()
-      if (!reader) {
-        return NextResponse.json({ error: 'Failed to read response' }, { status: 400 })
-      }
-
-      let totalSize = 0
-      const maxSize = 5 * 1024 * 1024 // 5MB
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        
-        totalSize += value.length
-        if (totalSize > maxSize) {
-          return NextResponse.json({ error: 'Response too large' }, { status: 400 })
-        }
-        
-        html += new TextDecoder().decode(value)
-      }
-    } catch (error) {
-      clearTimeout(timeoutId)
-      if (error instanceof Error && error.name === 'AbortError') {
-        return NextResponse.json({ error: 'Request timeout' }, { status: 408 })
-      }
-      throw error
+    if (fetched.status < 200 || fetched.status >= 300) {
+      return NextResponse.json({
+        error: 'Failed to fetch URL',
+        success: false,
+      }, { status: 400 })
     }
 
     // Extract job data from HTML
-    const jobData = extractJobDataFromHTML(html, url)
+    const jobData = extractJobDataFromHTML(fetched.text, fetched.url.toString())
 
     if (!jobData.title) {
       return NextResponse.json({ 

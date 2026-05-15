@@ -221,6 +221,124 @@ export function userAcceptsUnitedStates(user: UserLocationTokens): boolean {
   return user.countries.has('united states')
 }
 
+// ── Listing / board location line → country tokens (shared: pre-filter, geo clamp) ──
+
+const JOB_LOC_US_STATE_CODES = new Set([
+  'al',
+  'ak',
+  'az',
+  'ar',
+  'ca',
+  'co',
+  'ct',
+  'de',
+  'fl',
+  'ga',
+  'hi',
+  'id',
+  'il',
+  'in',
+  'ia',
+  'ks',
+  'ky',
+  'la',
+  'me',
+  'md',
+  'ma',
+  'mi',
+  'mn',
+  'ms',
+  'mo',
+  'mt',
+  'ne',
+  'nv',
+  'nh',
+  'nj',
+  'nm',
+  'ny',
+  'nc',
+  'nd',
+  'oh',
+  'ok',
+  'or',
+  'pa',
+  'ri',
+  'sc',
+  'sd',
+  'tn',
+  'tx',
+  'ut',
+  'vt',
+  'va',
+  'wa',
+  'wv',
+  'wi',
+  'wy',
+  'dc',
+])
+
+/**
+ * Country / region tokens inferred from a job board "Location" field
+ * (e.g. "London, England, UK" → united kingdom, london, uk).
+ */
+export function countryTokensFromJobLocationLine(location: string): string[] {
+  const loc = location.trim()
+  if (!loc) return []
+
+  if (/^remote$/i.test(loc)) return []
+  if (/\bremote\b/i.test(loc)) {
+    const qualifier = loc
+      .replace(/\bremote\b/gi, ' ')
+      .replace(/\b(?:within|from|based\s+in|only|anywhere\s+in)\b/gi, ' ')
+      .replace(/[()[\]{}|/\\–—-]+/g, ',')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    if (!qualifier || /^,+$/.test(qualifier)) return []
+
+    const qualifierTokens = countryTokensFromJobLocationLine(qualifier)
+    if (qualifierTokens.length > 0) return qualifierTokens
+    return []
+  }
+
+  if (/^(n\/a|not specified|unknown)$/i.test(loc)) return []
+
+  const parts = loc
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+
+  if (parts.length === 0) return []
+
+  const last = parts[parts.length - 1]
+
+  const normalise = (t: string): string => {
+    if (/^(uk|great britain|england|scotland|wales|northern ireland)$/.test(t))
+      return 'united kingdom'
+    if (/^(usa|u\.s\.a?\.?|us|united states of america)$/.test(t)) return 'united states'
+    return t
+  }
+
+  const candidates = new Set<string>()
+
+  if (JOB_LOC_US_STATE_CODES.has(last)) {
+    candidates.add('united states')
+    if (parts.length >= 3) {
+      const thirdLast = parts[parts.length - 3]
+      candidates.add(thirdLast)
+      candidates.add(normalise(thirdLast))
+    }
+  } else {
+    candidates.add(last)
+    candidates.add(normalise(last))
+    if (parts.length >= 2) {
+      candidates.add(parts[0])
+    }
+  }
+
+  return [...candidates].filter(Boolean)
+}
+
 /** Returns the distinct country tokens intersecting a JD text (country-name substring match). */
 export function jdMentionsUserCountries(
   jdLower: string,
@@ -250,9 +368,9 @@ export function jdMentionsUserCities(
  * Checks whether a given JD region snippet (city or country name extracted by a regex)
  * overlaps with the user's locations. Returns true when the JD is acceptable.
  *
- * Handles semantic expansion: "Europe" covers all European countries; "EU" covers
- * all EU member states. This prevents false-positive wrong_location clamps on
- * Germany/France/Netherlands/Italy/etc. when the user lists "Europe" or "EU".
+ * Semantic expansion: "Europe" covers European countries (including UK); "EU" covers
+ * EU member states only. Remote vs on-site is enforced separately (see pre-filter
+ * `checkRemoteWorkPolicy`).
  */
 export function jdLocationOverlapsUser(
   jdMentionedNames: string[],
@@ -273,12 +391,43 @@ export function jdLocationOverlapsUser(
       if (lower.includes(tok) || tok.includes(lower)) return true
     }
 
-    // Semantic expansion: "Europe" = any European country
     if (user.hasEuropeToken && EUROPE_COUNTRIES.has(lower)) return true
 
-    // Semantic expansion: "EU" = any EU member state
     if (user.hasEuToken && EU_MEMBER_COUNTRIES.has(lower)) return true
 
     return false
   })
+}
+
+/**
+ * True when the user expects remote-first hiring: Remote / Europe / EU scope, or the
+ * bot "remote only" toggle. On-site/hybrid is then only OK in cities they explicitly
+ * listed (e.g. Lisbon, Porto).
+ */
+export function userWantsRemoteFirstUnlessListedCities(
+  user: UserLocationTokens,
+  remoteOnly: boolean
+): boolean {
+  if (user.isAny) return false
+  if (remoteOnly) return true
+  if (user.hasEuropeToken || user.hasEuToken) return true
+  if (user.hasRemoteToken) return true
+  for (const c of user.countries) {
+    if (EU_MEMBER_COUNTRIES.has(c) || EUROPE_COUNTRIES.has(c)) return true
+  }
+  return false
+}
+
+/** True if on-site / required-location snippets name at least one of the user's cities. */
+export function jdOnsiteBlobIncludesUserCity(
+  onsiteCityPhrases: string[],
+  requiredLocations: string[],
+  user: UserLocationTokens
+): boolean {
+  const blob = [...onsiteCityPhrases, ...requiredLocations].join(' ').toLowerCase()
+  for (const city of user.cities) {
+    if (city.length < 3) continue
+    if (blob.includes(city)) return true
+  }
+  return false
 }

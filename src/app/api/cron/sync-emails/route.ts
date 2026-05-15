@@ -1,34 +1,15 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { isCronRequestAuthorized } from '@/lib/cron-auth'
 import { syncEmailsForUser } from './sync-helper'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
-    // SECURITY: Verify this is called by Vercel Cron or with proper auth
-    // Vercel Cron sends a specific header: 'x-vercel-cron' or 'x-vercel-signature'
-    const vercelCronHeader = request.headers.get('x-vercel-cron')
-    const authHeader = request.headers.get('authorization')
-    
-    // In production, require either:
-    // 1. Vercel Cron header (x-vercel-cron)
-    // 2. CRON_SECRET Bearer token
-    if (process.env.NODE_ENV === 'production') {
-      const hasVercelCron = vercelCronHeader === '1' || request.headers.get('x-vercel-signature')
-      const hasValidSecret = process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`
-      
-      if (!hasVercelCron && !hasValidSecret) {
-        console.error('Unauthorized cron access attempt')
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-      }
-    } else {
-      // In development, allow if CRON_SECRET is provided and matches, or if explicitly allowed
-      if (process.env.CRON_SECRET) {
-        if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
-      }
+    if (!isCronRequestAuthorized(request.headers)) {
+      console.error('Unauthorized cron access attempt')
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     console.log('🔄 Starting scheduled email sync...')

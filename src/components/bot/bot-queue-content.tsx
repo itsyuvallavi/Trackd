@@ -33,6 +33,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
+const QUEUE_PAGE_SIZE = 50
+
 interface QueueJob {
   id: string
   title: string
@@ -47,6 +49,42 @@ interface QueueJob {
   coverLetter: string | null
   createdAt: string
   duplicate: { appliedAt: string; existingId: string } | null
+}
+
+interface QueueResponse {
+  jobs?: QueueJob[]
+  profileComplete?: boolean
+  pagination?: {
+    limit: number
+    offset: number
+    nextOffset: number | null
+  }
+  error?: string
+}
+
+function queueJobLogicalKey(job: QueueJob): string {
+  return `${job.company.trim().toLowerCase()}::${job.title.trim().toLowerCase()}`
+}
+
+function mergeQueueJobs(currentJobs: QueueJob[], incomingJobs: QueueJob[], append: boolean): QueueJob[] {
+  if (!append) return incomingJobs
+
+  const seenIds = new Set(currentJobs.map((job) => job.id))
+  const seenLogicalJobs = new Set(currentJobs.map(queueJobLogicalKey))
+  const merged = [...currentJobs]
+
+  for (const job of incomingJobs) {
+    const logicalKey = queueJobLogicalKey(job)
+    if (seenIds.has(job.id) || seenLogicalJobs.has(logicalKey)) {
+      continue
+    }
+
+    seenIds.add(job.id)
+    seenLogicalJobs.add(logicalKey)
+    merged.push(job)
+  }
+
+  return merged
 }
 
 function ScoreBadge({ score }: { score: number }) {
@@ -440,24 +478,35 @@ export function BotQueueContent() {
   const [jobs, setJobs] = useState<QueueJob[]>([])
   const [profileComplete, setProfileComplete] = useState(true)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [nextOffset, setNextOffset] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (options: { append?: boolean; offset?: number } = {}) => {
+    const append = options.append === true
+    const pageOffset = options.offset ?? 0
+    if (append) setLoadingMore(true)
+    else setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/bot/queue')
-      const data = await res.json() as { jobs?: QueueJob[]; profileComplete?: boolean; error?: string }
+      const params = new URLSearchParams({
+        limit: String(QUEUE_PAGE_SIZE),
+        offset: String(pageOffset),
+      })
+      const res = await fetch(`/api/bot/queue?${params.toString()}`)
+      const data = await res.json() as QueueResponse
       if (res.status === 401) {
         throw new Error('Session expired — please sign in again.')
       }
       if (!res.ok) throw new Error(data.error ?? 'Failed to load queue')
-      setJobs(data.jobs ?? [])
+      setJobs((prev) => mergeQueueJobs(prev, data.jobs ?? [], append))
       setProfileComplete(data.profileComplete ?? true)
+      setNextOffset(data.pagination?.nextOffset ?? null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load queue')
     } finally {
-      setLoading(false)
+      if (append) setLoadingMore(false)
+      else setLoading(false)
     }
   }, [])
 
@@ -516,7 +565,7 @@ export function BotQueueContent() {
         </p>
 
         <button
-          onClick={load}
+          onClick={() => load()}
           disabled={loading}
           className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50"
         >
@@ -593,6 +642,16 @@ export function BotQueueContent() {
               onDelete={handleDelete}
             />
           ))}
+          {nextOffset !== null && (
+            <button
+              onClick={() => load({ append: true, offset: nextOffset })}
+              disabled={loadingMore}
+              className="self-center inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04] transition-colors disabled:opacity-50"
+            >
+              {loadingMore && <Loader2 className="size-4 animate-spin" />}
+              Load more
+            </button>
+          )}
         </div>
       )}
     </div>

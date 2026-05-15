@@ -4,9 +4,10 @@ import { LoginForm } from '@/components/auth/login-form'
 import { getCurrentUser } from '@/lib/auth'
 import { HeroImage } from '@/components/home/hero-image'
 import { Aurora, GlassCard, GlassPill } from '@/components/ui/glass'
+import { authErrorMessage, safeAuthRedirectPath } from '@/lib/auth-callback'
 
 interface HomePageProps {
-  searchParams?: Promise<{ next?: string }>
+  searchParams?: Promise<{ next?: string; error?: string }>
 }
 
 export default async function Home({ searchParams }: HomePageProps) {
@@ -17,7 +18,8 @@ export default async function Home({ searchParams }: HomePageProps) {
   }
 
   const resolvedSearchParams = (await searchParams) ?? {}
-  const next = resolvedSearchParams.next ?? '/jobs'
+  const next = safeAuthRedirectPath(resolvedSearchParams.next)
+  const initialError = authErrorMessage(resolvedSearchParams.error)
 
   return (
     <div className="dark relative min-h-screen w-full flex bg-background text-foreground overflow-hidden">
@@ -47,7 +49,7 @@ export default async function Home({ searchParams }: HomePageProps) {
               </p>
             </div>
 
-            <LoginForm next={next} />
+            <LoginForm next={next} initialError={initialError} />
           </GlassCard>
 
           <p className="mt-8 text-xs text-muted-foreground/80 text-center">

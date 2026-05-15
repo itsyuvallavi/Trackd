@@ -1,0 +1,29 @@
+{
+  "status": "OK",
+  "data": [
+    {
+      "job_id": "jsearch-1",
+      "job_title": "Senior Frontend Engineer",
+      "employer_name": "Acme Labs",
+      "job_city": "Austin",
+      "job_state": "TX",
+      "job_country": "US",
+      "job_apply_link": "https://jobs.example.com/acme/frontend",
+      "job_description": "Build React and TypeScript products for remote-friendly teams.",
+      "job_is_remote": true,
+      "job_posted_at_datetime_utc": "2026-05-12T15:30:00.000Z",
+      "job_employment_type": "FULLTIME",
+      "job_min_salary": 120000,
+      "job_max_salary": 155000,
+      "job_salary_currency": "USD",
+      "employer_logo": "https://jobs.example.com/acme/logo.png"
+    },
+    {
+      "job_id": "jsearch-2",
+      "job_title": "Product Designer",
+      "employer_name": "Design Co",
+      "job_country": "US",
+      "job_is_remote": false
+    }
+  ]
+}

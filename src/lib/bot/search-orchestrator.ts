@@ -14,9 +14,10 @@ import type { BotConfig } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { SearchJobResult, OrchestratorResult } from './types'
 import { evaluateJob } from './job-evaluator'
+import { preFilterJob } from './pre-filter'
 import { runSearch } from './adapters/search-client'
-import { BOT_SEARCH_RESULTS_WANTED } from './search-constants'
 import { botSearchHasQueryableBackend } from './bot-search-sources'
+import { buildBotSearchRequest } from './search-request'
 import {
   BOT_LISTING_OUTCOME,
   BOT_LISTING_STAGE,
@@ -216,28 +217,22 @@ export async function runBotSearch(
       return result
     }
 
+    const searchRequest = buildBotSearchRequest(botConfig)
+
     pushLog('info', 'Search request built from /settings/bot', {
-      keywords: botConfig.keywords,
-      locations: botConfig.locations,
-      remote_only: botConfig.remoteOnly,
-      experience_level: botConfig.experienceLevel ?? null,
-      exclude_companies_count: botConfig.excludeCompanies.length,
-      exclude_keywords_count: botConfig.excludeKeywords.length,
+      keywords: searchRequest.keywords,
+      locations: searchRequest.locations,
+      remote_only: searchRequest.remote_only,
+      experience_level: searchRequest.experience_level ?? null,
+      exclude_companies_count: searchRequest.exclude_companies?.length ?? 0,
+      exclude_keywords_count: searchRequest.exclude_keywords?.length ?? 0,
       spoken_languages: botConfig.spokenLanguages ?? [],
       min_score: botConfig.minScore,
     })
 
     let searchResponse
     try {
-      searchResponse = await runSearch({
-        keywords: botConfig.keywords,
-        locations: botConfig.locations.length > 0 ? botConfig.locations : ['Remote'],
-        remote_only: botConfig.remoteOnly,
-        exclude_companies: botConfig.excludeCompanies,
-        exclude_keywords: botConfig.excludeKeywords,
-        results_wanted: BOT_SEARCH_RESULTS_WANTED,
-        experience_level: botConfig.experienceLevel,
-      })
+      searchResponse = await runSearch(searchRequest)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       result.errors['search'] = msg
@@ -345,8 +340,10 @@ export async function runBotSearch(
 
     for (let seq = 0; seq < searchResponse.jobs.length; seq++) {
       const job = searchResponse.jobs[seq]
+      const rawUrl = job.url?.trim() ?? ''
+      const normalizedUrl = rawUrl ? normalizeJobUrl(rawUrl) : ''
 
-      if (!job.url?.trim()) {
+      if (!rawUrl) {
         if (dismissedFp.has(dismissedFingerprintForTitleCompany(job))) {
           result.skippedPreviouslyDismissed++
           auditBySeq.set(seq, {
@@ -359,24 +356,13 @@ export async function runBotSearch(
           })
           continue
         }
-        noUrlSeqOrdered.push(seq)
-        auditBySeq.set(seq, {
-          ...baseMutable(job, seq),
-          finalized: false,
-          stage: 'awaiting_eval',
-          outcome: 'pending',
-        })
-        continue
-      }
-
-      const url = normalizeJobUrl(job.url!)
-      if (
+      } else if (
         dismissedFp.has(dismissedFingerprintForUrl(job.url!)) ||
         dismissedFp.has(dismissedFingerprintForTitleCompany(job))
       ) {
         result.skippedPreviouslyDismissed++
         if (verboseDedup) {
-          pushLog('info', `Dedup dismissed (deleted earlier): ${job.title} @ ${job.company} — ${url}`)
+          pushLog('info', `Dedup dismissed (deleted earlier): ${job.title} @ ${job.company} — ${normalizedUrl}`)
         }
         auditBySeq.set(seq, {
           ...baseMutable(job, seq),
@@ -389,10 +375,10 @@ export async function runBotSearch(
         continue
       }
 
-      if (existingUrls.has(url)) {
+      if (rawUrl && existingUrls.has(normalizedUrl)) {
         result.skippedExistingByUrl++
         if (verboseDedup) {
-          pushLog('info', `Dedup URL (already in DB): ${job.title} @ ${job.company} — ${url}`)
+          pushLog('info', `Dedup URL (already in DB): ${job.title} @ ${job.company} — ${normalizedUrl}`)
         }
         auditBySeq.set(seq, {
           ...baseMutable(job, seq),
@@ -443,7 +429,11 @@ export async function runBotSearch(
       }
 
       seenInBatch.add(key)
-      urlToSeq.set(url, seq)
+      if (rawUrl) {
+        urlToSeq.set(normalizedUrl, seq)
+      } else {
+        noUrlSeqOrdered.push(seq)
+      }
       auditBySeq.set(seq, {
         ...baseMutable(job, seq),
         finalized: false,
@@ -465,8 +455,7 @@ export async function runBotSearch(
         `${newJobs.length} new listings to evaluate (min score ${botConfig.minScore})`
     )
 
-    const noUrlJobs = searchResponse.jobs.filter((j) => !j.url?.trim())
-    const allNewJobs: SearchJobResult[] = [...newJobs, ...noUrlJobs]
+    const allNewJobs: SearchJobResult[] = newJobs
 
     if (allNewJobs.length === 0) {
       pushLog('info', `No new jobs for user ${userId} — all already tracked or duplicate in batch`)
@@ -545,6 +534,41 @@ export async function runBotSearch(
             continue
           }
         } else {
+          const preFilter = preFilterJob(job, botConfig)
+          if (preFilter.rejected) {
+            result.jobsSkippedLowScore++
+            result.evaluationSkips.push({
+              title: job.title.slice(0, 200),
+              company: job.company.slice(0, 120),
+              score: preFilter.score,
+              minScore: botConfig.minScore,
+              flags: [preFilter.flag],
+              reasoning: preFilter.reason.slice(0, REASONING_STORE_MAX),
+            })
+            pushLog(
+              'info',
+              `Deterministic filter rejected (not saved): ${job.title} @ ${job.company} — ${preFilter.flag} | ${oneLineExcerpt(preFilter.reason, REASONING_LOG_MAX)}`
+            )
+            auditBySeq.set(seq, {
+              ...audit,
+              finalized: true,
+              stage: BOT_LISTING_STAGE.BELOW_THRESHOLD,
+              outcome: BOT_LISTING_OUTCOME.REJECTED,
+              evaluated: false,
+              score: preFilter.score,
+              shouldApply: false,
+              flags: [preFilter.flag],
+              reasoning: preFilter.reason,
+              resumeMatch: null,
+              scoringInputs: {
+                note: 'OPENAI_API_KEY was not set — deterministic pre-filter ran before save.',
+                gateway: 'none',
+                deterministicFilter: preFilter.flag,
+              },
+              decisionReason: preFilter.reason,
+            })
+            continue
+          }
           scoringInputs = noOpenAiSnapshot()
         }
 

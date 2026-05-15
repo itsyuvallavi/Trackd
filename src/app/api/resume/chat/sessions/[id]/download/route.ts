@@ -62,7 +62,7 @@ export async function GET(
       const jsonContent = response.data.choices[0]?.message?.content || '{}'
       
       // Clean up JSON if wrapped in markdown code blocks
-      let cleanJson = jsonContent
+      const cleanJson = jsonContent
         .replace(/^```json\n?/i, '')
         .replace(/^```\n?/i, '')
         .replace(/\n?```$/i, '')
@@ -175,4 +175,3 @@ export async function GET(
     )
   }
 }
-

@@ -1,8 +1,9 @@
 console.log('[Trackd] Extension loaded')
 
-// API URL - change this for your environment
-// const API_URL = 'http://localhost:3000' // For local development
-const API_URL = 'https://trackd-eight.vercel.app' // For production
+// Production default. Local E2E can override this with:
+// chrome.storage.local.set({ trackdApiUrl: 'http://localhost:3001' })
+const DEFAULT_API_URL = 'https://trackd-eight.vercel.app'
+let API_URL = DEFAULT_API_URL
 
 // Content script files to inject
 const CONTENT_SCRIPT_FILES = [
@@ -32,6 +33,39 @@ async function fetchWithTimeout(url, options = {}, timeout = 10000) {
       throw new Error('Request timed out. Please check your connection and try again.');
     }
     throw error;
+  }
+}
+
+function normalizeApiUrl(value) {
+  if (!value || typeof value !== 'string') return DEFAULT_API_URL
+
+  try {
+    const url = new URL(value.trim())
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return DEFAULT_API_URL
+    return url.origin
+  } catch {
+    return DEFAULT_API_URL
+  }
+}
+
+async function loadApiUrl() {
+  const data = await chrome.storage.local.get(['trackdApiUrl'])
+  API_URL = normalizeApiUrl(data.trackdApiUrl)
+  console.log('[Trackd] API URL:', API_URL)
+}
+
+async function parseApiJsonResponse(response) {
+  const text = await response.text()
+  if (!text.trim()) return {}
+
+  try {
+    return JSON.parse(text)
+  } catch {
+    return {
+      error: response.ok
+        ? 'Trackd returned an invalid response.'
+        : `Trackd returned ${response.status} ${response.statusText || 'non-JSON response'}`.trim()
+    }
   }
 }
 
@@ -70,6 +104,8 @@ let savedJobId = null
 document.addEventListener('DOMContentLoaded', init)
 
 async function init() {
+  await loadApiUrl()
+
   // Set dynamic links based on API_URL
   const getKeyLink = document.getElementById('getKeyLink')
   if (getKeyLink) {
@@ -185,7 +221,7 @@ connectBtn.addEventListener('click', async () => {
       body: JSON.stringify({ key })
     })
 
-    const data = await res.json()
+    const data = await parseApiJsonResponse(res)
 
     if (res.ok && data.valid) {
       await chrome.storage.local.set({ extensionKey: key, userEmail: data.email })
@@ -353,11 +389,13 @@ saveBtn.addEventListener('click', async () => {
       body: JSON.stringify(jobData)
     })
 
-    const data = await res.json()
+    const data = await parseApiJsonResponse(res)
 
-    if (res.ok) {
+    if (res.ok && data.job?.id) {
       savedJobId = data.job.id
       showSuccessView(jobData.company, jobData.title)
+    } else if (res.ok) {
+      showMessage('error', data.message || data.error || 'Trackd saved the job but returned an invalid response.')
     } else if (res.status === 409) {
       // Duplicate
       showMessage('warning', `Already saved on ${new Date(data.existingJob.savedAt).toLocaleDateString()}`)
@@ -368,7 +406,7 @@ saveBtn.addEventListener('click', async () => {
       showConnectView()
       showMessage('error', 'Session expired. Please reconnect.')
     } else {
-      showMessage('error', data.message || 'Failed to save job')
+      showMessage('error', data.message || data.error || 'Failed to save job')
     }
   } catch (err) {
     console.error('Save job error:', err)
@@ -439,7 +477,7 @@ importUrlBtn?.addEventListener('click', async () => {
       body: JSON.stringify({ url })
     }, 15000)
 
-    const response = await res.json()
+    const response = await parseApiJsonResponse(res)
 
     if (!res.ok || !response.success) {
       // Special handling for LinkedIn or sites that require client-side extraction

@@ -19,10 +19,10 @@ Everyone currently accesses the same account via `TEMP_USER_ID`. We need proper 
 
 ### OAuth Credentials (for Email Sync - separate from Auth)
 ```
-GOOGLE_CLIENT_ID=442976926416-t4a4rfgmkir3qpph1c8ncmnrn68m3v84.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=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
-MICROSOFT_CLIENT_ID=4d6b5025-8c4d-4560-957d-52c666cf81ec
-MICROSOFT_CLIENT_SECRET=c421fd49-2503-4bd2-8b69-d2be81912ebd
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+MICROSOFT_CLIENT_ID=your-microsoft-client-id
+MICROSOFT_CLIENT_SECRET=your-microsoft-client-secret
 ```
 
 ### Important Distinction
@@ -98,8 +98,8 @@ Update `.env` (you already have most of these):
 
 ```env
 # Supabase (update variable names for consistency)
-NEXT_PUBLIC_SUPABASE_URL=https://myxbtnqaruddbwmxoijs.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15eGJ0bnFhcnVkZGJ3bXhvaWpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU4NDA1ODEsImV4cCI6MjA4MTQxNjU4MX0.ATzcfAdA8pi4CvXp8nvqlxkeUor3ksLYK3xCN6UnxSc
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 
 # Get this from Supabase Dashboard → Settings → API → service_role key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
@@ -1013,9 +1013,9 @@ Since we currently have `TEMP_USER_ID` data:
 
 1. Go to **Authentication → Providers → Google**
 2. Toggle **Enable Google**
-3. Enter your existing credentials:
-   - Client ID: `442976926416-t4a4rfgmkir3qpph1c8ncmnrn68m3v84.apps.googleusercontent.com`
-   - Client Secret: `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`
+3. Enter your Google OAuth web client credentials:
+   - Client ID: `your-google-client-id.apps.googleusercontent.com`
+   - Client Secret: `your-google-client-secret`
 4. Save
 
 **In Google Cloud Console** (`https://console.cloud.google.com`):
@@ -1034,9 +1034,9 @@ Since we currently have `TEMP_USER_ID` data:
 
 1. Go to **Authentication → Providers → Azure (Microsoft)**
 2. Toggle **Enable Azure**
-3. Enter your existing credentials:
-   - Client ID: `4d6b5025-8c4d-4560-957d-52c666cf81ec`
-   - Client Secret: `c421fd49-2503-4bd2-8b69-d2be81912ebd`
+3. Enter your Microsoft OAuth app credentials:
+   - Client ID: `your-microsoft-client-id`
+   - Client Secret: `your-microsoft-client-secret`
    - URL: `https://login.microsoftonline.com/common` (for any Microsoft account)
 4. Save
 

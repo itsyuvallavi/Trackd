@@ -8,8 +8,10 @@ import {
   BOT_SEARCH_RESULTS_WANTED,
   describeJSearchDateWindow,
 } from '@/lib/bot/search-constants'
-import { jobsSearchApiRapidApiKey } from '@/lib/bot/rapidapi-jobs-search-keys'
-import { botSearchHasQueryableBackend } from '@/lib/bot/bot-search-sources'
+import {
+  botSearchHasQueryableBackend,
+  effectiveSearchBackends,
+} from '@/lib/bot/bot-search-sources'
 
 export const metadata = { title: 'Job Search settings — Trackd' }
 
@@ -20,16 +22,14 @@ export default async function BotSettingsPage() {
 
   const telegramConfigured = !!process.env.TELEGRAM_BOT_TOKEN
   const searchServiceConfigured = botSearchHasQueryableBackend()
+  const searchBackends = effectiveSearchBackends()
 
   return (
     <BotSettingsContent
       initialConfig={serializeForClient(botConfig)}
       telegramConfigured={telegramConfigured}
       searchServiceConfigured={searchServiceConfigured}
-      searchBackends={{
-        jsearch: !!process.env.JSEARCH_API_KEY,
-        jobsSearchApi: jobsSearchApiRapidApiKey().length > 0,
-      }}
+      searchBackends={searchBackends}
       searchUiCaps={{
         keywordOrMax: BOT_SEARCH_KEYWORD_OR_MAX,
         locationPassesMax: BOT_SEARCH_LOCATION_PASSES_MAX,

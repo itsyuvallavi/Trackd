@@ -25,6 +25,16 @@ type QueueJobRow = {
   createdAt: Date
 }
 
+const DEFAULT_QUEUE_LIMIT = 50
+const MAX_QUEUE_LIMIT = 100
+
+function parsePositiveInt(value: string | null, fallback: number): number {
+  if (!value) return fallback
+  const parsed = Number.parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback
+  return parsed
+}
+
 function isProfileComplete(
   p: {
     phone: string | null
@@ -53,7 +63,7 @@ function titleKey(company: string, title: string): string {
   return `${company.toLowerCase().trim()}::${title.toLowerCase().trim()}`
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getCurrentUser()
   if (!user) {
     return NextResponse.json(
@@ -61,6 +71,14 @@ export async function GET() {
       { status: 401 }
     )
   }
+
+  const url = new URL(request.url)
+  const limit = Math.min(
+    MAX_QUEUE_LIMIT,
+    Math.max(1, parsePositiveInt(url.searchParams.get('limit'), DEFAULT_QUEUE_LIMIT)),
+  )
+  const offset = parsePositiveInt(url.searchParams.get('offset'), 0)
+  const take = limit + 1
 
   let appProfile: {
     phone: string | null
@@ -110,9 +128,14 @@ export async function GET() {
       createdAt: true,
     },
     orderBy: [{ botScore: 'desc' }, { createdAt: 'desc' }],
+    take,
+    skip: offset,
   })
 
-  const jobs: QueueJobRow[] = rawJobs.map((j) => ({
+  const hasMore = rawJobs.length > limit
+  const rawPage = hasMore ? rawJobs.slice(0, limit) : rawJobs
+
+  const jobs: QueueJobRow[] = rawPage.map((j) => ({
     ...j,
     importSource: cols.has('importSource')
       ? ((j as { importSource?: string | null }).importSource ?? null)
@@ -170,6 +193,11 @@ export async function GET() {
 
   return NextResponse.json({
     profileComplete: isProfileComplete(appProfile),
+    pagination: {
+      limit,
+      offset,
+      nextOffset: hasMore ? offset + limit : null,
+    },
     jobs: deduped.map((j) => ({
       ...j,
       createdAt: j.createdAt.toISOString(),

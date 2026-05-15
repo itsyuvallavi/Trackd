@@ -73,12 +73,18 @@ The extension works on:
 
 ### Changing API URL (for development)
 
-Edit `scripts/popup.js` and change the `API_URL` constant:
+The production default is `https://trackd-eight.vercel.app`.
+
+For local E2E testing, set an override in the extension console, then reload the extension:
 
 ```javascript
-const API_URL = 'https://trackd.app' // Your production URL
-// or
-const API_URL = 'http://localhost:3000' // Local development
+chrome.storage.local.set({ trackdApiUrl: 'http://localhost:3001' })
+```
+
+Clear the override to return to production:
+
+```javascript
+chrome.storage.local.remove('trackdApiUrl')
 ```
 
 ### Reconnecting

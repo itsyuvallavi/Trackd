@@ -20,7 +20,12 @@ import type { SearchJobResult } from './types'
 import {
   parseUserLocations,
   jdLocationOverlapsUser,
+  userAcceptsUnitedStates,
+  countryTokensFromJobLocationLine,
+  userWantsRemoteFirstUnlessListedCities,
+  jdOnsiteBlobIncludesUserCity,
 } from './user-locations'
+import { analyzeJd } from './jd-excerpt'
 
 export type PreFilterResult =
   | { rejected: false }
@@ -31,107 +36,63 @@ export type PreFilterResult =
       reason: string
     }
 
-// ── Helpers ───────────────────────────────────────────────────────────────
-
-// US state abbreviations — when the last location segment is one of these,
-// the job is implicitly in the United States.
-const US_STATE_CODES = new Set([
-  'al','ak','az','ar','ca','co','ct','de','fl','ga','hi','id','il','in','ia',
-  'ks','ky','la','me','md','ma','mi','mn','ms','mo','mt','ne','nv','nh','nj',
-  'nm','ny','nc','nd','oh','ok','or','pa','ri','sc','sd','tn','tx','ut','vt',
-  'va','wa','wv','wi','wy','dc',
-])
-
-/**
- * Extracts the most-likely country token(s) from a formatted location string.
- *
- * Handles:
- *   "Bengaluru, Karnataka, India"       → ["india"]
- *   "Chicago, IL"                       → ["united states"]  (state code)
- *   "London, England, UK"               → ["united kingdom"]
- *   "Amstelveen, North Holland, Netherlands" → ["netherlands"]
- *   "Remote"                            → []  (skip filter)
- */
-function extractCountryTokens(location: string): string[] {
-  const loc = location.trim()
-  if (!loc) return []
-
-  // "Remote" alone or with a region → don't filter on country
-  if (/^remote$/i.test(loc)) return []
-  if (/\bremote\b/i.test(loc)) return []
-
-  // Placeholders
-  if (/^(n\/a|not specified|unknown)$/i.test(loc)) return []
-
-  const parts = loc
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean)
-
-  if (parts.length === 0) return []
-
-  const last = parts[parts.length - 1]
-
-  const normalise = (t: string): string => {
-    if (/^(uk|great britain|england|scotland|wales|northern ireland)$/.test(t))
-      return 'united kingdom'
-    if (/^(usa|u\.s\.a?\.?|united states of america)$/.test(t))
-      return 'united states'
-    return t
-  }
-
-  const candidates = new Set<string>()
-
-  // If last segment is a US state code (e.g. "IL", "NY") → United States
-  if (US_STATE_CODES.has(last)) {
-    candidates.add('united states')
-    // Also check second-to-last in case format is "City, ST, USA"
-    if (parts.length >= 3) {
-      const thirdLast = parts[parts.length - 3]
-      candidates.add(thirdLast)
-      candidates.add(normalise(thirdLast))
-    }
-  } else {
-    candidates.add(last)
-    candidates.add(normalise(last))
-    // For 3-part "City, Region, Country" also try the region as a city fallback
-    if (parts.length >= 2) {
-      candidates.add(parts[0])
-    }
-  }
-
-  return [...candidates].filter(Boolean)
-}
-
 // ── Location pre-filter ───────────────────────────────────────────────────
 
 /** Job boards that only post US-based jobs. */
 const US_ONLY_BOARDS = new Set(['dice', 'ziprecruiter', 'zip_recruiter'])
 
+/**
+ * Remote-first Europe/EU seekers need proof the role is remote-friendly. Listings with
+ * almost no description and no Remote flag look like on-site jobs with missing metadata
+ * (e.g. LATAM employers on LinkedIn) — reject before the LLM inflates them from the title.
+ */
+const MIN_JD_CHARS_FOR_REMOTE_FIRST_EVIDENCE = 80
+
 function checkLocation(job: SearchJobResult, config: BotConfig): PreFilterResult {
   const user = parseUserLocations(config.locations)
   if (user.isAny) return { rejected: false }
 
-  // The API row explicitly marks the job as remote → location of HQ is irrelevant.
-  if (job.is_remote === true) return { rejected: false }
-
   const loc = (job.location ?? '').trim()
 
-  // No location metadata → can't pre-filter; let the LLM handle it.
+  // No location metadata → can't pre-filter; let the LLM / geo clamp handle it.
   if (!loc || /^(n\/a|not specified|unknown)$/i.test(loc)) return { rejected: false }
 
-  // Contains "Remote" anywhere → don't pre-filter (e.g. "Remote, United States").
-  if (/\bremote\b/i.test(loc)) return { rejected: false }
+  const countryTokens = countryTokensFromJobLocationLine(loc)
 
-  const countryTokens = extractCountryTokens(loc)
-  if (countryTokens.length === 0) return { rejected: false }
+  if (countryTokens.length > 0) {
+    if (jdLocationOverlapsUser(countryTokens, user)) return { rejected: false }
 
-  // Check all extracted tokens against the user's accepted locations (with EU/Europe expansion).
-  if (jdLocationOverlapsUser(countryTokens, user)) return { rejected: false }
+    const board = (job.jobBoard ?? job.source ?? '').toLowerCase()
+    if (US_ONLY_BOARDS.has(board) && !userAcceptsUnitedStates(user)) {
+      return {
+        rejected: true,
+        score: 20,
+        flag: 'wrong_location',
+        reason: `Sourced from ${board} (US-only job board) and the United States is not in your Target locations.`,
+      }
+    }
 
-  // Known US-only board — add a clearer reason.
+    const countryLabel = countryTokens[0]
+    return {
+      rejected: true,
+      score: 20,
+      flag: 'wrong_location',
+      reason: `Job location "${loc}" (${countryLabel}) is not in your Target locations (${config.locations.join(', ')}).`,
+    }
+  }
+
+  /**
+   * User typed only global remote tokens ("Remote", "Anywhere") with no country/city —
+   * accept remote rows that don't carry a parseable HQ region.
+   */
+  const onlyRemoteGlobal =
+    user.hasRemoteToken && user.countries.size === 0 && user.cities.size === 0
+  if (onlyRemoteGlobal && (job.is_remote === true || /^remote$/i.test(loc))) {
+    return { rejected: false }
+  }
+
   const board = (job.jobBoard ?? job.source ?? '').toLowerCase()
-  if (US_ONLY_BOARDS.has(board) && !user.countries.has('united states')) {
+  if (US_ONLY_BOARDS.has(board) && !userAcceptsUnitedStates(user)) {
     return {
       rejected: true,
       score: 20,
@@ -140,13 +101,66 @@ function checkLocation(job: SearchJobResult, config: BotConfig): PreFilterResult
     }
   }
 
-  const countryLabel = countryTokens[0]
-  return {
-    rejected: true,
-    score: 20,
-    flag: 'wrong_location',
-    reason: `Job location "${loc}" (${countryLabel}) is not in your Target locations (${config.locations.join(', ')}).`,
+  return { rejected: false }
+}
+
+/**
+ * Remote-first Europe/EU seekers: accept employers anywhere in scope only when the
+ * role is remote-friendly (or open to international), unless the JD ties on-site
+ * work to a city the user explicitly listed (e.g. Lisbon, Porto).
+ */
+function checkRemoteWorkPolicy(job: SearchJobResult, config: BotConfig): PreFilterResult {
+  const user = parseUserLocations(config.locations)
+  if (user.isAny) return { rejected: false }
+  if (!userWantsRemoteFirstUnlessListedCities(user, config.remoteOnly)) {
+    return { rejected: false }
   }
+
+  const loc = (job.location ?? '').trim()
+  const listingRemote =
+    job.is_remote === true || /\bremote\b/i.test(loc) || /^remote$/i.test(loc)
+
+  const facts = analyzeJd(job.description ?? '')
+  const jdRemote =
+    facts.mentionsRemoteFriendly ||
+    facts.mentionsOpenToInternational
+
+  if (listingRemote || jdRemote) {
+    return { rejected: false }
+  }
+
+  const onsiteSignals =
+    facts.requiresOnSiteOrHybrid || facts.onsiteCityPhrases.length > 0
+
+  if (onsiteSignals) {
+    if (jdOnsiteBlobIncludesUserCity(facts.onsiteCityPhrases, facts.requiredLocations, user)) {
+      return { rejected: false }
+    }
+    return {
+      rejected: true,
+      score: 20,
+      flag: 'wrong_location',
+      reason:
+        'This role looks on-site or hybrid in a location you did not list for in-person work. You want remote anywhere in Europe unless the employer is in a city you added to Target locations (e.g. Lisbon, Porto).',
+    }
+  }
+
+  const jdLen = (job.description ?? '').trim().length
+  if (
+    jdLen < MIN_JD_CHARS_FOR_REMOTE_FIRST_EVIDENCE &&
+    !listingRemote &&
+    !jdRemote
+  ) {
+    return {
+      rejected: true,
+      score: 20,
+      flag: 'wrong_location',
+      reason:
+        'Listing has little or no job description and is not marked Remote — cannot confirm it fits your remote-first Europe rule (needs explicit remote-friendly wording or a Remote listing).',
+    }
+  }
+
+  return { rejected: false }
 }
 
 // ── Seniority pre-filter ──────────────────────────────────────────────────
@@ -232,6 +246,9 @@ function checkSeniority(job: SearchJobResult, config: BotConfig): PreFilterResul
 export function preFilterJob(job: SearchJobResult, config: BotConfig): PreFilterResult {
   const locResult = checkLocation(job, config)
   if (locResult.rejected) return locResult
+
+  const remotePolicy = checkRemoteWorkPolicy(job, config)
+  if (remotePolicy.rejected) return remotePolicy
 
   const seniorityResult = checkSeniority(job, config)
   if (seniorityResult.rejected) return seniorityResult

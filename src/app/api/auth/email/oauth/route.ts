@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { requireAuth } from '@/lib/auth'
+import {
+  createEmailOAuthState,
+  type EmailOAuthProvider,
+  safeEmailOAuthRedirectPath,
+} from '@/lib/email-oauth-state'
 
 /**
  * Initiate OAuth flow for Google or Microsoft email integration
@@ -44,10 +49,25 @@ export async function GET(request: NextRequest) {
 
   const searchParams = request.nextUrl.searchParams
   const provider = searchParams.get('provider') // 'google' or 'microsoft'
-  const redirectTo = searchParams.get('redirect_to') || '/settings/integrations'
+  const redirectTo = safeEmailOAuthRedirectPath(searchParams.get('redirect_to'))
 
   if (!provider || !['google', 'microsoft'].includes(provider)) {
     return NextResponse.json({ error: 'Invalid provider' }, { status: 400 })
+  }
+
+  let state: string
+  try {
+    state = createEmailOAuthState({
+      provider: provider as EmailOAuthProvider,
+      redirectTo,
+      userId: user.id,
+    })
+  } catch (error) {
+    console.error('Email OAuth state configuration error:', error)
+    return NextResponse.json(
+      { error: 'Email OAuth is not configured. Please set EMAIL_OAUTH_STATE_SECRET.' },
+      { status: 500 },
+    )
   }
 
   // Get base URL from environment variable or request origin
@@ -87,10 +107,7 @@ export async function GET(request: NextRequest) {
     authUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/gmail.readonly email profile')
     authUrl.searchParams.set('access_type', 'offline')
     authUrl.searchParams.set('prompt', 'consent')
-    authUrl.searchParams.set(
-      'state',
-      JSON.stringify({ provider: 'google', redirectTo, userId: user.id }),
-    )
+    authUrl.searchParams.set('state', state)
 
     return NextResponse.redirect(authUrl.toString())
   }
@@ -112,14 +129,10 @@ export async function GET(request: NextRequest) {
     authUrl.searchParams.set('redirect_uri', callbackUrl)
     authUrl.searchParams.set('response_type', 'code')
     authUrl.searchParams.set('scope', 'https://graph.microsoft.com/Mail.Read offline_access')
-    authUrl.searchParams.set(
-      'state',
-      JSON.stringify({ provider: 'microsoft', redirectTo, userId: user.id }),
-    )
+    authUrl.searchParams.set('state', state)
 
     return NextResponse.redirect(authUrl.toString())
   }
 
   return NextResponse.json({ error: 'Provider not implemented' }, { status: 400 })
 }
-

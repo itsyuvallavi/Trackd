@@ -1,7 +1,7 @@
-import { createHash } from 'crypto'
 import { prisma } from '@/lib/prisma'
-import { JobSource, JobStatus, ActivityType } from '@prisma/client'
+import { JobStatus, ActivityType } from '@prisma/client'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { hashExtensionKey, isValidExtensionKeyFormat, sanitizeExtensionJobPayload } from '@/lib/extension-jobs'
 
 export async function POST(request: Request) {
   try {
@@ -12,18 +12,14 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Missing extension key' }, { status: 401 })
     }
 
-    const keyHash = createHash('sha256').update(key).digest('hex')
-    const extensionKey = await prisma.extensionKey.findUnique({
-      where: { keyHash }
-    })
-
-    if (!extensionKey) {
-      return Response.json({ error: 'Invalid extension key' }, { status: 401 })
+    if (!isValidExtensionKeyFormat(key)) {
+      return Response.json({ error: 'Invalid extension key format' }, { status: 400 })
     }
 
+    const keyHash = hashExtensionKey(key)
     // Check extension rate limit (defense in depth - middleware also checks)
     const rateLimitResult = checkRateLimit(
-      `extension:key:${key}`,
+      `extension:key:${keyHash.slice(0, 16)}`,
       RATE_LIMITS.extension.limit,
       RATE_LIMITS.extension.window
     )
@@ -46,49 +42,22 @@ export async function POST(request: Request) {
       )
     }
 
+    const extensionKey = await prisma.extensionKey.findUnique({
+      where: { keyHash }
+    })
+
+    if (!extensionKey) {
+      return Response.json({ error: 'Invalid extension key' }, { status: 401 })
+    }
+
     const userId = extensionKey.userId
     const jobData = await request.json()
+    const sanitized = sanitizeExtensionJobPayload(jobData)
 
-    // Validate and sanitize input with length limits
-    if (!jobData.company || typeof jobData.company !== 'string') {
-      return Response.json(
-        { error: 'Company is required' },
-        { status: 400 }
-      )
+    if (!sanitized.ok) {
+      return Response.json({ error: sanitized.error }, { status: sanitized.status })
     }
-
-    if (!jobData.title || typeof jobData.title !== 'string') {
-      return Response.json(
-        { error: 'Title is required' },
-        { status: 400 }
-      )
-    }
-
-    // Sanitize and limit field lengths to prevent abuse
-    const company = jobData.company.trim().slice(0, 200)
-    const title = jobData.title.trim().slice(0, 300)
-    const location = jobData.location ? String(jobData.location).trim().slice(0, 200) : null
-    const url = jobData.url ? String(jobData.url).trim().slice(0, 2048) : null
-    const salary = jobData.salary ? String(jobData.salary).trim().slice(0, 100) : null
-
-    // Validate URL format if provided
-    if (url) {
-      try {
-        const urlObj = new URL(url)
-        if (!['http:', 'https:'].includes(urlObj.protocol)) {
-          return Response.json({ error: 'Invalid URL protocol' }, { status: 400 })
-        }
-      } catch {
-        return Response.json({ error: 'Invalid URL format' }, { status: 400 })
-      }
-    }
-
-    if (company.length === 0 || title.length === 0) {
-      return Response.json(
-        { error: 'Company and title cannot be empty' },
-        { status: 400 }
-      )
-    }
+    const { company, title, location, url, salary, source, sourceLabel } = sanitized.data
 
     // Check for duplicates (same company + title within 30 days)
     const thirtyDaysAgo = new Date()
@@ -114,20 +83,6 @@ export async function POST(request: Request) {
       }, { status: 409 })
     }
 
-    // Map source string to JobSource enum
-    const sourceMap: Record<string, JobSource> = {
-      'LinkedIn': JobSource.LINKEDIN,
-      'Indeed': JobSource.INDEED,
-      'Greenhouse': JobSource.COMPANY_SITE,
-      'Lever': JobSource.COMPANY_SITE,
-      'Workable': JobSource.WORKABLE,
-      'EU Remote Jobs': JobSource.EU_REMOTE_JOBS,
-      'ZipRecruiter': JobSource.ZIPRECRUITER,
-      'Landing.jobs': JobSource.LANDING_JOBS,
-      'Extension': JobSource.OTHER,
-    }
-    const source = sourceMap[jobData.source] || JobSource.OTHER
-
     // Create the job with APPLIED status
     const job = await prisma.job.create({
       data: {
@@ -151,7 +106,7 @@ export async function POST(request: Request) {
         type: ActivityType.STATUS_CHANGE,
         fromStatus: null,
         toStatus: JobStatus.APPLIED,
-        description: `Job saved via Chrome extension from ${jobData.source || 'unknown source'}`
+        description: `Job saved via Chrome extension from ${sourceLabel || 'unknown source'}`
       }
     })
 
@@ -173,4 +128,3 @@ export async function POST(request: Request) {
     )
   }
 }
-

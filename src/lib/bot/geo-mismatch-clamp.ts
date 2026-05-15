@@ -20,6 +20,7 @@ import {
   parseUserLocations,
   userAcceptsUnitedStates,
   jdLocationOverlapsUser,
+  countryTokensFromJobLocationLine,
   type UserLocationTokens,
 } from './user-locations'
 
@@ -100,11 +101,22 @@ function citizenshipCountry(token: string): string | null {
 function buildReasons(
   facts: JdFacts,
   user: UserLocationTokens,
-  userWantsRemote: boolean
+  userWantsRemote: boolean,
+  listingLocationLine: string | null | undefined
 ): string[] {
   const reasons: string[] = []
 
   if (user.isAny) return reasons
+
+  const listingToks = countryTokensFromJobLocationLine(listingLocationLine ?? '')
+  if (
+    listingToks.length > 0 &&
+    !jdLocationOverlapsUser(listingToks, user)
+  ) {
+    reasons.push(
+      `Job listing location "${(listingLocationLine ?? '').trim() || '—'}" is not in your Target locations (${user.raw.join(', ') || 'none'})`
+    )
+  }
 
   // 1. JD-mandated country/region not in user's list.
   // Escape hatch: if the user accepts remote (either via `remoteOnly=true` or
@@ -203,7 +215,7 @@ export function applyGeoMismatchClamp(
   const userWantsRemote = config.remoteOnly === true
 
   const facts = analyzeJd(job.description ?? '')
-  const hardReasons = buildReasons(facts, user, userWantsRemote)
+  const hardReasons = buildReasons(facts, user, userWantsRemote, job.location)
 
   let cap = 100
   const reasons: string[] = [...hardReasons]

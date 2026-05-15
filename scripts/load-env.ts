@@ -6,8 +6,8 @@
 import { config } from 'dotenv'
 import { resolve } from 'node:path'
 
-config({ path: resolve(process.cwd(), '.env') })
-config({ path: resolve(process.cwd(), '.env.local'), override: true })
+config({ path: resolve(process.cwd(), '.env'), quiet: true })
+config({ path: resolve(process.cwd(), '.env.local'), override: true, quiet: true })
 
 /** CLI wins over files: `--sources=jsearch,jobs_search_api` */
 const sourcesArg = process.argv.find((a) => a.startsWith('--sources='))

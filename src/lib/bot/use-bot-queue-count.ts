@@ -7,13 +7,13 @@ export function useBotQueueCount(): number {
   const [count, setCount] = useState(0)
 
   const refetch = useCallback(() => {
-    fetch('/api/bot/queue')
+    fetch('/api/bot/queue/count')
       .then((r) => {
-        if (!r.ok) return { jobs: [] as unknown[] }
-        return r.json() as Promise<{ jobs?: unknown[] }>
+        if (!r.ok) return { count: 0 }
+        return r.json() as Promise<{ count?: number }>
       })
       .then((d) => {
-        setCount(d.jobs?.length ?? 0)
+        setCount(d.count ?? 0)
       })
       .catch(() => {})
   }, [])

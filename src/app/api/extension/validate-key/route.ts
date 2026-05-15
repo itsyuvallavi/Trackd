@@ -1,18 +1,20 @@
-import { createHash } from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { hashExtensionKey, isValidExtensionKeyFormat } from '@/lib/extension-jobs'
 
 export async function POST(request: Request) {
   try {
     const { key } = await request.json()
 
-    if (!key?.startsWith('tk_')) {
+    if (!isValidExtensionKeyFormat(key)) {
       return Response.json({ error: 'Invalid key format' }, { status: 400 })
     }
 
+    const keyHash = hashExtensionKey(key)
+
     // Check extension rate limit (defense in depth - middleware also checks)
     const rateLimitResult = checkRateLimit(
-      `extension:key:${key}`,
+      `extension:key:${keyHash.slice(0, 16)}`,
       RATE_LIMITS.extension.limit,
       RATE_LIMITS.extension.window
     )
@@ -34,8 +36,6 @@ export async function POST(request: Request) {
         }
       )
     }
-
-    const keyHash = createHash('sha256').update(key).digest('hex')
 
     const extensionKey = await prisma.extensionKey.findUnique({
       where: { keyHash }
@@ -73,4 +73,3 @@ export async function POST(request: Request) {
     )
   }
 }
-

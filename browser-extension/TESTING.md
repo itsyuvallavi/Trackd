@@ -11,9 +11,17 @@ Complete testing checklist for the Trackd Chrome Extension.
    ```
    Server should be running at `http://localhost:3000`
 
-2. **Update API URL** (if testing locally)
-   - Open `browser-extension/scripts/popup.js`
-   - Change `API_URL` to `'http://localhost:3000'`
+2. **Set local API URL** (if testing locally)
+   - Open the extension service/popup console
+   - Run:
+     ```javascript
+     chrome.storage.local.set({ trackdApiUrl: 'http://localhost:3001' })
+     ```
+   - Reload the extension
+   - Clear it after local testing:
+     ```javascript
+     chrome.storage.local.remove('trackdApiUrl')
+     ```
 
 3. **Extension Installed**
    - Chrome: `chrome://extensions/` → Enable Developer Mode → Load unpacked

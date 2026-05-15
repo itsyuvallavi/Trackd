@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { NotificationType, JobStatus } from '@prisma/client'
 import { EmailMessage } from './email-service'
 import { ClassifiedEmail } from './email-classifier'
+import { createEmailIdentifier } from './email-identifiers'
 
 export interface SyncStats {
   totalEmails: number
@@ -12,9 +13,57 @@ export interface SyncStats {
   ambiguousMatches: number
   newJobsDetected: number
   noMatches: number
+  processingErrors?: number
+  partial?: boolean
+}
+
+/** Stored on SYNC_COMPLETE notifications so the UI can show what changed */
+export interface SyncCompleteJobChange {
+  jobId: string
+  title: string
+  company: string
+  oldStatus: string | null
+  newStatus: string
+  emailSubject?: string
+  /** ISO timestamp when interview time was parsed and saved */
+  interviewAtIso?: string | null
 }
 
 export class NotificationService {
+  private async findExistingEmailNotification(
+    userId: string,
+    type: NotificationType,
+    emailIdentifier: string,
+  ): Promise<string | null> {
+    const recentNotifications = await prisma.notification.findMany({
+      where: {
+        userId,
+        type,
+        createdAt: {
+          gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+        },
+      },
+      select: {
+        id: true,
+        metadata: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 200,
+    })
+
+    const existing = recentNotifications.find((notification) => {
+      if (!notification.metadata || typeof notification.metadata !== 'object') {
+        return false
+      }
+
+      return (notification.metadata as { emailIdentifier?: string }).emailIdentifier === emailIdentifier
+    })
+
+    return existing?.id ?? null
+  }
+
   /**
    * Create notification for ambiguous match (email could match multiple jobs)
    */
@@ -24,6 +73,17 @@ export class NotificationService {
     matchedJobs: Array<{ id: string; title: string; company: string }>,
     classified: ClassifiedEmail
   ): Promise<string> {
+    const emailIdentifier = createEmailIdentifier(email)
+    const existingId = await this.findExistingEmailNotification(
+      userId,
+      NotificationType.AMBIGUOUS_MATCH,
+      emailIdentifier,
+    )
+
+    if (existingId) {
+      return existingId
+    }
+
     const jobList = matchedJobs
       .map((job, idx) => `${idx + 1}. ${job.title} at ${job.company}`)
       .join('\n')
@@ -35,6 +95,7 @@ export class NotificationService {
         title: 'Ambiguous Match',
         message: `Email from ${email.from} could match multiple jobs:\n\n${jobList}`,
         metadata: {
+          emailIdentifier,
           emailSubject: email.subject,
           emailFrom: email.from,
           emailDate: email.date.toISOString(),
@@ -71,6 +132,17 @@ export class NotificationService {
     classified: ClassifiedEmail,
     jobInfo: { company: string; title: string; location?: string }
   ): Promise<void> {
+    const emailIdentifier = createEmailIdentifier(email)
+    const existingId = await this.findExistingEmailNotification(
+      userId,
+      NotificationType.NEW_JOB_DETECTED,
+      emailIdentifier,
+    )
+
+    if (existingId) {
+      return
+    }
+
     await prisma.notification.create({
       data: {
         userId,
@@ -78,6 +150,7 @@ export class NotificationService {
         title: 'New Job Detected',
         message: `"${jobInfo.title}" at ${jobInfo.company}\nFound in email from ${email.from}`,
         metadata: {
+          emailIdentifier,
           emailSubject: email.subject,
           emailFrom: email.from,
           emailDate: email.date.toISOString(),
@@ -133,7 +206,8 @@ export class NotificationService {
    */
   async createSyncCompleteNotification(
     userId: string,
-    stats: SyncStats
+    stats: SyncStats,
+    jobChanges?: SyncCompleteJobChange[]
   ): Promise<void> {
     const parts: string[] = []
     if (stats.updatedJobs > 0) {
@@ -159,7 +233,9 @@ export class NotificationService {
         type: 'SYNC_COMPLETE',
         title: 'Sync Complete',
         message,
-        metadata: JSON.parse(JSON.stringify({ stats })),
+        metadata: JSON.parse(
+          JSON.stringify({ stats, jobChanges: jobChanges ?? [] })
+        ),
         actionUrl: '/jobs',
       },
     })
@@ -194,6 +270,17 @@ export class NotificationService {
     email: EmailMessage,
     classified: ClassifiedEmail
   ): Promise<string> {
+    const emailIdentifier = createEmailIdentifier(email)
+    const existingId = await this.findExistingEmailNotification(
+      userId,
+      NotificationType.NEW_JOB_DETECTED,
+      emailIdentifier,
+    )
+
+    if (existingId) {
+      return existingId
+    }
+
     const notification = await prisma.notification.create({
       data: {
         userId,
@@ -201,6 +288,7 @@ export class NotificationService {
         title: 'New Email Detected',
         message: `Email from ${email.from} about ${classified.jobInfo?.company || 'unknown company'}\nCouldn't match to existing job (insufficient information)`,
         metadata: {
+          emailIdentifier,
           emailSubject: email.subject,
           emailFrom: email.from,
           emailDate: email.date.toISOString(),

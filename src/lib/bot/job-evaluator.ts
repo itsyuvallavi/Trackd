@@ -22,7 +22,6 @@ import { buildSmartJdExcerpt, type JdFacts } from './jd-excerpt'
 import type { BotConfig } from '@prisma/client'
 import type { SearchJobResult, JobEvaluation } from './types'
 import type { ResumeStructuredData } from './resume/types'
-import { parseUserLocations } from './user-locations'
 import { preFilterJob } from './pre-filter'
 
 const EVALUATOR_MODEL = 'gpt-5-mini'
@@ -35,8 +34,8 @@ Rules:
 1. Score based on SKILL and EXPERIENCE FIT only. Assume location and seniority are already acceptable — they have been pre-checked.
 2. If the description mandates a primary technology ecosystem the candidate's resume does not mention (e.g. N+ years of a specific language/framework), score below 45 unless it is marked optional / "nice to have".
 3. If the description mandates a spoken language NOT in the candidate's language list, it is a significant negative.
-4. Do not inflate the score just because the job title matches keywords — the description must also align.
-5. If the description is short or empty: score from the Title and Company. A title with the user's keywords from a company in their target region is a 76–80. Only go below 50 if the title clearly signals a wrong primary stack (e.g. "PHP Developer" when the resume only shows React/TS).
+4. Do not inflate the score just because the job title matches keywords — the description must substantively align when text exists.
+5. If the description is empty or under ~80 characters: you have almost no evidence of stack fit — cap the score at 55 even when the title matches (title-only is not a "Good" match). Below 50 when the title clearly signals a wrong primary stack (e.g. "PHP Developer" when the resume only shows React/TS).
 6. Never penalise on location or seniority — those are handled elsewhere.
 
 Your "reasoning" MUST cite at least one concrete phrase from the description, title, or company. If you cannot cite one, cap the score at 40.`
@@ -98,7 +97,6 @@ function buildEvalPrompt(
   resume: ResumeStructuredData | null
 ): string {
   const userLocations = config.locations.filter(Boolean)
-  const parsedLoc = parseUserLocations(userLocations)
 
   // Build a human-readable location line. Expand "Europe" and "EU" inline so the
   // LLM sees the specific country names and cannot string-match against "Italy" or
@@ -112,11 +110,8 @@ function buildEvalPrompt(
       if (lower === 'europe' || lower === 'emea' || lower === 'remote europe' || lower === 'remote emea') {
         return (
           loc +
-          ' (= ALL European countries: Germany, France, Spain, Italy, UK/England/Scotland/Wales, ' +
-          'Netherlands, Belgium, Ireland, Sweden, Norway, Denmark, Finland, Poland, Austria, ' +
-          'Switzerland, Czechia/Czech Republic, Romania, Hungary, Greece, Bulgaria, Croatia, ' +
-          'Serbia, Portugal, Lithuania, Latvia, Estonia, Slovakia, Slovenia, Luxembourg, Malta, ' +
-          'Cyprus, Iceland, and every other European nation and city therein)'
+          ' (= remote-first hiring across Europe unless the JD requires on-site only in a city you listed in Target locations, e.g. Lisbon or Porto. ' +
+          'Geographic scope includes EU/EEA, UK, Switzerland, and other European countries.)'
         )
       }
       if (lower === 'eu') {
@@ -178,8 +173,6 @@ ${resume.education.map((e) => `  - ${e.degree} in ${e.field ?? 'N/A'} from ${e.i
 
   const minScore = config.minScore
   const jd = buildSmartJdExcerpt(job.description)
-  // Compact verbatim list for the bottom reminder line
-  const locationsDisplay = userLocations.length > 0 ? userLocations.join(', ') : 'Any'
 
   return `You are evaluating job listings for a job seeker. Score this job 0-100 and decide if they should apply.
 
@@ -394,28 +387,18 @@ export async function evaluateJob(job: SearchJobResult, config: BotConfig): Prom
     scoringInputsFinal = { ...scoringInputsFinal, seniorityClamp: seniorityClamp.clampMeta }
   }
 
-  // Binary gate: if every deterministic clamp passed (none fired a hard cap) and
-  // the LLM's raw score is ≥ 40 (i.e. no strong "totally wrong job" signal), bump
-  // the score to minScore + 1 so it reaches the queue for manual review.
-  // The deterministic clamps are the authoritative yes/no on location, seniority,
-  // stack, language, and US-only signals. A fuzzy LLM score of 70 vs 76 is noise —
-  // it should not be the deciding factor after all binary checks have passed.
-  const anyClampFired =
-    !!stackClamp.clampMeta?.applied ||
-    !!langClamp.clampMeta?.applied ||
-    !!geoClamp.clampMeta?.applied ||
-    !!seniorityClamp.clampMeta?.applied
+  const jdLenThin = (job.description ?? '').trim().length
+  const isThinJd = jdLenThin < 80
 
-  if (!anyClampFired && evaluation.score >= 40 && evaluation.score < threshold) {
-    const boostedScore = threshold + 1
+  if (isThinJd && evaluation.score > 55) {
     evaluation = {
       ...evaluation,
-      score: boostedScore,
-      shouldApply: true,
-      flags: [...evaluation.flags, 'clamp_pass_boost'],
+      score: 55,
+      shouldApply: 55 >= threshold,
+      flags: Array.from(new Set([...evaluation.flags, 'thin_jd'])),
       reasoning:
-        evaluation.reasoning +
-        ' [All deterministic checks passed (location, seniority, stack, language). Score boosted for manual review.]',
+        (evaluation.reasoning || '') +
+        ' [Description under 80 characters — score capped at 55 (insufficient evidence).]',
     }
   }
 

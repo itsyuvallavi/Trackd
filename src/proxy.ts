@@ -9,8 +9,14 @@ const protectedRoutes = ['/jobs', '/board', '/today', '/settings', '/onboarding'
 const authRoutes = ['/login', '/signup']
 
 export async function proxy(request: NextRequest) {
-  const { supabaseResponse, user } = await updateSession(request)
   const path = request.nextUrl.pathname
+  const isApiRoute = path.startsWith('/api/')
+  const isProtectedRoute = isRouteMatch(path, protectedRoutes)
+  const isAuthRoute = isRouteMatch(path, authRoutes)
+  const shouldAuthenticate = shouldAuthenticateInProxy(path)
+  const { supabaseResponse, user } = await updateSession(request, {
+    authenticate: shouldAuthenticate,
+  })
 
   // If Supabase is not configured, allow all routes through
   // (this allows the app to deploy even without Supabase env vars)
@@ -24,8 +30,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // Handle route protection and redirects for non-API routes
-  if (!path.startsWith('/api/')) {
-    const isProtectedRoute = protectedRoutes.some((route) => path === route || path.startsWith(`${route}/`))
+  if (!isApiRoute) {
     if (isProtectedRoute && !user) {
       const redirectUrl = new URL('/login', request.url)
       redirectUrl.searchParams.set('next', path)
@@ -38,14 +43,12 @@ export async function proxy(request: NextRequest) {
       (user.user_metadata as Record<string, unknown>)['onboarding_completed'] === true
 
     const isOnboardingRoute = path === '/onboarding' || path.startsWith('/onboarding/')
-    const isApiRoute = path.startsWith('/api/')
 
     if (user && !hasCompletedOnboarding && !isOnboardingRoute && !isApiRoute) {
       const onboardingUrl = new URL('/onboarding', request.url)
       return NextResponse.redirect(onboardingUrl)
     }
 
-    const isAuthRoute = authRoutes.some((route) => path === route || path.startsWith(`${route}/`))
     if (isAuthRoute && user) {
       return NextResponse.redirect(new URL('/jobs', request.url))
     }
@@ -57,18 +60,34 @@ export async function proxy(request: NextRequest) {
   return applyRateLimiting(request, supabaseResponse, user, path)
 }
 
+export function shouldAuthenticateInProxy(pathname: string): boolean {
+  if (pathname.startsWith('/api/resume/upload')) {
+    return true
+  }
+
+  if (pathname.startsWith('/api/')) {
+    return false
+  }
+
+  return isRouteMatch(pathname, protectedRoutes) || isRouteMatch(pathname, authRoutes)
+}
+
+function isRouteMatch(pathname: string, routes: string[]): boolean {
+  return routes.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+}
+
 /**
  * Apply rate limiting to API routes
  */
 function applyRateLimiting(
   request: NextRequest,
   supabaseResponse: NextResponse,
-  user: any,
+  user: { id: string } | null,
   pathname: string
 ): NextResponse {
   // Get client IP address
   // Note: request.ip is available in middleware but TypeScript may not recognize it
-  const ip = (request as any).ip || 
+  const ip = (request as NextRequest & { ip?: string }).ip ||
     request.headers.get('x-forwarded-for')?.split(',')[0] || 
     request.headers.get('x-real-ip') || 
     'unknown'
@@ -88,18 +107,10 @@ function applyRateLimiting(
     identifier = `upload:${user.id}`
     limitConfig = RATE_LIMITS.upload
   }
-  // Extension endpoints - per extension key
-  else if (pathname.startsWith('/api/extension/')) {
-    const extensionKey = request.headers.get('X-Extension-Key')
-    if (!extensionKey) {
-      // If no key, rate limit by IP
-      identifier = `extension:ip:${ip}`
-      limitConfig = RATE_LIMITS.extension
-    } else {
-      // Rate limit by extension key
-      identifier = `extension:key:${extensionKey}`
-      limitConfig = RATE_LIMITS.extension
-    }
+  // Extension endpoints - pre-auth throttle by IP before any route does key lookup.
+  else if (pathname.startsWith('/api/extension/') || request.headers.has('X-Extension-Key')) {
+    identifier = `extension:ip:${ip}`
+    limitConfig = RATE_LIMITS.extension
   }
   // Auth endpoints - per IP
   else if (pathname.startsWith('/api/auth/')) {
@@ -108,8 +119,11 @@ function applyRateLimiting(
   }
   // General API endpoints - per user or IP
   else {
+    const sessionIdentifier = sessionRateLimitIdentifier(request)
     if (user) {
       identifier = `api:user:${user.id}`
+    } else if (sessionIdentifier) {
+      identifier = `api:session:${sessionIdentifier}`
     } else {
       identifier = `api:ip:${ip}`
     }
@@ -159,6 +173,26 @@ function applyRateLimiting(
   return response
 }
 
+export function sessionRateLimitIdentifier(request: NextRequest): string | null {
+  const sessionCookie = request.cookies
+    .getAll()
+    .find((cookie) => cookie.name.startsWith('sb-') && cookie.name.endsWith('-auth-token'))
+
+  if (!sessionCookie?.value) {
+    return null
+  }
+
+  return stableHash(sessionCookie.value)
+}
+
+function stableHash(value: string): string {
+  let hash = 5381
+  for (let index = 0; index < value.length; index++) {
+    hash = ((hash << 5) + hash) ^ value.charCodeAt(index)
+  }
+  return (hash >>> 0).toString(36)
+}
+
 export const config = {
   matcher: [
     /*
@@ -171,5 +205,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
-
-

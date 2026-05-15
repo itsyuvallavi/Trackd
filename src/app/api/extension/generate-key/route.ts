@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid'
-import { createHash } from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
+import { hashExtensionKey } from '@/lib/extension-jobs'
 
 // GET: Fetch current extension key info (without the full key)
 export async function GET() {
@@ -54,7 +54,7 @@ export async function POST() {
 
     // Generate new key: tk_ + 32 random chars
     const key = `tk_${nanoid(32)}`
-    const keyHash = createHash('sha256').update(key).digest('hex')
+    const keyHash = hashExtensionKey(key)
     const keyPrefix = key.slice(0, 10) // "tk_a1b2c3"
 
     // Delete existing key (if any) and create new one
@@ -75,4 +75,3 @@ export async function POST() {
     )
   }
 }
-

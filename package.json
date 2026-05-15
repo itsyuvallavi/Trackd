@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001 --hostname 0.0.0.0",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
@@ -22,6 +22,8 @@
     "test:bot:dry": "bun run scripts/test-bot-search.ts --dry-run",
     "test:bot:snap": "bun run scripts/test-bot-search.ts --dry-run --save-snapshot",
     "test:bot:replay": "bun run scripts/test-bot-search.ts --dry-run --from-snapshot",
+    "test:routes": "tsx scripts/smoke-routes.ts",
+    "check:google-auth": "tsx scripts/check-google-auth-config.ts",
     "bot:us-report": "bun run scripts/bot-jobs-us-report.ts",
     "reset:jobs": "bun run scripts/wipe-user-job-data.ts",
     "test:auto-apply": "bun run scripts/test-auto-apply-local.ts",

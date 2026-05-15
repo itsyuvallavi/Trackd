@@ -44,7 +44,6 @@ export interface SearchRequest {
   exclude_companies?: string[]
   exclude_keywords?: string[]
   results_wanted?: number
-  platforms?: string[]
   experience_level?: string | null
   proxy?: string | null
 }

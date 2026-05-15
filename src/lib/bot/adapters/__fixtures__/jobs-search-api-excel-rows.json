@@ -1,0 +1,15 @@
+[
+  {
+    "Job Title": "Data Analyst",
+    "Company Name": "Numbers Inc",
+    "Job URL": "https://jobs.example.com/numbers/data-analyst",
+    "Job Location": "Boston, MA",
+    "Job Description": "Analyze product usage data.",
+    "Site Name": "Glassdoor"
+  },
+  {
+    "Job Title": "Nameless Employer Role",
+    "Job URL": "https://jobs.example.com/no-company",
+    "Site Name": "LinkedIn"
+  }
+]

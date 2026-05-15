@@ -35,27 +35,30 @@ export function botSearchSourceAllowed(
 
 /** Used by cron, triggerBotSearch, orchestrator — enough backends for the active allowlist + keys. */
 export function botSearchHasQueryableBackend(): boolean {
-  const allow = botSearchSourcesAllowlist()
-  const ok = (t: BotSearchSourceToken, fn: () => boolean) =>
-    botSearchSourceAllowed(allow, t) && fn()
+  const backends = effectiveSearchBackends()
 
-  if (
-    ok('jsearch', () => !!(process.env.JSEARCH_API_KEY ?? '').trim()) ||
-    ok('jobs_search_api', () => jobsSearchApiRapidApiKey().length > 0)
-  ) {
-    return true
+  return backends.jsearch || backends.jobsSearchApi
+}
+
+/** Backend booleans after applying both env keys and `BOT_SEARCH_SOURCES`. */
+export function effectiveSearchBackends(): { jsearch: boolean; jobsSearchApi: boolean } {
+  const allow = botSearchSourcesAllowlist()
+
+  return {
+    jsearch: botSearchSourceAllowed(allow, 'jsearch') && !!(process.env.JSEARCH_API_KEY ?? '').trim(),
+    jobsSearchApi:
+      botSearchSourceAllowed(allow, 'jobs_search_api') && jobsSearchApiRapidApiKey().length > 0,
   }
-  return false
 }
 
 /** Which adapters will actually run (for CLI / bot preview text). */
 export function effectiveSearchBackendLabels(): string[] {
-  const allow = botSearchSourcesAllowlist()
+  const backends = effectiveSearchBackends()
   const lines: string[] = []
-  if (botSearchSourceAllowed(allow, 'jsearch') && (process.env.JSEARCH_API_KEY ?? '').trim()) {
+  if (backends.jsearch) {
     lines.push('JSearch')
   }
-  if (botSearchSourceAllowed(allow, 'jobs_search_api') && jobsSearchApiRapidApiKey().length > 0) {
+  if (backends.jobsSearchApi) {
     lines.push('Jobs Search API (getjobs_excel)')
   }
   return lines

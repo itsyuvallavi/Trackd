@@ -1,33 +1,20 @@
 import { prisma } from '@/lib/prisma'
-import { fetchEmailsSinceForIntegration } from '@/lib/fetch-emails-integration'
+import { fetchEmailsSinceForIntegration, MAX_OAUTH_MESSAGES } from '@/lib/fetch-emails-integration'
 import { EmailClassifier, EmailType } from '@/lib/email-classifier'
 import { AIClassifier } from '@/lib/ai-email-classifier'
 import { AIJobMatcher } from '@/lib/ai-job-matcher'
 import { ActivityType, JobStatus } from '@prisma/client'
-import { NotificationService } from '@/lib/notification-service'
-import { createHash } from 'crypto'
+import { NotificationService, type SyncCompleteJobChange } from '@/lib/notification-service'
+import { createEmailIdentifier } from '@/lib/email-identifiers'
 import { parseInterviewDateTime } from '@/lib/utils/interview-date-parser'
 import { alignEmailSyncLowerBound } from '@/lib/email-sync-window'
+import { buildEmailSyncCursorUpdate } from '@/lib/email-sync-cursor'
 
 // Feature flags
 const USE_AI_CLASSIFIER = process.env.ENABLE_AI_CLASSIFICATION === 'true'
 const USE_AI_MATCHING = process.env.ENABLE_AI_MATCHING === 'true'
 
-/**
- * Create a unique identifier for an email to prevent duplicate processing
- */
-function createEmailIdentifier(email: { id?: string; subject: string; from: string; date: Date }): string {
-  // Use messageId if available (most reliable)
-  if (email.id && email.id.includes('@') && !email.id.includes('Date.now()')) {
-    return email.id
-  }
-  
-  // Otherwise, create a hash from subject + from + date
-  // Normalize the date to the day (ignore time) to handle timezone differences
-  const dateStr = email.date.toISOString().split('T')[0] // YYYY-MM-DD
-  const hashInput = `${email.subject}|${email.from}|${dateStr}`
-  return createHash('sha256').update(hashInput).digest('hex').substring(0, 32)
-}
+export { createEmailIdentifier } from '@/lib/email-identifiers'
 
 /**
  * Check if an email has already been processed for a specific job
@@ -80,6 +67,7 @@ export async function syncEmailsForUser(userId: string) {
     }
 
     let syncSince: Date
+    let currentLastSyncedAt = integration.lastSyncedAt
     if (!integration.lastSyncedAt) {
       syncSince = alignEmailSyncLowerBound(
         new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
@@ -97,6 +85,7 @@ export async function syncEmailsForUser(userId: string) {
           where: { userId },
           data: { lastSyncedAt: syncSince },
         })
+        currentLastSyncedAt = syncSince
         console.log(`📅 Sync window from ${syncSince.toISOString()} (reset)`)
       } else {
         syncSince = alignEmailSyncLowerBound(lastSync)
@@ -138,6 +127,7 @@ export async function syncEmailsForUser(userId: string) {
     const keywordClassifier = new EmailClassifier() // Keep for matchToJob method (fallback)
     const aiMatcher = USE_AI_MATCHING ? new AIJobMatcher() : null
     const notificationService = new NotificationService()
+    const jobChanges: SyncCompleteJobChange[] = []
     let updatedCount = 0
     let processedCount = 0
     let skippedCount = 0
@@ -149,6 +139,7 @@ export async function syncEmailsForUser(userId: string) {
     let newJobsDetectedCount = 0
     let noMatchesCount = 0
     let notificationsCreatedCount = 0
+    let processingErrorsCount = 0
 
     console.log(`Processing ${emails.length} emails...`)
     for (let i = 0; i < emails.length; i++) {
@@ -261,9 +252,14 @@ export async function syncEmailsForUser(userId: string) {
                     ...(interviewAt ? { interviewAt } : {}),
                   },
                 })
-              } catch (updateError: any) {
+              } catch (updateError: unknown) {
                 // Handle case where job was deleted between matching and updating
-                if (updateError?.code === 'P2025') {
+                if (
+                  typeof updateError === 'object' &&
+                  updateError !== null &&
+                  'code' in updateError &&
+                  updateError.code === 'P2025'
+                ) {
                   console.log(`Warning: Job ${matchResult.jobId} was deleted, skipping update`)
                   continue
                 }
@@ -309,6 +305,16 @@ export async function syncEmailsForUser(userId: string) {
                   // @ts-expect-error - metadata field exists in database but may not be in generated types yet
                   metadata: activityMetadata,
                 },
+              })
+
+              jobChanges.push({
+                jobId: matchResult.jobId,
+                title: job.title,
+                company: job.company,
+                oldStatus: oldStatus,
+                newStatus: classified.suggestedStatus,
+                emailSubject: email.subject,
+                interviewAtIso: interviewAt ? interviewAt.toISOString() : null,
               })
 
               // Timeline already records the update; skip JOB_UPDATED notification to avoid duplicating the dashboard bell + feed
@@ -419,6 +425,7 @@ export async function syncEmailsForUser(userId: string) {
           }
         }
       } catch (error) {
+        processingErrorsCount++
         console.error(`Error processing email "${email.subject}":`, error)
         // Continue processing other emails
       }
@@ -429,17 +436,30 @@ export async function syncEmailsForUser(userId: string) {
     console.log(`  - New jobs detected: ${newJobsDetectedCount}`)
     console.log(`  - Ambiguous matches: ${ambiguousMatchesCount}`)
     console.log(`  - No matches: ${noMatchesCount}`)
+    console.log(`  - Processing errors: ${processingErrorsCount}`)
 
-    // Update last synced timestamp
-    console.log('Updating last synced timestamp...')
+    const cursorUpdate = buildEmailSyncCursorUpdate({
+      currentLastSyncedAt,
+      fetchedEmailsCount: emails.length,
+      maxFetchedEmails: MAX_OAUTH_MESSAGES,
+      processingErrorsCount,
+    })
+
+    // Only advance the cursor after a complete run. OAuth providers cap messages
+    // per request, and per-email errors are retried on the next scan.
+    console.log('Updating sync status...')
     await prisma.emailIntegration.update({
       where: { userId },
       data: {
-        lastSyncedAt: new Date(),
-        lastError: null,
+        lastSyncedAt: cursorUpdate.nextLastSyncedAt,
+        lastError: cursorUpdate.lastError,
       },
     })
-    console.log('✓ Last synced timestamp updated')
+    console.log(
+      cursorUpdate.completedFullWindow
+        ? '✓ Last synced timestamp advanced'
+        : '⚠️ Partial sync recorded; last synced timestamp was not advanced',
+    )
 
     const stats = {
       totalEmails: emails.length,
@@ -453,10 +473,12 @@ export async function syncEmailsForUser(userId: string) {
       skippedOther: skippedOtherCount,
       skippedLowConfidence: skippedLowConfidenceCount,
       syncSince: syncSince.toISOString(),
+      processingErrors: processingErrorsCount,
+      partial: !cursorUpdate.completedFullWindow,
     }
 
     // Create sync complete notification
-    await notificationService.createSyncCompleteNotification(userId, stats)
+    await notificationService.createSyncCompleteNotification(userId, stats, jobChanges)
     notificationsCreatedCount++ // Sync complete notification
 
     const syncCompletedAt = new Date()
@@ -489,6 +511,9 @@ export async function syncEmailsForUser(userId: string) {
         details: {
           syncSince: syncSince.toISOString(),
           jobsCount: jobs.length,
+          partial: !cursorUpdate.completedFullWindow,
+          processingErrors: processingErrorsCount,
+          reachedFetchCap: cursorUpdate.reachedFetchCap,
         },
       },
       })
@@ -562,7 +587,7 @@ export async function syncEmailsForUser(userId: string) {
  * Determine if we should update the job status based on the current and suggested status
  * Only advance status, never go backwards
  */
-function shouldUpdateStatus(
+export function shouldUpdateStatus(
   currentStatus: JobStatus | undefined,
   suggestedStatus: JobStatus
 ): boolean {

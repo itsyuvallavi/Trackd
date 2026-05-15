@@ -6,32 +6,35 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Chrome } from 'lucide-react'
+import { safeAuthRedirectPath } from '@/lib/auth-callback'
 
 interface LoginFormProps {
   next: string
+  initialError?: string | null
 }
 
-export function LoginForm({ next }: LoginFormProps) {
+export function LoginForm({ next, initialError = null }: LoginFormProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(initialError)
 
   const router = useRouter()
   const supabase = createClient()
+  const safeNext = safeAuthRedirectPath(next)
 
   async function handleGoogleSignIn() {
     setIsLoading(true)
     setError(null)
 
     console.log('Starting Google OAuth sign in...')
-    console.log('Redirect URL:', `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`)
+    console.log('Redirect URL:', `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext)}`)
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(
-          next,
+            safeNext,
         )}`,
       },
     })
@@ -80,7 +83,7 @@ export function LoginForm({ next }: LoginFormProps) {
         (data.user.user_metadata as Record<string, unknown>)['onboarding_completed'] === true
 
       // Redirect to onboarding if not completed, otherwise to the requested page
-      const redirectTo = hasCompletedOnboarding ? next : '/onboarding'
+      const redirectTo = hasCompletedOnboarding ? safeNext : '/onboarding'
       router.push(redirectTo)
       router.refresh()
     }
@@ -145,5 +148,3 @@ export function LoginForm({ next }: LoginFormProps) {
     </div>
   )
 }
-
-

@@ -7,7 +7,7 @@ import { alignEmailSyncLowerBound } from '@/lib/email-sync-window'
 
 const TOKEN_SKEW_MS = 5 * 60 * 1000
 /** Cap per sync to stay within serverless time limits */
-const MAX_OAUTH_MESSAGES = 400
+export const MAX_OAUTH_MESSAGES = 400
 
 function decodeBase64Url(data: string): string {
   const pad = data.length % 4 === 0 ? '' : '='.repeat(4 - (data.length % 4))
