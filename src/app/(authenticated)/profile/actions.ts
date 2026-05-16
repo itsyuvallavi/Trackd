@@ -82,7 +82,9 @@ export async function updateApplicationProfile(formData: FormData) {
     },
   })
 
+  const tags = cacheTagsFor(user.id)
+  revalidateTag(tags.bot, { expire: 0 })
   revalidatePath('/profile')
+  revalidatePath('/bot/identity')
 }
-
 

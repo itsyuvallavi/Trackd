@@ -11,7 +11,7 @@ export const maxDuration = 300
 
 /**
  * Cron: run the job search bot for all active BotConfig users.
- * Schedule: twice daily (08:00 + 20:00 UTC).
+ * Production on Vercel Hobby is scheduled once daily at 08:00 UTC.
  */
 export async function GET(request: Request) {
   if (!isCronRequestAuthorized(request.headers)) {

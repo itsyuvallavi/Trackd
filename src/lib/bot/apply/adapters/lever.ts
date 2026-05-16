@@ -49,16 +49,19 @@ export async function fillLeverApplication(
     return false
   }
 
+  const applicantName = profile?.applicationFullName?.trim() || resume?.name?.trim()
+  const applicantEmail = profile?.applicationEmail?.trim() || resume?.email?.trim()
+
   // Lever standard fields
-  if (resume?.name) {
-    const parts = resume.name.trim().split(' ')
-    await tryFill('input[name="name"]', resume.name)
+  if (applicantName) {
+    const parts = applicantName.split(' ')
+    await tryFill('input[name="name"]', applicantName)
     // Some Lever forms use separate first/last
     await tryFill('input[name="first_name"]', parts[0] ?? '')
     await tryFill('input[name="last_name"]', parts.slice(1).join(' ') || (parts[0] ?? ''))
   }
 
-  await tryFill('input[name="email"]', resume?.email ?? null)
+  await tryFill('input[name="email"]', applicantEmail ?? null)
   await tryFill('input[name="phone"]', profile?.phone ?? null)
   await tryFill('input[name="org"]', null) // current company — leave blank
   await tryFill('input[name="location"]', profile?.city ? `${profile.city}, ${profile.state ?? ''}`.trim() : null)

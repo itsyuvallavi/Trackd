@@ -1,0 +1,111 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { BotSearchFrequency } from '@prisma/client'
+
+const mocks = vi.hoisted(() => ({
+  requireAuth: vi.fn(),
+  botConfigUpsert: vi.fn(),
+  botConfigFindUnique: vi.fn(),
+  revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+  verifyTelegramChatId: vi.fn(),
+  executeBotRunForConfig: vi.fn(),
+  botSearchHasQueryableBackend: vi.fn(),
+}))
+
+vi.mock('next/cache', () => ({
+  revalidatePath: mocks.revalidatePath,
+  revalidateTag: mocks.revalidateTag,
+}))
+
+vi.mock('@/lib/auth', () => ({
+  requireAuth: mocks.requireAuth,
+}))
+
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    botConfig: {
+      upsert: mocks.botConfigUpsert,
+      findUnique: mocks.botConfigFindUnique,
+    },
+  },
+}))
+
+vi.mock('@/lib/bot/telegram', () => ({
+  verifyTelegramChatId: mocks.verifyTelegramChatId,
+}))
+
+vi.mock('@/lib/bot/execute-bot-run', () => ({
+  executeBotRunForConfig: mocks.executeBotRunForConfig,
+}))
+
+vi.mock('@/lib/bot/bot-search-sources', () => ({
+  botSearchHasQueryableBackend: mocks.botSearchHasQueryableBackend,
+}))
+
+function form(overrides: Partial<import('./bot-actions').BotConfigFormData> = {}) {
+  return {
+    keywords: ['Frontend Engineer'],
+    locations: ['Remote'],
+    excludeCompanies: [],
+    excludeKeywords: [],
+    spokenLanguages: ['English'],
+    remoteOnly: true,
+    experienceLevel: 'mid_level',
+    salaryMin: 120000,
+    isActive: true,
+    searchFrequency: 'DAILY' as BotSearchFrequency,
+    telegramChatId: '',
+    minScore: 75,
+    ...overrides,
+  }
+}
+
+describe('bot settings actions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.requireAuth.mockResolvedValue({ id: 'user_1', email: 'user@example.com' })
+    mocks.botConfigUpsert.mockResolvedValue({})
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('does not persist the server-wide Telegram chat ID when the user leaves chat ID blank', async () => {
+    vi.stubEnv('TELEGRAM_CHAT_ID', 'global-test-chat')
+
+    const { saveBotConfig } = await import('./bot-actions')
+    await saveBotConfig(form({ telegramChatId: '   ' }))
+
+    expect(mocks.botConfigUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          userId: 'user_1',
+          telegramChatId: null,
+        }),
+        update: expect.objectContaining({
+          telegramChatId: null,
+        }),
+      }),
+    )
+  })
+
+  it('persists only the explicit per-user Telegram chat ID', async () => {
+    vi.stubEnv('TELEGRAM_CHAT_ID', 'global-test-chat')
+
+    const { saveBotConfig } = await import('./bot-actions')
+    await saveBotConfig(form({ telegramChatId: '  user-chat-123  ' }))
+
+    expect(mocks.botConfigUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          userId: 'user_1',
+          telegramChatId: 'user-chat-123',
+        }),
+        update: expect.objectContaining({
+          telegramChatId: 'user-chat-123',
+        }),
+      }),
+    )
+  })
+})

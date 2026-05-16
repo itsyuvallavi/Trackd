@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useTransition } from 'react'
-import { Trash2, Upload, FileText, Star, ChevronDown, ChevronUp } from 'lucide-react'
+import { AlertCircle, Trash2, Upload, FileText, Star, ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ResumeStructuredData } from '@/lib/bot/resume/types'
 
@@ -77,7 +77,12 @@ export function BotResumeManager({ initialResumes }: BotResumeManagerProps) {
       setFile(null)
       setIsDefault(false)
       if (fileRef.current) fileRef.current.value = ''
-      flashMessage(`"${newResume.label}" uploaded and parsed successfully`)
+      flashMessage(
+        newResume.structuredData
+          ? `"${newResume.label}" uploaded and parsed successfully`
+          : `"${newResume.label}" uploaded, but AI parsing did not complete. It will not improve scoring until re-uploaded after parsing is available.`,
+        !newResume.structuredData,
+      )
     })
   }
 
@@ -125,11 +130,21 @@ export function BotResumeManager({ initialResumes }: BotResumeManagerProps) {
                           <Star className="size-2.5 fill-current" /> default
                         </span>
                       )}
+                      {!sd && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] text-warning-text">
+                          <AlertCircle className="size-2.5" /> not parsed
+                        </span>
+                      )}
                     </div>
                     <p className="text-[11px] text-muted-foreground truncate">{resume.fileName}</p>
                     {resume.matchKeywords.length > 0 && (
                       <p className="text-[11px] text-muted-foreground">
                         Triggers on: {resume.matchKeywords.join(', ')}
+                      </p>
+                    )}
+                    {!sd && (
+                      <p className="text-[11px] text-warning-text">
+                        This PDF is stored but unavailable to AI scoring.
                       </p>
                     )}
                   </div>

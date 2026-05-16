@@ -208,4 +208,41 @@ describe('runBotSearch orchestration', () => {
       skippedPreviouslyDismissed: 0,
     })
   })
+
+  it('does not count approved jobs that fail to save into the queue', async () => {
+    const approved = job({
+      title: 'Approved But Unsaved Role',
+      company: 'WriteFailCo',
+      url: 'https://example.com/write-fail',
+    })
+
+    mocks.runSearch.mockResolvedValue(searchResponse([approved]))
+    mocks.jobFindMany.mockResolvedValue([])
+    mocks.evaluateJob.mockResolvedValue({
+      evaluation: {
+        score: 91,
+        shouldApply: true,
+        reasoning: 'Strong match.',
+        flags: ['good_match'],
+      },
+      scoringInputs: { source: 'test' },
+    })
+    mocks.jobCreate.mockRejectedValue(new Error('database write failed'))
+
+    const { runBotSearch } = await import('./search-orchestrator')
+    const result = await runBotSearch(config(), 'user_1')
+
+    expect(mocks.evaluateJob).toHaveBeenCalledTimes(1)
+    expect(mocks.jobCreate).toHaveBeenCalledTimes(1)
+    expect(result).toMatchObject({
+      jobsFound: 1,
+      jobsNew: 0,
+      jobsEvaluated: 1,
+      jobsApproved: 0,
+      jobsSkippedLowScore: 0,
+    })
+    expect(result.errors).toEqual({
+      'save_Approved But Unsaved Role': 'database write failed',
+    })
+  })
 })

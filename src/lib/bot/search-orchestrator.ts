@@ -509,7 +509,6 @@ export async function runBotSearch(
             scoringInputs = si as unknown as Prisma.InputJsonValue
             evaluated = true
             result.jobsEvaluated++
-            if (shouldApply) result.jobsApproved++
           } catch (evalErr) {
             const errMsg = evalErr instanceof Error ? evalErr.message : String(evalErr)
             pushLog('warn', `Eval failed for "${job.title}"`, errMsg)
@@ -644,6 +643,7 @@ export async function runBotSearch(
         })
         result.jobsNew++
         if (evaluated && shouldApply) {
+          result.jobsApproved++
           const flagStr = flags.length ? flags.join(', ') : 'none'
           pushLog(
             'info',

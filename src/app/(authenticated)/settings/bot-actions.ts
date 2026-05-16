@@ -28,9 +28,7 @@ export interface BotConfigFormData {
 export async function saveBotConfig(data: BotConfigFormData) {
   const user = await requireAuth()
 
-  // Fall back to server-side TELEGRAM_CHAT_ID env var if user hasn't set one
-  const resolvedChatId =
-    data.telegramChatId.trim() || process.env.TELEGRAM_CHAT_ID || null
+  const resolvedChatId = data.telegramChatId.trim() || null
 
   const salaryMin =
     data.salaryMin != null && Number.isFinite(data.salaryMin)

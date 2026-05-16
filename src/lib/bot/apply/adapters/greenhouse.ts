@@ -50,16 +50,19 @@ export async function fillGreenhouseApplication(
     return false
   }
 
+  const applicantName = profile?.applicationFullName?.trim() || resume?.name?.trim()
+  const applicantEmail = profile?.applicationEmail?.trim() || resume?.email?.trim()
+
   // Name fields (Greenhouse uses first_name / last_name)
-  if (resume?.name) {
-    const parts = resume.name.trim().split(' ')
+  if (applicantName) {
+    const parts = applicantName.split(' ')
     const firstName = parts[0] ?? ''
     const lastName = parts.slice(1).join(' ') || (parts[0] ?? '')
     await tryFill('#first_name', firstName)
     await tryFill('#last_name', lastName)
   }
 
-  await tryFill('#email', resume?.email ?? null)
+  await tryFill('#email', applicantEmail ?? null)
   await tryFill('#phone', profile?.phone ?? null)
   await tryFill('#job_application_location', profile?.city ? `${profile.city}, ${profile.state ?? ''}`.trim() : null)
 

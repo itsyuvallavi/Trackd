@@ -88,4 +88,95 @@ describe('evaluateJob minScore behavior', () => {
     expect(result.evaluation.shouldApply).toBe(false)
     expect(result.evaluation.flags).not.toContain('clamp_pass_boost')
   })
+
+  it('uses the structured resume whose keywords match the job title', async () => {
+    findManyMock.mockResolvedValue([
+      {
+        id: 'resume_backend',
+        label: 'Backend',
+        matchKeywords: ['backend', 'node'],
+        isDefault: false,
+        structuredData: {
+          name: 'Candidate',
+          email: 'candidate@example.com',
+          phone: null,
+          location: null,
+          linkedin: null,
+          github: null,
+          portfolio: null,
+          summary: 'Backend engineer',
+          skills: ['Node.js'],
+          languages: [],
+          experience: [],
+          education: [],
+          certifications: [],
+        },
+      },
+      {
+        id: 'resume_frontend',
+        label: 'Frontend',
+        matchKeywords: ['frontend', 'react'],
+        isDefault: true,
+        structuredData: {
+          name: 'Candidate',
+          email: 'candidate@example.com',
+          phone: null,
+          location: null,
+          linkedin: null,
+          github: null,
+          portfolio: null,
+          summary: 'Frontend engineer',
+          skills: ['React', 'TypeScript'],
+          languages: [],
+          experience: [
+            {
+              company: 'Acme',
+              title: 'Frontend Engineer',
+              startDate: '2022',
+              endDate: 'Present',
+              description: 'Built React TypeScript product workflows.',
+              achievements: [],
+            },
+          ],
+          education: [],
+          certifications: [],
+        },
+      },
+    ])
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 88,
+                reasoning: 'The listing asks for "React TypeScript" work.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'React and TypeScript experience',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJob } = await import('./job-evaluator')
+    const result = await evaluateJob(
+      job({
+        title: 'Senior Frontend React Developer',
+        description:
+          'Build product interfaces with React TypeScript, accessibility, API integrations, and testing.',
+      }),
+      cfg({ minScore: 75 }),
+    )
+
+    expect(result.evaluation.shouldApply).toBe(true)
+    expect(result.scoringInputs.resumeUsed).toMatchObject({
+      resumeId: 'resume_frontend',
+      label: 'Frontend',
+      selection: 'matched_by_keywords',
+      skillsSentToPrompt: ['React', 'TypeScript'],
+    })
+  })
 })
