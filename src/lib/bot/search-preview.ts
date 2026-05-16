@@ -2,16 +2,13 @@ import {
   BOT_SEARCH_KEYWORD_OR_MAX,
   BOT_SEARCH_LOCATION_PASSES_MAX,
   BOT_SEARCH_RESULTS_WANTED,
-  describeJSearchDateWindow,
 } from '@/lib/bot/search-constants'
 import {
   jobsSearchApiSearchHint,
-  jsearchJobRequirementsFor,
   normalizeExperienceLevel,
 } from '@/lib/bot/experience-level'
 
 export type BotSearchBackends = {
-  jsearch: boolean
   /** RapidAPI Jobs Search API — POST getjobs_excel (multi-board). */
   jobsSearchApi: boolean
 }
@@ -21,7 +18,6 @@ export type BotSearchUiCaps = {
   keywordOrMax: number
   locationPassesMax: number
   resultsTarget: number
-  jsearchDateLabel: string
 }
 
 /** Fallback when props are missing (stale Flight chunk / HMR); matches `search-constants`. */
@@ -30,14 +26,13 @@ export function defaultSearchUiCaps(): BotSearchUiCaps {
     keywordOrMax: BOT_SEARCH_KEYWORD_OR_MAX,
     locationPassesMax: BOT_SEARCH_LOCATION_PASSES_MAX,
     resultsTarget: BOT_SEARCH_RESULTS_WANTED,
-    jsearchDateLabel: describeJSearchDateWindow(),
   }
 }
 
 export type BotSearchPreviewModel = {
   hasKeywords: boolean
   keywordQuery: string
-  /** Space-separated phrase for Jobs Search API (same first N keywords as JSearch OR list). */
+  /** Space-separated phrase for Jobs Search API. */
   jobsSearchPhrase: string
   extraKeywordsDropped: number
   locationRuns: string[]
@@ -53,13 +48,8 @@ export type BotSearchPreviewModel = {
     salaryMinUsd: number | null
     experienceLabel: string
   }
-  /**
-   * How the user's experienceLevel setting is forwarded to each search backend.
-   * Each value is null when the user chose "Any level" (no filter applied).
-   */
+  /** How the user's experienceLevel setting is forwarded to the search backend. */
   experienceForwarding: {
-    /** Value sent as JSearch `job_requirements` (csv of buckets). */
-    jsearchJobRequirements: string | null
     /** Keyword hint prepended to the Jobs Search API `search_term`. */
     jobsSearchApiTermPrefix: string | null
   }
@@ -101,13 +91,11 @@ export function buildBotSearchPreview(input: {
     rawLocs.length > 0 ? Math.max(0, rawLocs.length - locationPassesMax) : 0
 
   const enabledPlatforms: string[] = []
-  if (input.backends.jsearch) enabledPlatforms.push('JSearch (LinkedIn / Indeed / Glassdoor)')
   if (input.backends.jobsSearchApi) {
     enabledPlatforms.push('Multi-board jobs (RapidAPI Jobs Search API — getjobs_excel)')
   }
 
   const level = normalizeExperienceLevel(input.experienceLevelRaw)
-  const jsearchJobRequirements = jsearchJobRequirementsFor(level)
   const jobsSearchApiTermPrefix = jobsSearchApiSearchHint(level)
 
   const termPrefix = jobsSearchApiTermPrefix
@@ -136,7 +124,6 @@ export function buildBotSearchPreview(input: {
       experienceLabel: input.experienceLabel,
     },
     experienceForwarding: {
-      jsearchJobRequirements,
       jobsSearchApiTermPrefix,
     },
   }

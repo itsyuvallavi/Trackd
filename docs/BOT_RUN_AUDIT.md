@@ -23,7 +23,7 @@ Append-only **plain-text-style** lines (`level`, `message`, optional `meta`) for
 | Column           | Meaning |
 |------------------|---------|
 | `sequence`       | Stable index within the run (`0 … n-1`). Unique with `botRunId`. |
-| `importSource`   | Raw `job.source` from the adapter (e.g. `jsearch`, `indeed`, `jobs_search_api`). |
+| `importSource`   | Raw `job.source` from the adapter (e.g. `jobs_search_api`). |
 | `stage`          | Terminal pipeline stage (see below). |
 | `outcome`        | `skipped` (dedup only), `rejected` (below threshold / eval error / save error), `accepted` (persisted Job row). |
 | `jobSnapshot`    | Full listing payload for audit (title, company, URL, truncated description + length flags, salary, remote, etc.). |

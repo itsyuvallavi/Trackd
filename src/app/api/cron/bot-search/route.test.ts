@@ -112,7 +112,8 @@ describe('/api/cron/bot-search', () => {
     expect(response.status).toBe(503)
     expect(mocks.findMany).not.toHaveBeenCalled()
     await expect(response.json()).resolves.toEqual({
-      error: 'No search backends configured (keys and/or BOT_SEARCH_SOURCES allowlist)',
+      error:
+        'No search backend configured (JOBS_SEARCH_API_KEY and/or BOT_SEARCH_SOURCES allowlist)',
     })
   })
 })

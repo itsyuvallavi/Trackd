@@ -222,8 +222,7 @@ export function BotSettingsContent({
       {!searchServiceConfigured && (
         <div className="mb-5 p-3 bg-warning-bg border border-warning/30 rounded-xl text-sm text-warning-text">
           <strong>No search backends available.</strong> Add{' '}
-          <code className="font-mono text-xs">JSEARCH_API_KEY</code> and/or Jobs
-          Search API keys.
+          <code className="font-mono text-xs">JOBS_SEARCH_API_KEY</code>.
         </div>
       )}
 

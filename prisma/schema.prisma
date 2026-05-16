@@ -95,7 +95,7 @@ model Job {
   botScore     Int?       // AI match score (0-100)
   botReasoning String?    // AI reasoning for the score
 
-  /** Which adapter slug produced this row (e.g. `jsearch`, `jobs_search_api`) — see job-source-display */
+  /** Which adapter slug produced this row (e.g. `jobs_search_api`) — see job-source-display */
   importSource    String?
   /** When importSource is jobs_search_api, which board (indeed, glassdoor, …) */
   importJobBoard   String?

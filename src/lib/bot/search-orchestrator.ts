@@ -2,7 +2,7 @@
  * Bot search orchestrator.
  *
  * Flow:
- * 1. Call job search APIs (JSearch, Jobs Search API) via the unified client
+ * 1. Call the configured job search API via the unified client
  * 2. Deduplicate against existing jobs in the DB (by URL / title / batch)
  * 3. Save new jobs with status SAVED + source BOT or platform-specific
  * 4. Run AI evaluator on each new job
@@ -53,7 +53,6 @@ function metaToJson(meta: unknown): Prisma.InputJsonValue | undefined {
 
 function sourceToPrismaSource(source: string): JobSource {
   const map: Record<string, JobSource> = {
-    jsearch: JobSource.BOT,
     indeed: JobSource.INDEED,
     linkedin: JobSource.LINKEDIN,
     linkedin_ljs: JobSource.LINKEDIN,
@@ -212,7 +211,7 @@ export async function runBotSearch(
   try {
     if (!botSearchHasQueryableBackend()) {
       result.errors['config'] =
-        'No search backends available for current env / BOT_SEARCH_SOURCES — set JSEARCH_API_KEY and/or Jobs Search API (JOBS_SEARCH_API_KEY / JSEARCH fallback).'
+        'No search backend available for current env / BOT_SEARCH_SOURCES — set JOBS_SEARCH_API_KEY.'
       pushLog('warn', result.errors['config'])
       return result
     }

@@ -36,7 +36,7 @@ Trackd is a **job application tracker** for people who want one place to manage 
 ### Job search bot
 
 - **Configurable search** (keywords, locations, excludes, experience, languages, minimum AI score, schedules).
-- Pulls listings from external **job APIs** (e.g. RapidAPI: JSearch, Jobs Search API) per environment keys.
+- Pulls listings from external **job APIs** (RapidAPI Jobs Search API) per environment keys.
 - **Deduplication** by URL and company + title; respects **dismissed** imports when a user deletes a job.
 - **AI evaluation** (OpenAI) scores fit vs. your profile and preferences; jobs at or above your threshold are saved.
 - **Bot runs** with logging/audit rows, optional **Telegram** summaries, and a **queue UI** for reviewed items.

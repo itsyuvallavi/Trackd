@@ -74,7 +74,7 @@ function job(partial: Partial<SearchJobResult>): SearchJobResult {
     location: partial.location ?? 'Remote',
     url: partial.url ?? 'https://example.com/job',
     description: partial.description ?? 'React TypeScript role.',
-    source: partial.source ?? 'jsearch',
+    source: partial.source ?? 'jobs_search_api',
     is_remote: partial.is_remote ?? true,
   }
 }
@@ -83,13 +83,13 @@ function searchResponse(jobs: SearchJobResult[]): SearchResponse {
   return {
     jobs,
     meta: {
-      platforms_succeeded: ['jsearch'],
+      platforms_succeeded: ['jobs_search_api'],
       platforms_failed: {},
       fallback_used: false,
       total_raw: jobs.length,
       total_deduped: jobs.length,
-      by_source_raw: { jsearch: jobs.length },
-      by_source_deduped: { jsearch: jobs.length },
+      by_source_raw: { jobs_search_api: jobs.length },
+      by_source_deduped: { jobs_search_api: jobs.length },
     },
   }
 }

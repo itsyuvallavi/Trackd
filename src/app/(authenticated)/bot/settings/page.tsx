@@ -6,7 +6,6 @@ import {
   BOT_SEARCH_KEYWORD_OR_MAX,
   BOT_SEARCH_LOCATION_PASSES_MAX,
   BOT_SEARCH_RESULTS_WANTED,
-  describeJSearchDateWindow,
 } from '@/lib/bot/search-constants'
 import {
   botSearchHasQueryableBackend,
@@ -34,7 +33,6 @@ export default async function BotSettingsPage() {
         keywordOrMax: BOT_SEARCH_KEYWORD_OR_MAX,
         locationPassesMax: BOT_SEARCH_LOCATION_PASSES_MAX,
         resultsTarget: BOT_SEARCH_RESULTS_WANTED,
-        jsearchDateLabel: describeJSearchDateWindow(),
       }}
     />
   )

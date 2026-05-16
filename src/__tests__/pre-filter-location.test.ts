@@ -14,7 +14,7 @@ function job(partial: Partial<SearchJobResult> & Pick<SearchJobResult, 'title' |
     location: partial.location ?? null,
     url: partial.url ?? 'https://example.com/job',
     description: partial.description ?? null,
-    source: partial.source ?? 'jsearch',
+    source: partial.source ?? 'jobs_search_api',
     is_remote: partial.is_remote ?? null,
     jobBoard: partial.jobBoard ?? null,
     posted_date: partial.posted_date ?? null,

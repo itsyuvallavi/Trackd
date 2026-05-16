@@ -5,7 +5,7 @@
  * POST /getjobs_excel returns an **Excel workbook** (.xlsx), not JSON (name is accurate).
  *
  * Env:
- *   JOBS_SEARCH_API_KEY — optional if JSEARCH_API_KEY is set (same RapidAPI key is fine)
+ *   JOBS_SEARCH_API_KEY — RapidAPI key for jobs-search-api
  *   JOBS_SEARCH_COUNTRY_INDEED — country hint required by API payload (default USA); set e.g. Portugal for EU runs
  *   JOBS_SEARCH_SITE_NAMES — comma-separated boards (default: linkedin,glassdoor,zip_recruiter,naukri,bayt — no Indeed)
  *   JOBS_SEARCH_DISTANCE — search radius (default 500)

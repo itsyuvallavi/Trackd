@@ -50,7 +50,7 @@ function job(partial: Partial<SearchJobResult> = {}): SearchJobResult {
     url: 'https://example.com/job',
     description:
       'Build product interfaces with TypeScript, React, accessibility, API integrations, and testing. The role works with designers and backend engineers on customer-facing workflow features.',
-    source: 'jsearch',
+    source: 'jobs_search_api',
     is_remote: true,
     ...partial,
   }

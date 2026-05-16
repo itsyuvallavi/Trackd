@@ -1,11 +1,10 @@
 /**
  * Unified job search client (RapidAPI job sources).
  *
- * Sources (configured by env vars present):
- *   1. JSearch — JSEARCH_API_KEY
- *   2. Jobs Search API — JOBS_SEARCH_API_KEY, else JSEARCH (POST getjobs_excel, multi-board)
+ * Source:
+ *   1. Jobs Search API — JOBS_SEARCH_API_KEY (POST getjobs_excel, multi-board)
  *
- * Optional: `BOT_SEARCH_SOURCES` — comma-separated allowlist, e.g. `jsearch,jobs_search_api`.
+ * Optional: `BOT_SEARCH_SOURCES` — comma-separated allowlist, currently `jobs_search_api`.
  *
  * RapidAPI providers: if a call returns a terminal error (403 not subscribed,
  * legacy shutdown message), remaining location passes for that provider are skipped in the
@@ -17,11 +16,9 @@ import {
   BOT_SEARCH_KEYWORD_OR_MAX,
   BOT_SEARCH_LOCATION_PASSES_MAX,
   BOT_SEARCH_RESULTS_WANTED,
-  JSEARCH_DATE_POSTED,
 } from '../search-constants'
 import { jobsSearchApiRapidApiKey } from '../rapidapi-jobs-search-keys'
 import { searchJobsSearchApiExcel } from './jobs-search-api-adapter'
-import { searchJSearch } from './jsearch-adapter'
 import {
   botSearchSourceAllowed,
   botSearchSourcesAllowlist,
@@ -29,7 +26,6 @@ import {
 } from '../bot-search-sources'
 import {
   jobsSearchApiSearchHint,
-  jsearchJobRequirementsFor,
   normalizeExperienceLevel,
 } from '../experience-level'
 
@@ -53,7 +49,6 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
   const allow = botSearchSourcesAllowlist()
   const src = (t: BotSearchSourceToken) => botSearchSourceAllowed(allow, t)
 
-  const jSearchKey = process.env.JSEARCH_API_KEY ?? ''
   const jobsSearchApiKey = jobsSearchApiRapidApiKey()
 
   const platformsSucceeded: string[] = []
@@ -64,7 +59,6 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
     .map((k) => k.trim())
     .filter(Boolean)
     .slice(0, BOT_SEARCH_KEYWORD_OR_MAX)
-  const keywordQuery = keywordSlice.join(' OR ')
   const jobsSearchPhrase = keywordSlice.join(' ')
   const rawLocs = req.locations.map((l) => l.trim()).filter(Boolean)
   const locationVariants = (rawLocs.length > 0 ? rawLocs : ['Remote']).slice(
@@ -72,8 +66,7 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
     BOT_SEARCH_LOCATION_PASSES_MAX
   )
 
-  const platformSlots =
-    (src('jsearch') && jSearchKey ? 1 : 0) + (src('jobs_search_api') && jobsSearchApiKey ? 1 : 0)
+  const platformSlots = src('jobs_search_api') && jobsSearchApiKey ? 1 : 0
   const budget = req.results_wanted ?? BOT_SEARCH_RESULTS_WANTED
   const combos = Math.max(1, locationVariants.length) * Math.max(1, platformSlots)
   const perCombo = Math.max(5, Math.ceil(budget / combos))
@@ -81,40 +74,11 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
   let skipJobsSearchApi = false
 
   const normalizedLevel = normalizeExperienceLevel(req.experience_level)
-  const jsearchJobRequirements = jsearchJobRequirementsFor(normalizedLevel) ?? undefined
   const jobsSearchExperienceHint = jobsSearchApiSearchHint(normalizedLevel)
 
   for (let i = 0; i < locationVariants.length; i++) {
     const location = locationVariants[i]
     const locTag = `loc:${i + 1}`
-
-    if (src('jsearch') && jSearchKey) {
-      const numPages = Math.min(5, Math.max(1, Math.ceil(perCombo / 10)))
-      const { jobs, error } = await searchJSearch(
-        {
-          query: keywordQuery,
-          location,
-          remoteOnly: req.remote_only,
-          numPages,
-          datePosted: JSEARCH_DATE_POSTED,
-          excludeJobPublishers: req.exclude_companies?.length
-            ? req.exclude_companies
-            : undefined,
-          jobRequirements: jsearchJobRequirements,
-        },
-        jSearchKey
-      )
-
-      if (error && jobs.length === 0) {
-        platformsFailed[`jsearch_${locTag}`] = error
-      } else {
-        allJobs.push(...jobs)
-        if (!platformsSucceeded.includes('jsearch')) platformsSucceeded.push('jsearch')
-        if (error) platformsFailed[`jsearch_partial_${locTag}`] = error
-      }
-    } else if (src('jsearch') && !jSearchKey && i === 0) {
-      platformsFailed['jsearch'] = 'JSEARCH_API_KEY not set'
-    }
 
     if (src('jobs_search_api') && jobsSearchApiKey && !skipJobsSearchApi) {
       const searchTerm = req.remote_only ? `${jobsSearchPhrase} remote`.trim() : jobsSearchPhrase
@@ -140,8 +104,7 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
         if (error) platformsFailed[`jobs_search_api_partial_${locTag}`] = error
       }
     } else if (src('jobs_search_api') && !jobsSearchApiKey && i === 0) {
-      platformsFailed['jobs_search_api'] =
-        'No RapidAPI key for Jobs Search API (JOBS_SEARCH_API_KEY or JSEARCH_API_KEY)'
+      platformsFailed['jobs_search_api'] = 'JOBS_SEARCH_API_KEY not set'
     }
   }
 

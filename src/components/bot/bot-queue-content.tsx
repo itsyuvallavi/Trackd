@@ -42,7 +42,7 @@ interface QueueJob {
   location: string | null
   url: string | null
   salary: string | null
-  /** Human-readable API product (e.g. "JSearch (RapidAPI)", "Jobs Search API (RapidAPI) · LinkedIn") */
+  /** Human-readable API product (e.g. "Jobs Search API (RapidAPI) · LinkedIn") */
   sourceDisplayName: string
   botScore: number | null
   botReasoning: string | null

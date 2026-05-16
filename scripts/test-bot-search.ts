@@ -19,8 +19,8 @@ import './load-env'
  * --one-location   Pass a single location to runSearch (reduces API round-trips)
  * --sources=       Only run these backends (same as BOT_SEARCH_SOURCES)
  *
- * Required env — at least one backend (see `src/lib/bot/bot-search-sources.ts`):
- *   JSEARCH_API_KEY / JOBS_SEARCH_API_KEY   JSearch + Jobs Search API (shared RapidAPI key OK)
+ * Required env:
+ *   JOBS_SEARCH_API_KEY   RapidAPI Jobs Search API key
  *
  * Optional:
  *   OPENAI_API_KEY    Enable AI scoring (otherwise jobs are saved without score)
@@ -82,14 +82,13 @@ async function main() {
   // ── 1. Check env ──────────────────────────────────────────────────────────
   h('Step 1: Environment check')
 
-  const jSearchKey = process.env.JSEARCH_API_KEY
   const jobsSearchKey = process.env.JOBS_SEARCH_API_KEY?.trim()
   const effectiveJobsSearchKey = jobsSearchApiRapidApiKey()
   const openaiKey = process.env.OPENAI_API_KEY
 
   if (!botSearchHasQueryableBackend()) {
     fail('No search backends configured for this environment.')
-    console.log('  Set JSEARCH_API_KEY and/or JOBS_SEARCH_API_KEY (Jobs Search API can reuse JSEARCH key).')
+    console.log('  Set JOBS_SEARCH_API_KEY.')
     process.exit(1)
   }
   const sourcesAllow = process.env.BOT_SEARCH_SOURCES?.trim()
@@ -106,23 +105,9 @@ async function main() {
 
   const allow = botSearchSourcesAllowlist()
   h('Keys on disk (✓ green = selected backend will actually call this run)')
-  if ((jSearchKey ?? '').trim()) {
-    if (botSearchSourceAllowed(allow, 'jsearch'))
-      ok('JSEARCH_API_KEY → JSearch will run this run')
-    else info('JSEARCH_API_KEY present → not used this run (not in BOT_SEARCH_SOURCES / --sources)')
-  } else if (botSearchSourceAllowed(allow, 'jsearch')) {
-    warn('JSEARCH_API_KEY missing — jsearch was requested but cannot run')
-  } else {
-    info('JSEARCH_API_KEY not set (skipped for this allowlist)')
-  }
-
   if (effectiveJobsSearchKey) {
     if (botSearchSourceAllowed(allow, 'jobs_search_api'))
-      ok(
-        jobsSearchKey
-          ? 'JOBS_SEARCH_API_KEY → Jobs Search API will run this run'
-          : 'JSEARCH_API_KEY → Jobs Search API will run this run (JOBS_SEARCH_API_KEY unset)'
-      )
+      ok('JOBS_SEARCH_API_KEY → Jobs Search API will run this run')
     else info('Jobs Search API key present → not used this run (not in allowlist)')
   } else if (botSearchSourceAllowed(allow, 'jobs_search_api')) {
     warn('No RapidAPI key for Jobs Search API — requested but cannot run')
@@ -210,7 +195,7 @@ async function main() {
       effective.length > 2
     ) {
       warn(
-        `Many locations (${locationsForRun.length}) × backends (${effective.length}) can take several minutes — narrow with --sources=jsearch or --one-location`
+        `Many locations (${locationsForRun.length}) × backends (${effective.length}) can take several minutes — narrow with --one-location`
       )
     }
 
@@ -405,11 +390,8 @@ async function main() {
   // ── Summary ───────────────────────────────────────────────────────────────
   h('✅ All checks passed')
   console.log('\nTo activate the bot, set these in Vercel and go to /settings/bot:')
-  if (!jSearchKey) console.log('  JSEARCH_API_KEY  → https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch')
   if (!jobsSearchKey && !effectiveJobsSearchKey) {
-    console.log(
-      '  JOBS_SEARCH_API_KEY (optional if JSEARCH_API_KEY set) → RapidAPI jobs-search-api getjobs_excel'
-    )
+    console.log('  JOBS_SEARCH_API_KEY → RapidAPI jobs-search-api getjobs_excel')
   }
   console.log('  TELEGRAM_BOT_TOKEN (optional) → @BotFather on Telegram')
   console.log('')

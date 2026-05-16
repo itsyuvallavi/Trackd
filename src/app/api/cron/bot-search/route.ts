@@ -6,7 +6,7 @@ import { isBotConfigDueForSearch } from '@/lib/bot/search-schedule'
 import { isCronRequestAuthorized } from '@/lib/cron-auth'
 
 export const dynamic = 'force-dynamic'
-// Bot searches can take a while across multiple platforms
+// Bot searches can take a while across multiple location passes.
 export const maxDuration = 300
 
 /**
@@ -20,12 +20,12 @@ export async function GET(request: Request) {
 
   if (!botSearchHasQueryableBackend()) {
     console.warn(
-      '[bot-cron] No backends available — configure JSEARCH_API_KEY and/or Jobs Search API keys / BOT_SEARCH_SOURCES'
+      '[bot-cron] No backends available — configure JOBS_SEARCH_API_KEY / BOT_SEARCH_SOURCES'
     )
     return NextResponse.json(
       {
         error:
-          'No search backends configured (keys and/or BOT_SEARCH_SOURCES allowlist)',
+          'No search backend configured (JOBS_SEARCH_API_KEY and/or BOT_SEARCH_SOURCES allowlist)',
       },
       { status: 503 }
     )
