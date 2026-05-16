@@ -34,7 +34,7 @@ export function LoginForm({ next, initialError = null }: LoginFormProps) {
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(
-            safeNext,
+          safeNext,
         )}`,
       },
     })
@@ -93,7 +93,7 @@ export function LoginForm({ next, initialError = null }: LoginFormProps) {
     <div className="space-y-6">
       <Button
         variant="outline"
-        className="w-full justify-center"
+        className="h-10 w-full justify-center rounded-md text-sm"
         onClick={handleGoogleSignIn}
         disabled={isLoading}
       >
@@ -106,7 +106,7 @@ export function LoginForm({ next, initialError = null }: LoginFormProps) {
           <span className="w-full border-t border-border" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-background px-2 text-muted-foreground">
+          <span className="bg-card px-2 text-muted-foreground">
             Or continue with email
           </span>
         </div>
@@ -119,6 +119,7 @@ export function LoginForm({ next, initialError = null }: LoginFormProps) {
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            className="h-10 rounded-md px-3 text-sm md:text-sm"
             required
           />
         </div>
@@ -128,13 +129,14 @@ export function LoginForm({ next, initialError = null }: LoginFormProps) {
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            className="h-10 rounded-md px-3 text-sm md:text-sm"
             required
           />
         </div>
 
         {error && <p className="text-sm text-error-text">{error}</p>}
 
-        <Button type="submit" className="w-full" disabled={isLoading}>
+        <Button type="submit" className="h-10 w-full rounded-md text-sm" disabled={isLoading}>
           {isLoading ? 'Signing in...' : 'Sign In'}
         </Button>
       </form>

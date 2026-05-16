@@ -86,13 +86,13 @@ export function SignUpForm() {
 
   if (success) {
     return (
-      <div className="text-center p-6 border border-border rounded-lg">
+      <div className="rounded-2xl border border-border p-6 text-center">
         <h3 className="text-lg font-semibold mb-2">Check your email</h3>
         <p className="text-muted-foreground">
           We&apos;ve sent you a confirmation link at <strong>{email}</strong>
         </p>
         <Button
-          className="mt-4"
+          className="mt-4 h-10 rounded-md px-4 text-sm"
           onClick={() => router.push('/login')}
         >
           Go to Login
@@ -105,7 +105,7 @@ export function SignUpForm() {
     <div className="space-y-6">
       <Button
         variant="outline"
-        className="w-full justify-center"
+        className="h-10 w-full justify-center rounded-md text-sm"
         onClick={handleGoogleSignUp}
         disabled={isLoading}
       >
@@ -118,7 +118,7 @@ export function SignUpForm() {
           <span className="w-full border-t border-border" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-background px-2 text-muted-foreground">
+          <span className="bg-card px-2 text-muted-foreground">
             Or continue with email
           </span>
         </div>
@@ -131,6 +131,7 @@ export function SignUpForm() {
             placeholder="Full name"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            className="h-10 rounded-md px-3 text-sm md:text-sm"
             required
           />
         </div>
@@ -140,6 +141,7 @@ export function SignUpForm() {
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            className="h-10 rounded-md px-3 text-sm md:text-sm"
             required
           />
         </div>
@@ -150,13 +152,14 @@ export function SignUpForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             minLength={6}
+            className="h-10 rounded-md px-3 text-sm md:text-sm"
             required
           />
         </div>
 
         {error && <p className="text-sm text-error-text">{error}</p>}
 
-        <Button type="submit" className="w-full" disabled={isLoading}>
+        <Button type="submit" className="h-10 w-full rounded-md text-sm" disabled={isLoading}>
           {isLoading ? 'Creating account...' : 'Create Account'}
         </Button>
       </form>
@@ -170,5 +173,4 @@ export function SignUpForm() {
     </div>
   )
 }
-
 

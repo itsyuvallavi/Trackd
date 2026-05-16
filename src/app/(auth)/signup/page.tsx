@@ -18,13 +18,13 @@ export default function SignUpPage() {
     <div className="dark relative min-h-screen flex items-center justify-center bg-background text-foreground overflow-hidden">
       <Aurora />
 
-      <div className="relative z-10 w-full max-w-md p-6 sm:p-10">
+      <div className="relative z-10 w-full max-w-[520px] p-6 sm:p-10">
         <div className="flex items-center justify-center gap-2 mb-8">
           <CheckSquare className="size-7" strokeWidth={2.2} />
           <span className="text-lg font-semibold tracking-tight">Trackd</span>
         </div>
 
-        <GlassCard variant="strong" className="p-7 md:p-8 rounded-3xl">
+        <GlassCard variant="strong" className="rounded-2xl p-7 shadow-2xl md:p-9">
           <div className="text-center mb-6">
             <h1 className="text-2xl font-semibold tracking-tight">
               Create your account
