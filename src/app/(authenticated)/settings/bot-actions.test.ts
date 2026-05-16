@@ -108,4 +108,20 @@ describe('bot settings actions', () => {
       }),
     )
   })
+
+  it('coerces twice-daily scheduling to daily on the current Vercel Hobby scheduler', async () => {
+    const { saveBotConfig } = await import('./bot-actions')
+    await saveBotConfig(form({ searchFrequency: 'TWICE_DAILY' as BotSearchFrequency }))
+
+    expect(mocks.botConfigUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          searchFrequency: 'DAILY',
+        }),
+        update: expect.objectContaining({
+          searchFrequency: 'DAILY',
+        }),
+      }),
+    )
+  })
 })

@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import type { BotRun, BotRunStatus } from '@prisma/client'
 import { cn } from '@/lib/utils'
 
@@ -85,6 +86,20 @@ function StatusBadge({ status }: { status: BotRunStatus }) {
   )
 }
 
+function LocalDateTime({ iso }: { iso: string | Date }) {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  return (
+    <span suppressHydrationWarning>
+      {mounted ? new Date(iso).toLocaleString() : 'Recent run'}
+    </span>
+  )
+}
+
 export function BotRunsPanel({ runs }: BotRunsPanelProps) {
   if (runs.length === 0) {
     return (
@@ -106,7 +121,7 @@ export function BotRunsPanel({ runs }: BotRunsPanelProps) {
               <div className="flex flex-wrap items-center gap-3 text-sm">
                 <StatusBadge status={run.status} />
                 <span className="text-muted-foreground text-xs flex-1 min-w-[10rem]">
-                  {new Date(run.startedAt).toLocaleString()}
+                  <LocalDateTime iso={run.startedAt} />
                   {run.source === 'manual' && ' · manual'}
                 </span>
                 <span className="text-xs text-muted-foreground tabular-nums">

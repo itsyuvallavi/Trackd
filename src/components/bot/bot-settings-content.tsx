@@ -20,7 +20,6 @@ import { AlertCircle, CheckCircle2, HelpCircle, Loader2 } from 'lucide-react'
 
 const FREQUENCY_ORDER = [
   'DAILY',
-  'TWICE_DAILY',
   'WEEKLY',
 ] as const satisfies readonly BotSearchFrequency[]
 
@@ -38,6 +37,10 @@ const EXPERIENCE_OPTIONS = [
   { value: 'senior_level', label: 'Senior level' },
   { value: 'director', label: 'Director' },
 ]
+
+function supportedFrequency(frequency: BotSearchFrequency): BotSearchFrequency {
+  return frequency === 'TWICE_DAILY' ? 'DAILY' : frequency
+}
 
 interface BotSettingsContentProps {
   initialConfig: BotConfig | null
@@ -89,7 +92,7 @@ export function BotSettingsContent({
   )
   const [isActive, setIsActive] = useState(initialConfig?.isActive ?? false)
   const [frequency, setFrequency] = useState<BotSearchFrequency>(
-    initialConfig?.searchFrequency ?? 'DAILY'
+    supportedFrequency(initialConfig?.searchFrequency ?? 'DAILY')
   )
   const [telegramChatId, setTelegramChatId] = useState(
     initialConfig?.telegramChatId ?? ''
@@ -109,7 +112,7 @@ export function BotSettingsContent({
         experienceLevel: initialConfig?.experienceLevel ?? '',
         salaryMin: initialConfig?.salaryMin?.toString() ?? '',
         isActive: initialConfig?.isActive ?? false,
-        frequency: initialConfig?.searchFrequency ?? 'DAILY',
+        frequency: supportedFrequency(initialConfig?.searchFrequency ?? 'DAILY'),
         telegramChatId: initialConfig?.telegramChatId ?? '',
         minScore: initialConfig?.minScore ?? 60,
       }),

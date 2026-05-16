@@ -110,7 +110,10 @@ export function BotStatusStrip({
         <>
           <span aria-hidden className="text-muted-foreground/50">·</span>
           <span className="text-muted-foreground">
-            Last run <span className="text-foreground">{relativeTime(lastRun.startedAt)}</span>
+            Last run{' '}
+            <span className="text-foreground" suppressHydrationWarning>
+              {mounted ? relativeTime(lastRun.startedAt) : 'recently'}
+            </span>
             {' · '}
             <span className="text-foreground tabular-nums">{lastRun.jobsNew}</span> new
             {lastRun.jobsApproved > 0 && (

@@ -36,6 +36,10 @@ export async function saveBotConfig(data: BotConfigFormData) {
       : null
   const minScoreRaw = Number.isFinite(data.minScore) ? data.minScore : 60
   const minScore = Math.max(0, Math.min(100, Math.floor(minScoreRaw)))
+  const searchFrequency =
+    data.searchFrequency === BotSearchFrequency.TWICE_DAILY
+      ? BotSearchFrequency.DAILY
+      : data.searchFrequency
 
   const cleaned = {
     keywords: data.keywords.filter(Boolean),
@@ -47,7 +51,7 @@ export async function saveBotConfig(data: BotConfigFormData) {
     experienceLevel: data.experienceLevel || null,
     salaryMin,
     isActive: data.isActive,
-    searchFrequency: data.searchFrequency,
+    searchFrequency,
     telegramChatId: resolvedChatId,
     minScore,
   }
