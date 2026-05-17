@@ -463,6 +463,7 @@ export const getBotLastRunForStrip = (userId: string) =>
         orderBy: { startedAt: 'desc' },
         select: {
           startedAt: true,
+          jobsFound: true,
           jobsNew: true,
           jobsApproved: true,
         },

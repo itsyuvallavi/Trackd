@@ -9,13 +9,16 @@ const globalForPrisma = globalThis as unknown as {
 
 function createPrismaClient() {
   const connectionString = process.env.DATABASE_URL!
+  const poolMax =
+    Number(process.env.PRISMA_POOL_MAX) ||
+    (process.env.NODE_ENV === 'production' ? 1 : 5)
 
   if (!globalForPrisma.pool) {
     globalForPrisma.pool = new Pool({
       connectionString,
-      max: 10, // Increased from 5 to handle more concurrent requests and improve TTFB
-      min: 2, // Keep two connections warm for faster response times
-      idleTimeoutMillis: 30000, // Close idle connections after 30s to free up pool
+      max: Math.max(1, poolMax),
+      min: 0,
+      idleTimeoutMillis: 10000, // Close idle connections quickly in serverless/session-pooler mode
       connectionTimeoutMillis: 20000, // Wait up to 20s for a connection (increased from 10s)
       // Better error handling
       allowExitOnIdle: false, // Don't exit process when pool is idle

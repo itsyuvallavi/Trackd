@@ -198,6 +198,7 @@ export async function runBotSearch(
     jobsNew: 0,
     jobsEvaluated: 0,
     jobsApproved: 0,
+    jobsEvaluationFailed: 0,
     jobsSkippedLowScore: 0,
     skippedExistingByUrl: 0,
     skippedExistingByTitle: 0,
@@ -205,6 +206,7 @@ export async function runBotSearch(
     skippedPreviouslyDismissed: 0,
     errors: {},
     evaluationSkips: [],
+    evaluationFailures: [],
     platformsMeta: null,
   }
 
@@ -511,6 +513,12 @@ export async function runBotSearch(
           } catch (evalErr) {
             const errMsg = evalErr instanceof Error ? evalErr.message : String(evalErr)
             pushLog('warn', `Eval failed for "${job.title}"`, errMsg)
+            result.jobsEvaluationFailed++
+            result.evaluationFailures.push({
+              title: job.title.slice(0, 200),
+              company: job.company.slice(0, 120),
+              error: errMsg.slice(0, REASONING_STORE_MAX),
+            })
             auditBySeq.set(seq, {
               ...audit,
               finalized: true,
@@ -703,6 +711,7 @@ export async function runBotSearch(
       'info',
       `Pipeline done: found=${result.jobsFound} saved=${result.jobsNew} ` +
         `approved=${result.jobsApproved} below_AI_threshold=${result.jobsSkippedLowScore} ` +
+        `eval_failed=${result.jobsEvaluationFailed} ` +
         `dedup_url=${result.skippedExistingByUrl} dedup_title=${result.skippedExistingByTitle} dedup_batch=${result.skippedBatchDuplicate} dedup_dismissed=${result.skippedPreviouslyDismissed}`
     )
 

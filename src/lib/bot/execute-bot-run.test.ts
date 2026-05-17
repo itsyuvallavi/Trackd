@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   botRunCreate: vi.fn(),
   botRunUpdate: vi.fn(),
   botConfigUpdate: vi.fn(),
+  notificationCreate: vi.fn(),
   jobFindMany: vi.fn(),
   runBotSearch: vi.fn(),
   sendBotRunSummary: vi.fn(),
@@ -18,6 +19,9 @@ vi.mock('@/lib/prisma', () => ({
     },
     botConfig: {
       update: mocks.botConfigUpdate,
+    },
+    notification: {
+      create: mocks.notificationCreate,
     },
     job: {
       findMany: mocks.jobFindMany,
@@ -62,6 +66,7 @@ function orchestratorResult(overrides = {}) {
     jobsNew: 1,
     jobsEvaluated: 2,
     jobsApproved: 1,
+    jobsEvaluationFailed: 0,
     jobsSkippedLowScore: 1,
     skippedExistingByUrl: 0,
     skippedExistingByTitle: 0,
@@ -69,6 +74,7 @@ function orchestratorResult(overrides = {}) {
     skippedPreviouslyDismissed: 0,
     errors: {},
     evaluationSkips: [],
+    evaluationFailures: [],
     platformsMeta: null,
     ...overrides,
   }
@@ -80,6 +86,7 @@ describe('executeBotRunForConfig Telegram routing', () => {
     mocks.botRunCreate.mockResolvedValue({ id: 'run_1' })
     mocks.botRunUpdate.mockResolvedValue({})
     mocks.botConfigUpdate.mockResolvedValue({})
+    mocks.notificationCreate.mockResolvedValue({})
     mocks.jobFindMany.mockResolvedValue([])
     mocks.runBotSearch.mockResolvedValue(orchestratorResult())
     mocks.sendBotRunSummary.mockResolvedValue(undefined)
@@ -97,6 +104,17 @@ describe('executeBotRunForConfig Telegram routing', () => {
 
     expect(mocks.jobFindMany).not.toHaveBeenCalled()
     expect(mocks.sendBotRunSummary).not.toHaveBeenCalled()
+    expect(mocks.notificationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: 'user_1',
+          type: 'SYNC_COMPLETE',
+          title: 'Job search complete',
+          actionUrl: '/bot/runs',
+          metadata: expect.objectContaining({ kind: 'bot_run', botRunId: 'run_1' }),
+        }),
+      }),
+    )
   })
 
   it('sends Telegram summaries only to the explicit chat ID saved on the user config', async () => {
@@ -122,6 +140,50 @@ describe('executeBotRunForConfig Telegram routing', () => {
         jobsNew: 1,
         jobsApproved: 1,
         minScore: 75,
+      }),
+    )
+  })
+
+  it('marks all-evaluator-failed runs failed and creates an error notification', async () => {
+    mocks.runBotSearch.mockResolvedValue(
+      orchestratorResult({
+        jobsFound: 3,
+        jobsNew: 0,
+        jobsEvaluated: 0,
+        jobsApproved: 0,
+        jobsEvaluationFailed: 3,
+        jobsSkippedLowScore: 0,
+        evaluationFailures: [
+          { title: 'Frontend Engineer', company: 'Acme', error: 'provider request timed out' },
+        ],
+      }),
+    )
+
+    const { executeBotRunForConfig } = await import('./execute-bot-run')
+    await executeBotRunForConfig(config(), 'manual')
+
+    expect(mocks.botRunUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'run_1' },
+        data: expect.objectContaining({
+          status: 'FAILED',
+          errors: expect.objectContaining({
+            evaluationFailed: '3 listing(s) could not be scored',
+            evaluationFailures: [
+              { title: 'Frontend Engineer', company: 'Acme', error: 'provider request timed out' },
+            ],
+          }),
+        }),
+      }),
+    )
+    expect(mocks.notificationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: 'SYNC_ERROR',
+          title: 'Job search could not score jobs',
+          message: expect.stringContaining('3 could not be scored'),
+          actionUrl: '/bot/runs',
+        }),
       }),
     )
   })

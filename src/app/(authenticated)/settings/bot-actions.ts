@@ -110,10 +110,27 @@ export async function triggerBotSearch() {
   revalidatePath('/bot/runs')
 
   if (out.error) {
-    return { success: false, error: out.error }
+    return {
+      success: false,
+      error: out.error,
+      runId: out.runId,
+      jobsFound: out.jobsFound,
+      jobsNew: out.jobsNew,
+      jobsApproved: out.jobsApproved,
+      jobsSkippedLowScore: out.jobsSkippedLowScore,
+      jobsEvaluationFailed: out.jobsEvaluationFailed,
+    }
   }
 
-  return { success: true }
+  return {
+    success: true,
+    runId: out.runId,
+    jobsFound: out.jobsFound,
+    jobsNew: out.jobsNew,
+    jobsApproved: out.jobsApproved,
+    jobsSkippedLowScore: out.jobsSkippedLowScore,
+    jobsEvaluationFailed: out.jobsEvaluationFailed,
+  }
 }
 
 export async function verifyTelegram(chatId: string) {

@@ -64,6 +64,7 @@ export default async function BotLayout({
                   lastRun
                     ? {
                         startedAt: toIsoString(lastRun.startedAt),
+                        jobsFound: lastRun.jobsFound,
                         jobsNew: lastRun.jobsNew,
                         jobsApproved: lastRun.jobsApproved,
                       }

@@ -78,11 +78,19 @@ export interface EvaluationSkipAudit {
   resumeMatch?: string
 }
 
+export interface EvaluationFailureAudit {
+  title: string
+  company: string
+  error: string
+}
+
 export interface OrchestratorResult {
   jobsFound: number
   jobsNew: number
   jobsEvaluated: number
   jobsApproved: number
+  /** Listings that could not be evaluated because the AI/provider request failed. */
+  jobsEvaluationFailed: number
   /** Saved candidates that were not persisted because AI score &lt; minScore */
   jobsSkippedLowScore: number
   /** Had same normalized URL as a row already in the DB for this user */
@@ -96,5 +104,7 @@ export interface OrchestratorResult {
   errors: Record<string, string>
   /** Below minScore after OpenAI eval — inspect flags/reasoning in UI or DB */
   evaluationSkips: EvaluationSkipAudit[]
+  /** Evaluation failures — inspect errors when provider/model requests fail. */
+  evaluationFailures: EvaluationFailureAudit[]
   platformsMeta: SearchMeta | null
 }

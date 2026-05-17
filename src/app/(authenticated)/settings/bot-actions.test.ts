@@ -124,4 +124,63 @@ describe('bot settings actions', () => {
       }),
     )
   })
+
+  it('returns manual run counters so zero-save searches are visible to the UI', async () => {
+    mocks.botConfigFindUnique.mockResolvedValue({
+      id: 'cfg_1',
+      userId: 'user_1',
+      keywords: ['Frontend Engineer'],
+    })
+    mocks.botSearchHasQueryableBackend.mockReturnValue(true)
+    mocks.executeBotRunForConfig.mockResolvedValue({
+      runId: 'run_1',
+      jobsFound: 33,
+      jobsNew: 0,
+      jobsApproved: 0,
+      jobsSkippedLowScore: 27,
+      jobsEvaluationFailed: 0,
+    })
+
+    const { triggerBotSearch } = await import('./bot-actions')
+    await expect(triggerBotSearch()).resolves.toEqual({
+      success: true,
+      runId: 'run_1',
+      jobsFound: 33,
+      jobsNew: 0,
+      jobsApproved: 0,
+      jobsSkippedLowScore: 27,
+      jobsEvaluationFailed: 0,
+    })
+  })
+
+  it('returns persisted failed-run counters when AI scoring fails', async () => {
+    mocks.botConfigFindUnique.mockResolvedValue({
+      id: 'cfg_1',
+      userId: 'user_1',
+      keywords: ['Frontend Engineer'],
+    })
+    mocks.botSearchHasQueryableBackend.mockReturnValue(true)
+    mocks.executeBotRunForConfig.mockResolvedValue({
+      success: false,
+      runId: 'run_1',
+      jobsFound: 3,
+      jobsNew: 0,
+      jobsApproved: 0,
+      jobsSkippedLowScore: 0,
+      jobsEvaluationFailed: 3,
+      error: 'Search found jobs, but AI scoring failed for all candidates.',
+    })
+
+    const { triggerBotSearch } = await import('./bot-actions')
+    await expect(triggerBotSearch()).resolves.toEqual({
+      success: false,
+      runId: 'run_1',
+      jobsFound: 3,
+      jobsNew: 0,
+      jobsApproved: 0,
+      jobsSkippedLowScore: 0,
+      jobsEvaluationFailed: 3,
+      error: 'Search found jobs, but AI scoring failed for all candidates.',
+    })
+  })
 })

@@ -16,6 +16,7 @@ interface BotStatusStripProps {
   frequencyLabel: string
   lastRun: {
     startedAt: string
+    jobsFound: number
     jobsNew: number
     jobsApproved: number
   } | null
@@ -62,6 +63,33 @@ export function BotStatusStrip({
     return () => clearTimeout(t)
   }, [toast])
 
+  function completionMessage(res: {
+    jobsFound?: number
+    jobsNew?: number
+    jobsApproved?: number
+    jobsSkippedLowScore?: number
+    jobsEvaluationFailed?: number
+  }) {
+    const found = res.jobsFound ?? 0
+    const saved = res.jobsNew ?? 0
+    const approved = res.jobsApproved ?? 0
+    const belowScore = res.jobsSkippedLowScore ?? 0
+    const evalFailed = res.jobsEvaluationFailed ?? 0
+
+    if (evalFailed > 0 && saved === 0) {
+      return `Search found ${found} listing${found === 1 ? '' : 's'}, but AI scoring failed. Open Runs for details.`
+    }
+
+    if (saved === 0) {
+      if (belowScore > 0) {
+        return `Search found ${found} listing${found === 1 ? '' : 's'}, but none met your match threshold. Open Runs for reasoning.`
+      }
+      return `Search finished: ${found} listing${found === 1 ? '' : 's'} found, 0 saved. Open Runs for details.`
+    }
+
+    return `Search saved ${saved} new job${saved === 1 ? '' : 's'}${approved > 0 ? `, ${approved} approved` : ''}.`
+  }
+
   function handleRun() {
     setToast({ kind: 'running' })
     startRun(async () => {
@@ -69,18 +97,28 @@ export function BotStatusStrip({
       if (res.success) {
         window.dispatchEvent(new CustomEvent(BOT_RUN_COMPLETE_EVENT))
         window.dispatchEvent(new CustomEvent(NOTIFICATIONS_REFRESH_EVENT))
-        await router.refresh()
+        router.refresh()
         setToast({
           kind: 'done',
           ok: true,
-          msg: 'Search finished — your lists are updating.',
+          msg: completionMessage(res),
         })
         return
+      }
+      if ('runId' in res && res.runId) {
+        window.dispatchEvent(new CustomEvent(BOT_RUN_COMPLETE_EVENT))
+        window.dispatchEvent(new CustomEvent(NOTIFICATIONS_REFRESH_EVENT))
+        router.refresh()
       }
       setToast({
         kind: 'done',
         ok: false,
-        msg: 'error' in res && res.error ? res.error : 'Search failed.',
+        msg:
+          'jobsEvaluationFailed' in res && (res.jobsEvaluationFailed ?? 0) > 0
+            ? completionMessage(res)
+            : 'error' in res && res.error
+              ? res.error
+              : 'Search failed.',
       })
     })
   }
@@ -114,6 +152,8 @@ export function BotStatusStrip({
             <span className="text-foreground" suppressHydrationWarning>
               {mounted ? relativeTime(lastRun.startedAt) : 'recently'}
             </span>
+            {' · '}
+            <span className="text-foreground tabular-nums">{lastRun.jobsFound}</span> found
             {' · '}
             <span className="text-foreground tabular-nums">{lastRun.jobsNew}</span> new
             {lastRun.jobsApproved > 0 && (

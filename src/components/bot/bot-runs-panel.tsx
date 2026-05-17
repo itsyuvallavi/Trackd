@@ -38,6 +38,12 @@ type EvaluationSkipRow = {
   reasoning: string
 }
 
+type EvaluationFailureRow = {
+  title: string
+  company: string
+  error: string
+}
+
 function evaluationSkipsFromRun(
   errors: BotRun['errors']
 ): EvaluationSkipRow[] {
@@ -61,6 +67,27 @@ function evaluationSkipsFromRun(
       minScore: o.minScore,
       flags,
       reasoning,
+    })
+  }
+  return out
+}
+
+function evaluationFailuresFromRun(
+  errors: BotRun['errors']
+): EvaluationFailureRow[] {
+  if (!errors || typeof errors !== 'object' || Array.isArray(errors)) return []
+  const raw = (errors as Record<string, unknown>).evaluationFailures
+  if (!Array.isArray(raw)) return []
+  const out: EvaluationFailureRow[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+    const o = item as Record<string, unknown>
+    if (typeof o.title !== 'string' || typeof o.company !== 'string') continue
+    const error = typeof o.error === 'string' ? o.error : ''
+    out.push({
+      title: o.title,
+      company: o.company,
+      error,
     })
   }
   return out
@@ -116,6 +143,7 @@ export function BotRunsPanel({ runs }: BotRunsPanelProps) {
         {runs.map((run) => {
           const pipeline = pipelineSummaryFromRun(run.errors)
           const evalSkips = evaluationSkipsFromRun(run.errors)
+          const evalFailures = evaluationFailuresFromRun(run.errors)
           return (
             <div key={run.id} className="px-5 py-3 space-y-1.5">
               <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -163,6 +191,29 @@ export function BotRunsPanel({ runs }: BotRunsPanelProps) {
                         </p>
                         <p className="text-[11px] leading-snug text-foreground/90 mt-1">
                           {s.reasoning}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+              {evalFailures.length > 0 && (
+                <details className="text-xs group">
+                  <summary className="cursor-pointer text-error-text hover:text-foreground select-none">
+                    AI scoring failed for {evalFailures.length} listing
+                    {evalFailures.length === 1 ? '' : 's'} — show errors
+                  </summary>
+                  <ul className="mt-2 space-y-3 border-l-2 border-error/30 pl-3 max-h-64 overflow-y-auto">
+                    {evalFailures.map((f, i) => (
+                      <li key={`${run.id}-eval-failure-${i}`}>
+                        <p className="font-medium text-foreground leading-tight">
+                          {f.title}{' '}
+                          <span className="text-muted-foreground font-normal">
+                            @ {f.company}
+                          </span>
+                        </p>
+                        <p className="text-[11px] leading-snug text-error-text mt-1">
+                          {f.error}
                         </p>
                       </li>
                     ))}
