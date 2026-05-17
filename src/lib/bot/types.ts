@@ -26,6 +26,16 @@ export interface SearchMeta {
   fallback_used: boolean
   total_raw: number
   total_deduped: number
+  /** Provider pass planning/execution details for keyword x location fanout. */
+  search_passes?: {
+    planned: number
+    selected: number
+    executed: number
+    max: number
+    dropped: number
+    capped: boolean
+    concurrency: number
+  }
   /** Counts by `job.source` after all platforms merged, before exclude filters and dedup. */
   by_source_raw: Record<string, number>
   /** Counts by `job.source` after exclude filters + URL dedup (full list before `results_wanted` slice). */

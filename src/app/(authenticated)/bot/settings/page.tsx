@@ -5,6 +5,7 @@ import { serializeForClient } from '@/lib/serialize-for-client'
 import {
   BOT_SEARCH_KEYWORD_OR_MAX,
   BOT_SEARCH_LOCATION_PASSES_MAX,
+  BOT_SEARCH_PROVIDER_PASSES_MAX,
   BOT_SEARCH_RESULTS_WANTED,
 } from '@/lib/bot/search-constants'
 import {
@@ -32,6 +33,7 @@ export default async function BotSettingsPage() {
       searchUiCaps={{
         keywordOrMax: BOT_SEARCH_KEYWORD_OR_MAX,
         locationPassesMax: BOT_SEARCH_LOCATION_PASSES_MAX,
+        providerPassesMax: BOT_SEARCH_PROVIDER_PASSES_MAX,
         resultsTarget: BOT_SEARCH_RESULTS_WANTED,
       }}
     />

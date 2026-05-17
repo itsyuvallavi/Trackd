@@ -494,6 +494,15 @@ export function BotSettingsContent({
                   </span>
                 </KVRow>
               )}
+              <KVRow label="Provider passes">
+                <span className="text-xs">
+                  {searchPreview.providerPassesSelected} of{' '}
+                  {searchPreview.providerPassesPlanned} planned
+                  {searchPreview.providerPassesCapped
+                    ? ` · ${searchPreview.providerPassesDropped} capped`
+                    : ''}
+                </span>
+              </KVRow>
               <KVRow label="APIs">
                 <span className="text-xs">
                   {searchPreview.noBackends

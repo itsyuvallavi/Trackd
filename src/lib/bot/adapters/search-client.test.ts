@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SearchJobResult } from '../types'
+import {
+  BOT_SEARCH_PROVIDER_PASSES_MAX,
+  BOT_SEARCH_RAPIDAPI_CONCURRENCY,
+} from '../search-constants'
 
 const searchJobsSearchApiExcelMock = vi.fn()
 
@@ -100,6 +104,78 @@ describe('runSearch settings plumbing', () => {
       location: 'Remote',
       isRemote: true,
     })
+  })
+
+  it('caps broad keyword x location fanout while preserving variety', async () => {
+    searchJobsSearchApiExcelMock.mockImplementation(
+      async (params: { searchTerm: string; location: string }) => ({
+        jobs: [
+          result({
+            title: params.searchTerm,
+            location: params.location,
+            url: `https://example.com/${params.searchTerm}-${params.location}`.replace(
+              /\s+/g,
+              '-'
+            ),
+          }),
+        ],
+      })
+    )
+
+    const { runSearch } = await import('./search-client')
+    const response = await runSearch({
+      keywords: ['K1', 'K2', 'K3', 'K4', 'K5'],
+      locations: ['L1', 'L2', 'L3', 'L4', 'L5'],
+      remote_only: true,
+      results_wanted: 90,
+    })
+
+    expect(searchJobsSearchApiExcelMock).toHaveBeenCalledTimes(BOT_SEARCH_PROVIDER_PASSES_MAX)
+
+    const calls = searchJobsSearchApiExcelMock.mock.calls.map(([params]) => params)
+    expect(new Set(calls.map((params) => params.searchTerm)).size).toBeGreaterThan(1)
+    expect(new Set(calls.map((params) => params.location)).size).toBeGreaterThan(1)
+    expect(calls.every((params) => params.location === 'L1')).toBe(false)
+    expect(calls.every((params) => params.resultsWanted === 9)).toBe(true)
+
+    expect(response.meta.search_passes).toMatchObject({
+      planned: 25,
+      selected: BOT_SEARCH_PROVIDER_PASSES_MAX,
+      executed: BOT_SEARCH_PROVIDER_PASSES_MAX,
+      max: BOT_SEARCH_PROVIDER_PASSES_MAX,
+      dropped: 15,
+      capped: true,
+      concurrency: BOT_SEARCH_RAPIDAPI_CONCURRENCY,
+    })
+  })
+
+  it('stops remaining planned passes after a terminal RapidAPI failure', async () => {
+    searchJobsSearchApiExcelMock.mockResolvedValue({
+      jobs: [],
+      error: 'Jobs Search API HTTP 403: not subscribed',
+    })
+
+    const { runSearch } = await import('./search-client')
+    const response = await runSearch({
+      keywords: ['K1', 'K2', 'K3', 'K4', 'K5'],
+      locations: ['L1', 'L2', 'L3', 'L4', 'L5'],
+      remote_only: true,
+      results_wanted: 45,
+    })
+
+    expect(searchJobsSearchApiExcelMock).toHaveBeenCalledTimes(1)
+    expect(response.meta.search_passes).toMatchObject({
+      planned: 25,
+      selected: BOT_SEARCH_PROVIDER_PASSES_MAX,
+      executed: 1,
+      max: BOT_SEARCH_PROVIDER_PASSES_MAX,
+      dropped: 15,
+      capped: true,
+      concurrency: BOT_SEARCH_RAPIDAPI_CONCURRENCY,
+    })
+    expect(Object.values(response.meta.platforms_failed)).toContain(
+      'Jobs Search API HTTP 403: not subscribed'
+    )
   })
 
   it('honors the source allowlist', async () => {

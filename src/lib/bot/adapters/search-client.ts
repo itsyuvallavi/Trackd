@@ -13,10 +13,10 @@
 
 import type { SearchRequest, SearchResponse, SearchJobResult } from '../types'
 import {
-  BOT_SEARCH_KEYWORD_OR_MAX,
-  BOT_SEARCH_LOCATION_PASSES_MAX,
+  BOT_SEARCH_RAPIDAPI_CONCURRENCY,
   BOT_SEARCH_RESULTS_WANTED,
 } from '../search-constants'
+import { buildBotSearchPassPlan, type BotSearchProviderPass } from '../search-plan'
 import { jobsSearchApiRapidApiKey } from '../rapidapi-jobs-search-keys'
 import { searchJobsSearchApiExcel } from './jobs-search-api-adapter'
 import {
@@ -45,6 +45,26 @@ function rapidApiTerminalFailure(error: string): boolean {
   return false
 }
 
+async function runLimited<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>,
+  shouldStop?: () => boolean
+): Promise<void> {
+  const limit = Math.max(1, Math.min(concurrency, items.length || 1))
+  let next = 0
+
+  await Promise.all(
+    Array.from({ length: limit }, async () => {
+      while (next < items.length) {
+        if (shouldStop?.()) return
+        const item = items[next++]
+        await worker(item)
+      }
+    })
+  )
+}
+
 export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
   const allow = botSearchSourcesAllowlist()
   const src = (t: BotSearchSourceToken) => botSearchSourceAllowed(allow, t)
@@ -55,43 +75,39 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
   const platformsFailed: Record<string, string> = {}
   const allJobs: SearchJobResult[] = []
 
-  const keywordSlice = req.keywords
-    .map((k) => k.trim())
-    .filter(Boolean)
-    .slice(0, BOT_SEARCH_KEYWORD_OR_MAX)
-  const searchTerms = keywordSlice.length > 0 ? keywordSlice : req.remote_only ? ['remote'] : ['']
-  const rawLocs = req.locations.map((l) => l.trim()).filter(Boolean)
-  const locationVariants = (rawLocs.length > 0 ? rawLocs : ['Remote']).slice(
-    0,
-    BOT_SEARCH_LOCATION_PASSES_MAX
-  )
+  const searchPlan = buildBotSearchPassPlan({
+    keywords: req.keywords,
+    locations: req.locations,
+    remoteOnly: !!req.remote_only,
+  })
 
   const platformSlots = src('jobs_search_api') && jobsSearchApiKey ? 1 : 0
   const budget = req.results_wanted ?? BOT_SEARCH_RESULTS_WANTED
-  const combos =
-    Math.max(1, locationVariants.length) *
-    Math.max(1, searchTerms.length) *
-    Math.max(1, platformSlots)
+  const selectedPasses = searchPlan.passes.length
+  const combos = Math.max(1, selectedPasses) * Math.max(1, platformSlots)
   const perCombo = Math.max(5, Math.ceil(budget / combos))
 
   let skipJobsSearchApi = false
+  let executedPasses = 0
 
   const normalizedLevel = normalizeExperienceLevel(req.experience_level)
   const jobsSearchExperienceHint = jobsSearchApiSearchHint(normalizedLevel)
 
-  for (let i = 0; i < locationVariants.length; i++) {
-    const location = locationVariants[i]
-    const locTag = `loc:${i + 1}`
+  if (src('jobs_search_api') && jobsSearchApiKey) {
+    await runLimited<BotSearchProviderPass>(
+      searchPlan.passes,
+      BOT_SEARCH_RAPIDAPI_CONCURRENCY,
+      async (pass) => {
+        if (skipJobsSearchApi) return
 
-    for (let k = 0; k < searchTerms.length; k++) {
-      const searchTerm = searchTerms[k]
-      const termTag = `term:${k + 1}`
+        const locTag = `loc:${pass.locationIndex + 1}`
+        const termTag = `term:${pass.termIndex + 1}`
+        executedPasses++
 
-      if (src('jobs_search_api') && jobsSearchApiKey && !skipJobsSearchApi) {
         const { jobs, error } = await searchJobsSearchApiExcel(
           {
-            searchTerm,
-            location,
+            searchTerm: pass.searchTerm,
+            location: pass.location,
             resultsWanted: perCombo,
             isRemote: !!req.remote_only,
             experienceHint: jobsSearchExperienceHint,
@@ -109,12 +125,11 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
           }
           if (error) platformsFailed[`jobs_search_api_partial_${locTag}_${termTag}`] = error
         }
-      } else if (src('jobs_search_api') && !jobsSearchApiKey && i === 0 && k === 0) {
-        platformsFailed['jobs_search_api'] = 'JOBS_SEARCH_API_KEY not set'
-      }
-
-      if (skipJobsSearchApi) break
-    }
+      },
+      () => skipJobsSearchApi
+    )
+  } else if (src('jobs_search_api') && !jobsSearchApiKey) {
+    platformsFailed['jobs_search_api'] = 'JOBS_SEARCH_API_KEY not set'
   }
 
   const filtered = allJobs.filter((job) => {
@@ -145,6 +160,15 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
       fallback_used: false,
       total_raw: allJobs.length,
       total_deduped: deduped.length,
+      search_passes: {
+        planned: searchPlan.totalPossiblePasses,
+        selected: selectedPasses,
+        executed: executedPasses,
+        max: searchPlan.maxPasses,
+        dropped: searchPlan.droppedPasses,
+        capped: searchPlan.capped,
+        concurrency: jobsSearchApiKey && src('jobs_search_api') ? BOT_SEARCH_RAPIDAPI_CONCURRENCY : 0,
+      },
       by_source_raw: countBySource(allJobs),
       by_source_deduped: countBySource(deduped),
     },

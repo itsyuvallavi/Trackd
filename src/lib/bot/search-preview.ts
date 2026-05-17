@@ -1,8 +1,10 @@
 import {
   BOT_SEARCH_KEYWORD_OR_MAX,
   BOT_SEARCH_LOCATION_PASSES_MAX,
+  BOT_SEARCH_PROVIDER_PASSES_MAX,
   BOT_SEARCH_RESULTS_WANTED,
 } from '@/lib/bot/search-constants'
+import { buildBotSearchPassPlan } from '@/lib/bot/search-plan'
 import {
   jobsSearchApiSearchHint,
   normalizeExperienceLevel,
@@ -17,6 +19,7 @@ export type BotSearchBackends = {
 export type BotSearchUiCaps = {
   keywordOrMax: number
   locationPassesMax: number
+  providerPassesMax: number
   resultsTarget: number
 }
 
@@ -25,6 +28,7 @@ export function defaultSearchUiCaps(): BotSearchUiCaps {
   return {
     keywordOrMax: BOT_SEARCH_KEYWORD_OR_MAX,
     locationPassesMax: BOT_SEARCH_LOCATION_PASSES_MAX,
+    providerPassesMax: BOT_SEARCH_PROVIDER_PASSES_MAX,
     resultsTarget: BOT_SEARCH_RESULTS_WANTED,
   }
 }
@@ -36,6 +40,11 @@ export type BotSearchPreviewModel = {
   providerSearchTerms: string[]
   /** Human-readable provider query summary. */
   jobsSearchPhrase: string
+  providerPassesPlanned: number
+  providerPassesSelected: number
+  providerPassesDropped: number
+  providerPassesCapped: boolean
+  providerPassesPreview: { searchTerm: string; location: string }[]
   extraKeywordsDropped: number
   locationRuns: string[]
   extraLocationsDropped: number
@@ -80,15 +89,23 @@ export function buildBotSearchPreview(input: {
   /** Prefer passing from RSC; omitted values use `defaultSearchUiCaps()` so older clients don’t crash. */
   caps?: BotSearchUiCaps | null
 }): BotSearchPreviewModel {
-  const { keywordOrMax, locationPassesMax, resultsTarget } = input.caps ?? defaultSearchUiCaps()
+  const { keywordOrMax, locationPassesMax, providerPassesMax, resultsTarget } =
+    input.caps ?? defaultSearchUiCaps()
   const kw = input.keywords.map((k) => k.trim()).filter(Boolean)
   const usedKw = kw.slice(0, keywordOrMax)
   const keywordQuery = usedKw.join(' OR ')
   const extraKeywordsDropped = Math.max(0, kw.length - keywordOrMax)
 
   const rawLocs = input.locations.map((l) => l.trim()).filter(Boolean)
-  const locSource = rawLocs.length > 0 ? rawLocs : ['Remote']
-  const locationRuns = locSource.slice(0, locationPassesMax)
+  const searchPlan = buildBotSearchPassPlan({
+    keywords: input.keywords,
+    locations: input.locations,
+    remoteOnly: input.remoteOnly,
+    keywordMax: keywordOrMax,
+    locationMax: locationPassesMax,
+    providerPassesMax,
+  })
+  const locationRuns = searchPlan.locations
   const extraLocationsDropped =
     rawLocs.length > 0 ? Math.max(0, rawLocs.length - locationPassesMax) : 0
 
@@ -100,22 +117,31 @@ export function buildBotSearchPreview(input: {
   const level = normalizeExperienceLevel(input.experienceLevelRaw)
   const jobsSearchApiTermPrefix = jobsSearchApiSearchHint(level)
 
-  const providerSearchTerms = (usedKw.length > 0 ? usedKw : input.remoteOnly ? ['remote'] : [''])
-    .map((term) => {
-      const base = term.trim()
-      if (!base) return ''
-      return jobsSearchApiTermPrefix && !new RegExp(`\\b${jobsSearchApiTermPrefix}\\b`, 'i').test(base)
-        ? `${jobsSearchApiTermPrefix} ${base}`.trim()
-        : base
-    })
-    .filter(Boolean)
+  const displayTerm = (term: string) => {
+    const base = term.trim()
+    if (!base) return ''
+    return jobsSearchApiTermPrefix && !new RegExp(`\\b${jobsSearchApiTermPrefix}\\b`, 'i').test(base)
+      ? `${jobsSearchApiTermPrefix} ${base}`.trim()
+      : base
+  }
+
+  const providerSearchTerms = searchPlan.searchTerms.map(displayTerm).filter(Boolean)
   const jobsSearchPhrase = providerSearchTerms.join(' OR ')
+  const providerPassesPreview = searchPlan.passes.map((pass) => ({
+    searchTerm: displayTerm(pass.searchTerm),
+    location: pass.location,
+  }))
 
   return {
     hasKeywords: usedKw.length > 0,
     keywordQuery,
     providerSearchTerms,
     jobsSearchPhrase,
+    providerPassesPlanned: searchPlan.totalPossiblePasses,
+    providerPassesSelected: searchPlan.passes.length,
+    providerPassesDropped: searchPlan.droppedPasses,
+    providerPassesCapped: searchPlan.capped,
+    providerPassesPreview,
     extraKeywordsDropped,
     locationRuns,
     extraLocationsDropped,
