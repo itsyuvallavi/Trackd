@@ -91,6 +91,14 @@ export type EvaluateJobResult = {
   scoringInputs: ScoringInputsSnapshot
 }
 
+function resumeString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback
+}
+
+function resumeStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
+}
+
 function buildEvalPrompt(
   job: SearchJobResult,
   config: BotConfig,
@@ -147,16 +155,30 @@ function buildEvalPrompt(
   const resumeSection = resume
     ? `
 CANDIDATE RESUME:
-Name: ${resume.name}
-Skills: ${resume.skills.slice(0, 30).join(', ')}
-${resume.summary ? `Summary: ${resume.summary}` : ''}
+Name: ${resumeString(resume.name, 'Not listed')}
+Skills: ${resumeStringArray(resume.skills).slice(0, 30).join(', ')}
+${resumeString(resume.summary) ? `Summary: ${resumeString(resume.summary)}` : ''}
 Experience:
-${resume.experience
+${(Array.isArray(resume.experience) ? resume.experience : [])
   .slice(0, 4)
-  .map((e) => `  - ${e.title} at ${e.company} (${e.startDate}–${e.endDate}): ${e.description.slice(0, 200)}`)
+  .map((e) => {
+    const title = resumeString(e?.title, 'Role')
+    const company = resumeString(e?.company, 'Company')
+    const startDate = resumeString(e?.startDate, '?')
+    const endDate = resumeString(e?.endDate, '?')
+    const description = resumeString(e?.description).slice(0, 200)
+    return `  - ${title} at ${company} (${startDate}–${endDate}): ${description}`
+  })
   .join('\n')}
 Education:
-${resume.education.map((e) => `  - ${e.degree} in ${e.field ?? 'N/A'} from ${e.institution}`).join('\n')}
+${(Array.isArray(resume.education) ? resume.education : [])
+  .map((e) => {
+    const degree = resumeString(e?.degree, 'Degree')
+    const field = resumeString(e?.field, 'N/A')
+    const institution = resumeString(e?.institution, 'Institution')
+    return `  - ${degree} in ${field} from ${institution}`
+  })
+  .join('\n')}
 `
     : '\nNo resume uploaded — evaluate based on preferences only.\n'
 
@@ -231,10 +253,12 @@ function buildScoringInputsSnapshot(
       resumeId: resumeMeta.id,
       label: resumeMeta.label,
       selection: resume ? 'matched_by_keywords' : 'none',
-      skillsSentToPrompt: resume ? resume.skills.slice(0, 30) : [],
+      skillsSentToPrompt: resume ? resumeStringArray(resume.skills).slice(0, 30) : [],
       summaryIncluded: !!resume?.summary,
-      experienceRolesInPrompt: resume ? Math.min(4, resume.experience.length) : 0,
-      educationRowsInPrompt: resume ? resume.education.length : 0,
+      experienceRolesInPrompt: resume
+        ? Math.min(4, Array.isArray(resume.experience) ? resume.experience.length : 0)
+        : 0,
+      educationRowsInPrompt: resume && Array.isArray(resume.education) ? resume.education.length : 0,
     },
     jobBlockSentToModel: {
       title: job.title,

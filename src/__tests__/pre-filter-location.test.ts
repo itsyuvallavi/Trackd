@@ -157,6 +157,33 @@ describe('preFilterJob location (US remote HQ)', () => {
     expect(r.rejected).toBe(false)
   })
 
+  it('allows remote-marked country rows when user has only Remote', () => {
+    const r = preFilterJob(
+      job({
+        title: 'Data Analyst',
+        company: 'Acme',
+        location: 'New York, NY',
+        is_remote: true,
+      }),
+      cfg(['Remote'], true),
+    )
+    expect(r.rejected).toBe(false)
+  })
+
+  it('allows title-marked remote country rows when user has only Remote', () => {
+    const r = preFilterJob(
+      job({
+        title: 'Business Analyst - Remote',
+        company: 'Acme',
+        location: 'United States',
+        is_remote: null,
+        description: 'Remote role partnering with product and analytics teams.',
+      }),
+      cfg(['Remote'], true),
+    )
+    expect(r.rejected).toBe(false)
+  })
+
   it('rejects remote-qualified India listing when target locations exclude India', () => {
     const r = preFilterJob(
       job({

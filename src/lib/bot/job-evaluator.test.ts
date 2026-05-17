@@ -179,4 +179,57 @@ describe('evaluateJob minScore behavior', () => {
       skillsSentToPrompt: ['React', 'TypeScript'],
     })
   })
+
+  it('does not crash on sparse parsed resume experience rows', async () => {
+    findManyMock.mockResolvedValue([
+      {
+        id: 'resume_sparse',
+        label: 'Data',
+        matchKeywords: ['data'],
+        isDefault: true,
+        structuredData: {
+          name: 'Candidate',
+          email: 'candidate@example.com',
+          summary: 'Data analyst',
+          skills: ['SQL', 'Tableau'],
+          experience: [
+            {
+              company: 'Acme',
+              title: 'Data Analyst',
+            },
+          ],
+          education: [],
+        },
+      },
+    ])
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 70,
+                reasoning: 'The title says "Data Analyst" and the description mentions "SQL".',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'SQL experience',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJob } = await import('./job-evaluator')
+    const result = await evaluateJob(
+      job({
+        title: 'Data Analyst',
+        description: 'Data Analyst role using SQL dashboards and Tableau reporting.',
+      }),
+      cfg({ keywords: ['Data Analyst'], minScore: 55 }),
+    )
+
+    expect(result.evaluation.score).toBe(55)
+    expect(result.scoringInputs.resumeUsed.skillsSentToPrompt).toEqual(['SQL', 'Tableau'])
+  })
 })

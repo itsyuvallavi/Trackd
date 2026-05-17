@@ -57,6 +57,20 @@ function checkLocation(job: SearchJobResult, config: BotConfig): PreFilterResult
   // No location metadata → can't pre-filter; let the LLM / geo clamp handle it.
   if (!loc || /^(n\/a|not specified|unknown)$/i.test(loc)) return { rejected: false }
 
+  /**
+   * A user who enters only "Remote" / "Anywhere" is asking for global remote
+   * roles. Many boards still attach an employer HQ or payroll country to remote
+   * rows, so accept rows that carry explicit remote evidence before country
+   * filtering those metadata fields.
+   */
+  const onlyRemoteGlobal =
+    user.hasRemoteToken && user.countries.size === 0 && user.cities.size === 0
+  const listingRemote =
+    job.is_remote === true || /\bremote\b/i.test(loc) || /\bremote\b/i.test(job.title)
+  if (onlyRemoteGlobal && listingRemote) {
+    return { rejected: false }
+  }
+
   const countryTokens = countryTokensFromJobLocationLine(loc)
 
   if (countryTokens.length > 0) {
@@ -79,16 +93,6 @@ function checkLocation(job: SearchJobResult, config: BotConfig): PreFilterResult
       flag: 'wrong_location',
       reason: `Job location "${loc}" (${countryLabel}) is not in your Target locations (${config.locations.join(', ')}).`,
     }
-  }
-
-  /**
-   * User typed only global remote tokens ("Remote", "Anywhere") with no country/city —
-   * accept remote rows that don't carry a parseable HQ region.
-   */
-  const onlyRemoteGlobal =
-    user.hasRemoteToken && user.countries.size === 0 && user.cities.size === 0
-  if (onlyRemoteGlobal && (job.is_remote === true || /^remote$/i.test(loc))) {
-    return { rejected: false }
   }
 
   const board = (job.jobBoard ?? job.source ?? '').toLowerCase()
@@ -118,7 +122,7 @@ function checkRemoteWorkPolicy(job: SearchJobResult, config: BotConfig): PreFilt
 
   const loc = (job.location ?? '').trim()
   const listingRemote =
-    job.is_remote === true || /\bremote\b/i.test(loc) || /^remote$/i.test(loc)
+    job.is_remote === true || /\bremote\b/i.test(loc) || /\bremote\b/i.test(job.title)
 
   const facts = analyzeJd(job.description ?? '')
   const jdRemote =
