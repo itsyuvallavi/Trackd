@@ -32,7 +32,7 @@ describe('runSearch settings plumbing', () => {
     delete process.env.BOT_SEARCH_SOURCES
   })
 
-  it('passes keywords, locations, remote, excludes, and seniority settings to adapters', async () => {
+  it('fans out keywords by location and passes remote, excludes, and seniority settings to adapters', async () => {
     searchJobsSearchApiExcelMock.mockResolvedValue({
       jobs: [result({ url: 'https://example.com/jobs-search', source: 'jobs_search_api' })],
     })
@@ -48,15 +48,58 @@ describe('runSearch settings plumbing', () => {
       results_wanted: 20,
     })
 
-    expect(searchJobsSearchApiExcelMock).toHaveBeenCalledTimes(2)
+    expect(searchJobsSearchApiExcelMock).toHaveBeenCalledTimes(4)
     expect(searchJobsSearchApiExcelMock.mock.calls[0][0]).toMatchObject({
-      searchTerm: 'Frontend Engineer Backend Engineer remote',
+      searchTerm: 'Frontend Engineer',
       location: 'Portugal',
+      resultsWanted: 5,
+      isRemote: true,
+      experienceHint: 'senior',
+    })
+    expect(searchJobsSearchApiExcelMock.mock.calls[1][0]).toMatchObject({
+      searchTerm: 'Backend Engineer',
+      location: 'Portugal',
+      resultsWanted: 5,
+      isRemote: true,
+      experienceHint: 'senior',
+    })
+    expect(searchJobsSearchApiExcelMock.mock.calls[2][0]).toMatchObject({
+      searchTerm: 'Frontend Engineer',
+      location: 'Remote Europe',
+      resultsWanted: 5,
+      isRemote: true,
+      experienceHint: 'senior',
+    })
+    expect(searchJobsSearchApiExcelMock.mock.calls[3][0]).toMatchObject({
+      searchTerm: 'Backend Engineer',
+      location: 'Remote Europe',
+      resultsWanted: 5,
       isRemote: true,
       experienceHint: 'senior',
     })
 
     expect(response.jobs.map((job) => job.url)).toEqual(['https://example.com/jobs-search'])
+  })
+
+  it('uses a remote fallback term only when no keywords are provided', async () => {
+    searchJobsSearchApiExcelMock.mockResolvedValue({
+      jobs: [result({ url: 'https://example.com/remote-fallback', source: 'jobs_search_api' })],
+    })
+
+    const { runSearch } = await import('./search-client')
+    await runSearch({
+      keywords: ['', '  '],
+      locations: [],
+      remote_only: true,
+      results_wanted: 10,
+    })
+
+    expect(searchJobsSearchApiExcelMock).toHaveBeenCalledTimes(1)
+    expect(searchJobsSearchApiExcelMock.mock.calls[0][0]).toMatchObject({
+      searchTerm: 'remote',
+      location: 'Remote',
+      isRemote: true,
+    })
   })
 
   it('honors the source allowlist', async () => {

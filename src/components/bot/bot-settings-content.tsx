@@ -482,13 +482,13 @@ export function BotSettingsContent({
             </p>
           ) : (
             <div className="space-y-3">
-              <KVRow label={`Combined query (first ${caps.keywordOrMax})`}>
+              <KVRow label={`Keyword passes (first ${caps.keywordOrMax})`}>
                 <span className="font-mono text-xs break-all">
-                  {searchPreview.keywordQuery}
+                  {searchPreview.providerSearchTerms.join(' · ') || searchPreview.keywordQuery}
                 </span>
               </KVRow>
               {searchPreview.locationRuns.length > 0 && (
-                <KVRow label={`Location passes (up to ${caps.locationPassesMax})`}>
+                <KVRow label={`Location passes (per keyword, up to ${caps.locationPassesMax})`}>
                   <span className="text-xs">
                     {searchPreview.locationRuns.join(' · ')}
                   </span>

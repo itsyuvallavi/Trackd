@@ -32,7 +32,9 @@ export function defaultSearchUiCaps(): BotSearchUiCaps {
 export type BotSearchPreviewModel = {
   hasKeywords: boolean
   keywordQuery: string
-  /** Space-separated phrase for Jobs Search API. */
+  /** Provider search terms sent as separate Jobs Search API passes. */
+  providerSearchTerms: string[]
+  /** Human-readable provider query summary. */
   jobsSearchPhrase: string
   extraKeywordsDropped: number
   locationRuns: string[]
@@ -98,16 +100,21 @@ export function buildBotSearchPreview(input: {
   const level = normalizeExperienceLevel(input.experienceLevelRaw)
   const jobsSearchApiTermPrefix = jobsSearchApiSearchHint(level)
 
-  const termPrefix = jobsSearchApiTermPrefix
-  const jobsSearchPhraseBase = usedKw.join(' ')
-  const jobsSearchPhrase =
-    termPrefix && !new RegExp(`\\b${termPrefix}\\b`, 'i').test(jobsSearchPhraseBase)
-      ? `${termPrefix} ${jobsSearchPhraseBase}`.trim()
-      : jobsSearchPhraseBase
+  const providerSearchTerms = (usedKw.length > 0 ? usedKw : input.remoteOnly ? ['remote'] : [''])
+    .map((term) => {
+      const base = term.trim()
+      if (!base) return ''
+      return jobsSearchApiTermPrefix && !new RegExp(`\\b${jobsSearchApiTermPrefix}\\b`, 'i').test(base)
+        ? `${jobsSearchApiTermPrefix} ${base}`.trim()
+        : base
+    })
+    .filter(Boolean)
+  const jobsSearchPhrase = providerSearchTerms.join(' OR ')
 
   return {
     hasKeywords: usedKw.length > 0,
     keywordQuery,
+    providerSearchTerms,
     jobsSearchPhrase,
     extraKeywordsDropped,
     locationRuns,

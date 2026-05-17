@@ -2,7 +2,7 @@
 export const BOT_SEARCH_RESULTS_WANTED = 45
 
 /**
- * First N non-empty keywords are sent to the search backend.
+ * First N non-empty keywords are sent to the search backend as separate passes.
  * Higher N = broader role coverage per run.
  */
 export const BOT_SEARCH_KEYWORD_OR_MAX = 5
