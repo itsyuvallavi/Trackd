@@ -124,6 +124,10 @@ export async function searchJobsSearchApiExcel(
      * BotConfig.experienceLevel in the caller — no hardcoded value here.
      */
     experienceHint?: string | null
+    /** Location-aware country hint for the provider payload. */
+    countryIndeed?: string | null
+    /** Whether to ask LinkedIn rows for full descriptions when this board is selected. */
+    linkedinFetchDescription?: boolean
     /** Region-aware board selection from the unified search planner. */
     siteNames?: string[]
     /** Pass provenance persisted on every normalized row. */
@@ -141,12 +145,16 @@ export async function searchJobsSearchApiExcel(
 
   const location = params.location.trim() || 'Remote'
   const results_wanted = Math.min(Math.max(params.resultsWanted, 1), 100)
-  const country_indeed = process.env.JOBS_SEARCH_COUNTRY_INDEED?.trim() || 'USA'
   const distance = Number(process.env.JOBS_SEARCH_DISTANCE) || 500
   const hours_old = Number(process.env.JOBS_SEARCH_HOURS_OLD) || 72
   const job_type = process.env.JOBS_SEARCH_JOB_TYPE?.trim() || 'fulltime'
-  const linkedin_fetch_description = process.env.JOBS_SEARCH_LINKEDIN_DESC === '1'
   const site_name = params.siteNames?.length ? params.siteNames : parseSiteNames()
+  const country_indeed =
+    params.countryIndeed?.trim() ||
+    process.env.JOBS_SEARCH_COUNTRY_INDEED?.trim() ||
+    'USA'
+  const linkedin_fetch_description =
+    params.linkedinFetchDescription ?? process.env.JOBS_SEARCH_LINKEDIN_DESC === '1'
 
   try {
     const res = await fetch(`${BASE}/getjobs_excel`, {

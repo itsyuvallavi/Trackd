@@ -8,6 +8,9 @@ export interface SearchProviderPassMeta {
   locationIndex: number
   isRemote: boolean
   siteNames: string[]
+  countryIndeed?: string | null
+  countryIndeedReason?: string | null
+  linkedinFetchDescription?: boolean
   resultsWanted: number
   experienceHint?: string | null
 }
@@ -54,6 +57,10 @@ export interface SearchMeta {
   }
   provider_passes?: SearchProviderPassMeta[]
   provider_site_names?: {
+    jobs_search_api?: string[]
+    reason?: string
+  }
+  provider_country_indeed?: {
     jobs_search_api?: string[]
     reason?: string
   }

@@ -22,6 +22,7 @@ import {
   jdLocationOverlapsUser,
   userAcceptsUnitedStates,
   countryTokensFromJobLocationLine,
+  hasRemoteWorkSignal,
   userWantsRemoteFirstUnlessListedCities,
   jdOnsiteBlobIncludesUserCity,
 } from './user-locations'
@@ -41,13 +42,6 @@ export type PreFilterResult =
 /** Job boards that only post US-based jobs. */
 const US_ONLY_BOARDS = new Set(['dice', 'ziprecruiter', 'zip_recruiter'])
 
-/**
- * Remote-first Europe/EU seekers need proof the role is remote-friendly. Listings with
- * almost no description and no Remote flag look like on-site jobs with missing metadata
- * (e.g. LATAM employers on LinkedIn) — reject before the LLM inflates them from the title.
- */
-const MIN_JD_CHARS_FOR_REMOTE_FIRST_EVIDENCE = 80
-
 function checkLocation(job: SearchJobResult, config: BotConfig): PreFilterResult {
   const user = parseUserLocations(config.locations)
   if (user.isAny) return { rejected: false }
@@ -66,7 +60,7 @@ function checkLocation(job: SearchJobResult, config: BotConfig): PreFilterResult
   const onlyRemoteGlobal =
     user.hasRemoteToken && user.countries.size === 0 && user.cities.size === 0
   const listingRemote =
-    job.is_remote === true || /\bremote\b/i.test(loc) || /\bremote\b/i.test(job.title)
+    job.is_remote === true || hasRemoteWorkSignal(loc) || hasRemoteWorkSignal(job.title)
   if (onlyRemoteGlobal && listingRemote) {
     return { rejected: false }
   }
@@ -122,7 +116,7 @@ function checkRemoteWorkPolicy(job: SearchJobResult, config: BotConfig): PreFilt
 
   const loc = (job.location ?? '').trim()
   const listingRemote =
-    job.is_remote === true || /\bremote\b/i.test(loc) || /\bremote\b/i.test(job.title)
+    job.is_remote === true || hasRemoteWorkSignal(loc) || hasRemoteWorkSignal(job.title)
 
   const facts = analyzeJd(job.description ?? '')
   const jdRemote =
@@ -146,21 +140,6 @@ function checkRemoteWorkPolicy(job: SearchJobResult, config: BotConfig): PreFilt
       flag: 'wrong_location',
       reason:
         'This role looks on-site or hybrid in a location you did not list for in-person work. You want remote anywhere in Europe unless the employer is in a city you added to Target locations (e.g. Lisbon, Porto).',
-    }
-  }
-
-  const jdLen = (job.description ?? '').trim().length
-  if (
-    jdLen < MIN_JD_CHARS_FOR_REMOTE_FIRST_EVIDENCE &&
-    !listingRemote &&
-    !jdRemote
-  ) {
-    return {
-      rejected: true,
-      score: 20,
-      flag: 'wrong_location',
-      reason:
-        'Listing has little or no job description and is not marked Remote — cannot confirm it fits your remote-first Europe rule (needs explicit remote-friendly wording or a Remote listing).',
     }
   }
 

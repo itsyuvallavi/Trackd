@@ -89,6 +89,100 @@ function hasEuropeScope(locations: string[]): boolean {
   return user.hasEuropeToken || user.hasEuToken || user.countries.has('portugal')
 }
 
+function normaliseLocationToken(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[_/|]+/g, ' ')
+    .replace(/[()[\]{}]+/g, ' ')
+    .replace(/\s*[-–—]\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+}
+
+export function resolveJobsSearchRemoteFlag(input: {
+  location: string
+  remoteOnly?: boolean
+}): boolean {
+  if (input.remoteOnly) return true
+
+  const loc = normaliseLocationToken(input.location)
+  if (!loc) return false
+
+  if (
+    loc === 'remote' ||
+    loc === 'anywhere' ||
+    loc === 'worldwide' ||
+    loc === 'global' ||
+    loc === 'work from home' ||
+    loc === 'wfh'
+  ) {
+    return true
+  }
+
+  if (loc.includes('remote')) return true
+
+  return ['europe', 'eu', 'emea', 'eea', 'remote europe', 'remote eu', 'remote emea'].includes(
+    loc
+  )
+}
+
+function explicitJobsSearchCountryIndeed(): string | null {
+  const raw = process.env.JOBS_SEARCH_COUNTRY_INDEED?.trim()
+  return raw || null
+}
+
+function countryFromLocationToken(location: string): string | null {
+  const loc = normaliseLocationToken(location)
+  if (!loc) return null
+
+  if (/\b(?:lisbon|porto|portugal)\b/.test(loc)) return 'Portugal'
+  if (/\b(?:united states|usa|us|new york|california|san francisco|boston|chicago|seattle)\b/.test(loc)) {
+    return 'USA'
+  }
+  if (/\bindia\b/.test(loc)) return 'India'
+  if (/\b(?:united kingdom|uk|london|england|scotland|wales)\b/.test(loc)) return 'United Kingdom'
+  if (/\bspain\b|\bmadrid\b|\bbarcelona\b/.test(loc)) return 'Spain'
+  if (/\bfrance\b|\bparis\b/.test(loc)) return 'France'
+  if (/\bgermany\b|\bberlin\b|\bmunich\b/.test(loc)) return 'Germany'
+  if (/\bnetherlands\b|\bamsterdam\b/.test(loc)) return 'Netherlands'
+  if (/\bireland\b|\bdublin\b/.test(loc)) return 'Ireland'
+  if (/\b(?:united arab emirates|uae|dubai|abu dhabi)\b/.test(loc)) {
+    return 'United Arab Emirates'
+  }
+
+  return null
+}
+
+export function resolveJobsSearchCountryIndeed(input: {
+  location: string
+  allLocations: string[]
+}): { countryIndeed: string; reason: string } {
+  const explicit = explicitJobsSearchCountryIndeed()
+  if (explicit) return { countryIndeed: explicit, reason: 'env_override' }
+
+  const direct = countryFromLocationToken(input.location)
+  if (direct) return { countryIndeed: direct, reason: 'location_pass' }
+
+  for (const location of input.allLocations) {
+    const scoped = countryFromLocationToken(location)
+    if (scoped) return { countryIndeed: scoped, reason: 'profile_scope' }
+  }
+
+  const user = parseUserLocations(input.allLocations)
+  if (user.hasEuropeToken || user.hasEuToken) {
+    return { countryIndeed: 'Portugal', reason: 'europe_default' }
+  }
+
+  return { countryIndeed: 'USA', reason: 'default' }
+}
+
+export function resolveJobsSearchLinkedinFetchDescription(siteNames: string[]): boolean {
+  const raw = process.env.JOBS_SEARCH_LINKEDIN_DESC?.trim()
+  if (raw === '0' || raw?.toLowerCase() === 'false') return false
+  if (raw === '1' || raw?.toLowerCase() === 'true') return true
+  return siteNames.some((name) => name.toLowerCase() === 'linkedin')
+}
+
 function providerLocationQualifier(input: {
   location: string
   allLocations: string[]

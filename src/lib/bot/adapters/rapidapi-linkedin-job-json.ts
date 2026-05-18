@@ -3,6 +3,7 @@
  */
 
 import type { SearchJobResult } from '../types'
+import { hasRemoteWorkSignal } from '../user-locations'
 
 function str(v: unknown): string | null {
   return typeof v === 'string' && v.trim() ? v.trim() : null
@@ -121,12 +122,10 @@ export function normalizeRapidApiJobRow(
 
   const posted = str(raw.postedDate) ?? str(raw.listedAt) ?? str(raw.posted_at) ?? null
 
-  const locLower = (location ?? '').toLowerCase()
-  const descLower = (description ?? '').toLowerCase()
   const mentionsRemote =
-    locLower.includes('remote') ||
-    descLower.includes('remote') ||
-    title.toLowerCase().includes('remote')
+    hasRemoteWorkSignal(location) ||
+    hasRemoteWorkSignal(description) ||
+    hasRemoteWorkSignal(title)
   const isRemote = mentionsRemote ? true : null
 
   return {

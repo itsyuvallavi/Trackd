@@ -35,6 +35,9 @@ import {
 } from '../experience-level'
 import {
   buildProviderSearchQuery,
+  resolveJobsSearchCountryIndeed,
+  resolveJobsSearchLinkedinFetchDescription,
+  resolveJobsSearchRemoteFlag,
   resolveJobsSearchSiteNames,
 } from '../search-quality'
 
@@ -114,24 +117,40 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
     locations: req.locations,
     remoteOnly: !!req.remote_only,
   })
-  const providerPasses: SearchProviderPassMeta[] = searchPlan.passes.map((pass, passIndex) => ({
-    provider: 'jobs_search_api',
-    passIndex,
-    searchTerm: pass.searchTerm,
-    providerQuery: buildProviderSearchQuery({
-      searchTerm: pass.searchTerm,
+  const linkedinFetchDescription = resolveJobsSearchLinkedinFetchDescription(
+    jobsSearchSiteSelection.siteNames
+  )
+  const providerPasses: SearchProviderPassMeta[] = searchPlan.passes.map((pass, passIndex) => {
+    const country = resolveJobsSearchCountryIndeed({
       location: pass.location,
       allLocations: searchPlan.locations,
-      remoteOnly: !!req.remote_only,
-    }),
-    location: pass.location,
-    termIndex: pass.termIndex,
-    locationIndex: pass.locationIndex,
-    isRemote: !!req.remote_only,
-    siteNames: jobsSearchSiteSelection.siteNames,
-    resultsWanted: perCombo,
-    experienceHint: jobsSearchExperienceHint,
-  }))
+    })
+
+    return {
+      provider: 'jobs_search_api',
+      passIndex,
+      searchTerm: pass.searchTerm,
+      providerQuery: buildProviderSearchQuery({
+        searchTerm: pass.searchTerm,
+        location: pass.location,
+        allLocations: searchPlan.locations,
+        remoteOnly: !!req.remote_only,
+      }),
+      location: pass.location,
+      termIndex: pass.termIndex,
+      locationIndex: pass.locationIndex,
+      isRemote: resolveJobsSearchRemoteFlag({
+        location: pass.location,
+        remoteOnly: !!req.remote_only,
+      }),
+      siteNames: jobsSearchSiteSelection.siteNames,
+      countryIndeed: country.countryIndeed,
+      countryIndeedReason: country.reason,
+      linkedinFetchDescription,
+      resultsWanted: perCombo,
+      experienceHint: jobsSearchExperienceHint,
+    }
+  })
 
   if (src('jobs_search_api') && jobsSearchApiKey) {
     await runLimited<BotSearchProviderPass>(
@@ -152,8 +171,10 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
             searchTerm: passMeta?.providerQuery ?? pass.searchTerm,
             location: pass.location,
             resultsWanted: perCombo,
-            isRemote: !!req.remote_only,
+            isRemote: passMeta?.isRemote ?? !!req.remote_only,
             experienceHint: jobsSearchExperienceHint,
+            countryIndeed: passMeta?.countryIndeed ?? null,
+            linkedinFetchDescription,
             siteNames: jobsSearchSiteSelection.siteNames,
             providerPass: passMeta,
           },
@@ -219,8 +240,20 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
         jobs_search_api: jobsSearchSiteSelection.siteNames,
         reason: jobsSearchSiteSelection.reason,
       },
+      provider_country_indeed: {
+        jobs_search_api: Array.from(
+          new Set(providerPasses.map((pass) => pass.countryIndeed).filter(Boolean) as string[])
+        ),
+        reason: Array.from(
+          new Set(
+            providerPasses
+              .map((pass) => pass.countryIndeedReason)
+              .filter(Boolean) as string[]
+          )
+        ).join(','),
+      },
       query_strategy:
-        'keyword_location_query_v2: provider search_term includes remote/location qualifier when needed',
+        'keyword_location_query_v3: provider search_term includes remote/location qualifier; is_remote and country_indeed are pass-aware',
       by_source_raw: countBySource(allJobs),
       by_source_deduped: countBySource(deduped),
       by_job_board_raw: countByJobBoard(allJobs),

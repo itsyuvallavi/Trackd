@@ -71,7 +71,7 @@ describe('preFilterJob remote-first Europe', () => {
     expect(r.rejected).toBe(true)
   })
 
-  it('rejects empty description and non-remote listing for remote-first user (thin LATAM-style rows)', () => {
+  it('does not call missing metadata wrong_location for remote-first user', () => {
     const r = preFilterJob(
       job({
         title: 'Pessoa Desenvolvedora Full Stack',
@@ -82,8 +82,21 @@ describe('preFilterJob remote-first Europe', () => {
       }),
       cfg(['Portugal', 'Europe']),
     )
-    expect(r.rejected).toBe(true)
-    if (r.rejected) expect(r.flag).toBe('wrong_location')
+    expect(r.rejected).toBe(false)
+  })
+
+  it('recognizes Portuguese/Spanish remote wording in title metadata', () => {
+    const r = preFilterJob(
+      job({
+        title: 'Frontend Developer (React / Next.js) - 100% Remoto',
+        company: 'knowmad mood',
+        location: null,
+        is_remote: null,
+        description: null,
+      }),
+      cfg(['Portugal', 'Europe']),
+    )
+    expect(r.rejected).toBe(false)
   })
 
   it('allows thin JD when listing is explicitly remote', () => {

@@ -177,4 +177,30 @@ describe('searchJobsSearchApiExcel provider contract', () => {
     expect(body.location).toBe('remote')
     expect(body.results_wanted).toBe(1)
   })
+
+  it('lets caller override country and LinkedIn description settings per pass', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await searchJobsSearchApiExcel(
+      {
+        searchTerm: 'Frontend Engineer remote Europe',
+        location: 'Europe',
+        resultsWanted: 5,
+        isRemote: true,
+        countryIndeed: 'Portugal',
+        linkedinFetchDescription: true,
+        siteNames: ['linkedin', 'glassdoor'],
+      },
+      'test-rapidapi-key'
+    )
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string)
+    expect(body).toMatchObject({
+      country_indeed: 'Portugal',
+      is_remote: true,
+      linkedin_fetch_description: true,
+      site_name: ['linkedin', 'glassdoor'],
+    })
+  })
 })

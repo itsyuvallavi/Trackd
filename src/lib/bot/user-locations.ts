@@ -131,6 +131,18 @@ const REMOTE_TOKENS = new Set([
   'remote first',
 ])
 
+const REMOTE_WORK_SIGNAL_RE =
+  /\b(?:remote|remotely|remoto|remota|remotos|remotas|telework|telecommute|telecommuting|teletrabalho|teletrabajo|teletravail|home\s*office|work\s+from\s+home|wfh)\b|100%\s*(?:remote|remoto|remota)/i
+
+export function hasRemoteWorkSignal(value: string | null | undefined): boolean {
+  if (!value) return false
+  const normalized = value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[-_/]+/g, ' ')
+  return REMOTE_WORK_SIGNAL_RE.test(normalized)
+}
+
 export function parseUserLocations(raw: string[] | null | undefined): UserLocationTokens {
   const cleaned = (raw ?? [])
     .map((s) => s.trim())

@@ -62,6 +62,8 @@ describe('runSearch settings plumbing', () => {
       isRemote: true,
       experienceHint: 'senior',
       siteNames: ['linkedin', 'glassdoor'],
+      countryIndeed: 'Portugal',
+      linkedinFetchDescription: true,
     })
     expect(searchJobsSearchApiExcelMock.mock.calls[1][0]).toMatchObject({
       searchTerm: 'Backend Engineer remote Portugal',
@@ -99,6 +101,35 @@ describe('runSearch settings plumbing', () => {
       providerQuery: 'Frontend Engineer remote Portugal',
       location: 'Portugal',
       siteNames: ['linkedin', 'glassdoor'],
+      countryIndeed: 'Portugal',
+      linkedinFetchDescription: true,
+    })
+  })
+
+  it('sets Jobs Search API remote flag per location pass when remote-only is off', async () => {
+    searchJobsSearchApiExcelMock.mockResolvedValue({
+      jobs: [result({ url: 'https://example.com/jobs-search', source: 'jobs_search_api' })],
+    })
+
+    const { runSearch } = await import('./search-client')
+    const response = await runSearch({
+      keywords: ['Frontend Engineer'],
+      locations: ['Remote', 'Lisbon', 'Europe', 'Porto', 'EU'],
+      remote_only: false,
+      results_wanted: 25,
+    })
+
+    const calls = searchJobsSearchApiExcelMock.mock.calls.map(([params]) => params)
+    expect(calls).toMatchObject([
+      { location: 'Remote', isRemote: true, countryIndeed: 'Portugal' },
+      { location: 'Lisbon', isRemote: false, countryIndeed: 'Portugal' },
+      { location: 'Europe', isRemote: true, countryIndeed: 'Portugal' },
+      { location: 'Porto', isRemote: false, countryIndeed: 'Portugal' },
+      { location: 'EU', isRemote: true, countryIndeed: 'Portugal' },
+    ])
+    expect(response.meta.provider_country_indeed).toEqual({
+      jobs_search_api: ['Portugal'],
+      reason: 'profile_scope,location_pass',
     })
   })
 
