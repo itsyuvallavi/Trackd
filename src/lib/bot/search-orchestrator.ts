@@ -14,10 +14,16 @@ import type { BotConfig } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { SearchJobResult, OrchestratorResult } from './types'
 import { evaluateJob } from './job-evaluator'
-import { preFilterJob } from './pre-filter'
+import { preFilterJob, type PreFilterResult } from './pre-filter'
 import { runSearch } from './adapters/search-client'
 import { botSearchHasQueryableBackend } from './bot-search-sources'
 import { buildBotSearchRequest } from './search-request'
+import {
+  countryTokensFromJobLocationLine,
+  hasRemoteWorkSignal,
+  jdLocationOverlapsUser,
+  parseUserLocations,
+} from './user-locations'
 import {
   BOT_SEARCH_AI_EVAL_CONCURRENCY,
   BOT_SEARCH_AI_EVAL_MAX_PER_RUN,
@@ -134,6 +140,172 @@ type MutableListing = {
   scoringInputs: Prisma.InputJsonValue | null
   decisionReason: string | null
   errorMessage: string | null
+}
+
+type JobWithAudit = {
+  job: SearchJobResult
+  seq: number
+  audit: MutableListing
+}
+
+type CandidatePriority = {
+  score: number
+  reasons: string[]
+}
+
+type PrioritizedJobWithAudit = JobWithAudit & {
+  priority: CandidatePriority
+}
+
+function normalizePriorityText(value: string | null | undefined): string {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9+#.]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function keywordPriority(job: SearchJobResult, botConfig: BotConfig): CandidatePriority {
+  const title = normalizePriorityText(job.title)
+  const haystack = `${title} ${normalizePriorityText(job.description)}`.trim()
+  const reasons: string[] = []
+  let score = 0
+  let tokenHits = 0
+
+  for (const rawKeyword of botConfig.keywords) {
+    const keyword = normalizePriorityText(rawKeyword)
+    if (!keyword) continue
+
+    if (title.includes(keyword)) {
+      score += 30
+      reasons.push(`title_phrase:${rawKeyword}`)
+      continue
+    }
+
+    const tokens = keyword
+      .split(' ')
+      .filter((token) => token.length >= 3)
+      .filter((token) => !['developer', 'engineer', 'software', 'role', 'job'].includes(token))
+
+    for (const token of tokens) {
+      if (haystack.includes(token)) {
+        tokenHits++
+        reasons.push(`keyword:${token}`)
+      }
+    }
+  }
+
+  if (tokenHits > 0) {
+    score += Math.min(32, tokenHits * 8)
+  }
+
+  return { score, reasons }
+}
+
+function locationPriority(job: SearchJobResult, botConfig: BotConfig): CandidatePriority {
+  const user = parseUserLocations(botConfig.locations)
+  if (user.isAny) {
+    return { score: 5, reasons: ['location:any'] }
+  }
+
+  const reasons: string[] = []
+  let score = 0
+  const location = job.location ?? ''
+  const locationTokens = countryTokensFromJobLocationLine(location)
+
+  if (locationTokens.length > 0 && jdLocationOverlapsUser(locationTokens, user)) {
+    score += 30
+    reasons.push('location:target_region')
+  }
+
+  const locText = normalizePriorityText(location)
+  for (const city of user.cities) {
+    if (city.length >= 3 && locText.includes(city)) {
+      score += 24
+      reasons.push(`location:city:${city}`)
+      break
+    }
+  }
+
+  const remoteSignal =
+    job.is_remote === true ||
+    hasRemoteWorkSignal(job.title) ||
+    hasRemoteWorkSignal(location) ||
+    hasRemoteWorkSignal(job.description)
+
+  if (
+    remoteSignal &&
+    (botConfig.remoteOnly || user.hasRemoteToken || user.hasEuropeToken || user.hasEuToken)
+  ) {
+    score += 35
+    reasons.push('location:remote_signal')
+  }
+
+  return { score, reasons }
+}
+
+function qualityPriority(job: SearchJobResult): CandidatePriority {
+  const reasons: string[] = []
+  let score = 0
+  const descriptionLength = (job.description ?? '').trim().length
+
+  if (descriptionLength >= 400) {
+    score += 18
+    reasons.push('description:substantial')
+  } else if (descriptionLength >= 80) {
+    score += 10
+    reasons.push('description:usable')
+  } else {
+    score -= 8
+    reasons.push('description:thin')
+  }
+
+  if (job.salary_min || job.salary_max) {
+    score += 4
+    reasons.push('salary:present')
+  }
+
+  const board = (job.jobBoard ?? job.source ?? '').toLowerCase()
+  if (['linkedin', 'indeed', 'glassdoor'].includes(board)) {
+    score += 4
+    reasons.push(`board:${board}`)
+  } else if (['naukri', 'bayt', 'dice', 'ziprecruiter', 'zip_recruiter'].includes(board)) {
+    score -= 6
+    reasons.push(`board:lower_priority:${board}`)
+  }
+
+  return { score, reasons }
+}
+
+function prioritizeCandidate(job: SearchJobResult, botConfig: BotConfig): CandidatePriority {
+  const parts = [
+    keywordPriority(job, botConfig),
+    locationPriority(job, botConfig),
+    qualityPriority(job),
+  ]
+
+  return {
+    score: parts.reduce((sum, part) => sum + part.score, 0),
+    reasons: parts.flatMap((part) => part.reasons).slice(0, 12),
+  }
+}
+
+function sortCandidatesForEvaluation(
+  candidates: JobWithAudit[],
+  botConfig: BotConfig
+): PrioritizedJobWithAudit[] {
+  return candidates
+    .map((candidate) => ({
+      ...candidate,
+      priority: prioritizeCandidate(candidate.job, botConfig),
+    }))
+    .sort((a, b) => {
+      const byPriority = b.priority.score - a.priority.score
+      if (byPriority !== 0) return byPriority
+      return a.seq - b.seq
+    })
 }
 
 function toCreateInput(botRunId: string, m: MutableListing): Prisma.BotRunListingCreateManyInput {
@@ -518,7 +690,7 @@ export async function runBotSearch(
 
     let noUrlIdx = 0
     const openAi = !!process.env.OPENAI_API_KEY
-    const jobsWithAudit: Array<{ job: SearchJobResult; seq: number; audit: MutableListing }> = []
+    const jobsWithAudit: JobWithAudit[] = []
     for (const job of allNewJobs) {
       let seq: number | undefined
       if (job.url?.trim()) {
@@ -540,14 +712,101 @@ export async function runBotSearch(
       jobsWithAudit.push({ job, seq, audit })
     }
 
+    const finalizePreFilteredCandidate = (
+      { job, seq, audit }: JobWithAudit,
+      preFilter: Extract<PreFilterResult, { rejected: true }>
+    ) => {
+      result.jobsHardFiltered++
+      result.jobsSkippedLowScore++
+      result.evaluationSkips.push({
+        title: job.title.slice(0, 200),
+        company: job.company.slice(0, 120),
+        score: preFilter.score,
+        minScore: botConfig.minScore,
+        flags: [preFilter.flag],
+        reasoning: preFilter.reason.slice(0, REASONING_STORE_MAX),
+        filterKind: 'hard_filter',
+        jobBoard: job.jobBoard ?? null,
+        providerPass: job.providerPass ?? null,
+      })
+      pushLog(
+        'info',
+        `Hard filter rejected before AI budget (not saved): ${job.title} @ ${job.company} — ` +
+          `${preFilter.flag} | ${oneLineExcerpt(preFilter.reason, REASONING_LOG_MAX)}`
+      )
+      auditBySeq.set(seq, {
+        ...audit,
+        finalized: true,
+        stage: BOT_LISTING_STAGE.HARD_FILTER,
+        outcome: BOT_LISTING_OUTCOME.REJECTED,
+        evaluated: false,
+        score: preFilter.score,
+        shouldApply: false,
+        flags: [preFilter.flag],
+        reasoning: preFilter.reason,
+        resumeMatch: null,
+        scoringInputs: {
+          model: 'pre-filter',
+          note: 'Deterministic hard filter ran before spending an AI evaluation budget slot.',
+          deterministicFilter: preFilter.flag,
+          maxEvaluations: BOT_SEARCH_AI_EVAL_MAX_PER_RUN,
+        },
+        decisionReason: preFilter.reason,
+      })
+    }
+
     const aiEvalMax = BOT_SEARCH_AI_EVAL_MAX_PER_RUN
     const aiEvalConcurrency = BOT_SEARCH_AI_EVAL_CONCURRENCY
-    const jobsToProcess = openAi ? jobsWithAudit.slice(0, aiEvalMax) : jobsWithAudit
-    const budgetedJobs = openAi ? jobsWithAudit.slice(aiEvalMax) : []
+    const aiEligibleJobs: JobWithAudit[] = []
+
+    if (openAi) {
+      for (const candidate of jobsWithAudit) {
+        const preFilter = preFilterJob(candidate.job, botConfig)
+        if (preFilter.rejected) {
+          finalizePreFilteredCandidate(candidate, preFilter)
+        } else {
+          aiEligibleJobs.push(candidate)
+        }
+      }
+    } else {
+      aiEligibleJobs.push(...jobsWithAudit)
+    }
+
+    if (openAi && aiEligibleJobs.length !== jobsWithAudit.length) {
+      pushLog(
+        'info',
+        `AI budget pre-filter: ${jobsWithAudit.length - aiEligibleJobs.length} hard-filtered, ` +
+          `${aiEligibleJobs.length} eligible for AI ranking.`
+      )
+    }
+
+    const prioritizedJobs = openAi
+      ? sortCandidatesForEvaluation(aiEligibleJobs, botConfig)
+      : aiEligibleJobs.map((candidate) => ({
+          ...candidate,
+          priority: { score: 0, reasons: [] },
+        }))
+    const jobsToProcess = openAi ? prioritizedJobs.slice(0, aiEvalMax) : prioritizedJobs
+    const budgetedJobs = openAi ? prioritizedJobs.slice(aiEvalMax) : []
+
+    if (openAi && prioritizedJobs.length > 0) {
+      const preview = prioritizedJobs.slice(0, Math.min(5, prioritizedJobs.length)).map((item) => ({
+        seq: item.seq,
+        title: item.job.title.slice(0, 120),
+        company: item.job.company.slice(0, 80),
+        priorityScore: item.priority.score,
+        reasons: item.priority.reasons,
+      }))
+      pushLog('info', 'AI evaluation priority order prepared', {
+        eligible: prioritizedJobs.length,
+        maxEvaluations: aiEvalMax,
+        preview,
+      })
+    }
 
     if (openAi && budgetedJobs.length > 0) {
       const message =
-        `AI evaluation budget reached: evaluating ${jobsToProcess.length}/${jobsWithAudit.length} ` +
+        `AI evaluation budget reached: evaluating ${jobsToProcess.length}/${prioritizedJobs.length} ` +
         `new listing(s); ${budgetedJobs.length} left unscored and not saved.`
       result.errors['evaluation_budget'] = message
       pushLog('warn', message, {
@@ -555,8 +814,11 @@ export async function runBotSearch(
         concurrency: aiEvalConcurrency,
         skipped: budgetedJobs.length,
       })
-      for (const { job, seq, audit } of budgetedJobs) {
+      for (const { job, seq, audit, priority } of budgetedJobs) {
         result.jobsSkippedLowScore++
+        const priorityReason = priority.reasons.length
+          ? ` Priority signals: ${priority.reasons.join(', ')}.`
+          : ''
         result.evaluationSkips.push({
           title: job.title.slice(0, 200),
           company: job.company.slice(0, 120),
@@ -564,7 +826,8 @@ export async function runBotSearch(
           minScore: botConfig.minScore,
           flags: ['eval_budget'],
           reasoning:
-            `Skipped AI scoring because this run reached the production evaluation budget (${aiEvalMax}).`,
+            `Skipped AI scoring because this run reached the production evaluation budget (${aiEvalMax}) ` +
+            `after deterministic candidate ranking.${priorityReason}`,
           filterKind: 'eval_budget',
           jobBoard: job.jobBoard ?? null,
           providerPass: job.providerPass ?? null,
@@ -579,17 +842,23 @@ export async function runBotSearch(
           shouldApply: false,
           flags: ['eval_budget'],
           reasoning:
-            `Skipped AI scoring because this run reached the production evaluation budget (${aiEvalMax}).`,
+            `Skipped AI scoring because this run reached the production evaluation budget (${aiEvalMax}) ` +
+            `after deterministic candidate ranking.${priorityReason}`,
           resumeMatch: null,
           scoringInputs: {
             note: 'AI evaluator was not run because the per-run evaluation budget was exhausted.',
             maxEvaluations: aiEvalMax,
             concurrency: aiEvalConcurrency,
+            priorityScore: priority.score,
+            priorityReasons: priority.reasons,
           },
           decisionReason:
-            'AI evaluation budget was exhausted before this listing was scored — listing not saved.',
+            'AI evaluation budget was exhausted after deterministic candidate ranking — listing not saved.',
         })
-        pushLog('info', `Budget skipped (not saved): ${job.title} @ ${job.company}`)
+        pushLog(
+          'info',
+          `Budget skipped (not saved): ${job.title} @ ${job.company} — priority ${priority.score}`
+        )
       }
     }
 

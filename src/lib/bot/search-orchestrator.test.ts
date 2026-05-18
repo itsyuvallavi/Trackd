@@ -423,4 +423,153 @@ describe('runBotSearch orchestration', () => {
       ]),
     )
   })
+
+  it('prioritizes high-signal listings before spending the AI evaluation budget', async () => {
+    const lowSignalJobs = Array.from({ length: BOT_SEARCH_AI_EVAL_MAX_PER_RUN }, (_, index) =>
+      job({
+        title: `Generic Web Role ${index + 1}`,
+        company: `LowSignalCo ${index + 1}`,
+        location: 'Remote',
+        url: `https://example.com/low-signal-${index + 1}`,
+        description: 'Short role.',
+      }),
+    )
+    const strongLateJob = job({
+      title: 'Frontend Engineer',
+      company: 'StrongLateCo',
+      location: 'Remote Europe',
+      url: 'https://example.com/strong-late',
+      description:
+        'Frontend Engineer role building React and TypeScript interfaces for a remote-first Europe product team. The role includes component systems, Next.js, and production UI delivery.',
+      salary_min: 90000,
+      jobBoard: 'linkedin',
+    })
+
+    mocks.runSearch.mockResolvedValue(searchResponse([...lowSignalJobs, strongLateJob]))
+    mocks.jobFindMany.mockResolvedValue([])
+    mocks.evaluateJob.mockImplementation((candidate: SearchJobResult) =>
+      Promise.resolve({
+        evaluation: {
+          score: candidate.company === 'StrongLateCo' ? 92 : 50,
+          shouldApply: candidate.company === 'StrongLateCo',
+          reasoning: candidate.company === 'StrongLateCo' ? 'Strong React match.' : 'Weak title match.',
+          flags: candidate.company === 'StrongLateCo' ? ['good_match'] : ['stack_mismatch'],
+        },
+        scoringInputs: { source: 'test' },
+      }),
+    )
+
+    const { runBotSearch } = await import('./search-orchestrator')
+    const result = await runBotSearch(config(), 'user_1', { botRunId: 'run_1' })
+
+    expect(mocks.evaluateJob).toHaveBeenCalledTimes(BOT_SEARCH_AI_EVAL_MAX_PER_RUN)
+    expect(mocks.evaluateJob).toHaveBeenCalledWith(strongLateJob, expect.any(Object))
+    expect(mocks.jobCreate).toHaveBeenCalledTimes(1)
+    expect(mocks.jobCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          title: 'Frontend Engineer',
+          company: 'StrongLateCo',
+        }),
+      }),
+    )
+    expect(result).toMatchObject({
+      jobsFound: BOT_SEARCH_AI_EVAL_MAX_PER_RUN + 1,
+      jobsNew: 1,
+      jobsEvaluated: BOT_SEARCH_AI_EVAL_MAX_PER_RUN,
+      jobsApproved: 1,
+      jobsSkippedLowScore: BOT_SEARCH_AI_EVAL_MAX_PER_RUN,
+    })
+    expect(result.evaluationSkips.filter((skip) => skip.filterKind === 'eval_budget')).toHaveLength(1)
+    expect(result.evaluationSkips.some((skip) => skip.company === 'StrongLateCo')).toBe(false)
+
+    const auditRows = mocks.botRunListingCreateMany.mock.calls[0][0].data
+    expect(auditRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sequence: BOT_SEARCH_AI_EVAL_MAX_PER_RUN,
+          title: 'Frontend Engineer',
+          stage: 'saved',
+          outcome: 'accepted',
+        }),
+        expect.objectContaining({
+          title: 'Generic Web Role 12',
+          stage: 'eval_budget',
+          scoringInputs: expect.objectContaining({
+            priorityReasons: expect.arrayContaining(['description:thin']),
+          }),
+        }),
+      ]),
+    )
+  })
+
+  it('hard-filters bad listings before the AI budget so later valid listings can be scored', async () => {
+    const wrongLocationJobs = Array.from({ length: BOT_SEARCH_AI_EVAL_MAX_PER_RUN }, (_, index) =>
+      job({
+        title: `Frontend Engineer ${index + 1}`,
+        company: `OffRegionCo ${index + 1}`,
+        location: 'Bengaluru, Karnataka, India',
+        url: `https://example.com/off-region-${index + 1}`,
+        description: 'React TypeScript role.',
+        is_remote: false,
+      }),
+    )
+    const validLateJob = job({
+      title: 'Frontend Engineer',
+      company: 'ValidLateCo',
+      location: 'Remote Europe',
+      url: 'https://example.com/valid-late',
+      description:
+        'Remote frontend engineering role for a Europe product team using React, TypeScript, and Next.js.',
+      is_remote: true,
+    })
+
+    mocks.runSearch.mockResolvedValue(searchResponse([...wrongLocationJobs, validLateJob]))
+    mocks.jobFindMany.mockResolvedValue([])
+    mocks.evaluateJob.mockResolvedValue({
+      evaluation: {
+        score: 90,
+        shouldApply: true,
+        reasoning: 'Strong match.',
+        flags: ['good_match'],
+      },
+      scoringInputs: { source: 'test' },
+    })
+
+    const { runBotSearch } = await import('./search-orchestrator')
+    const result = await runBotSearch(config(), 'user_1', { botRunId: 'run_1' })
+
+    expect(mocks.evaluateJob).toHaveBeenCalledTimes(1)
+    expect(mocks.evaluateJob).toHaveBeenCalledWith(validLateJob, expect.any(Object))
+    expect(mocks.jobCreate).toHaveBeenCalledTimes(1)
+    expect(result).toMatchObject({
+      jobsFound: BOT_SEARCH_AI_EVAL_MAX_PER_RUN + 1,
+      jobsNew: 1,
+      jobsEvaluated: 1,
+      jobsApproved: 1,
+      jobsHardFiltered: BOT_SEARCH_AI_EVAL_MAX_PER_RUN,
+      jobsSkippedLowScore: BOT_SEARCH_AI_EVAL_MAX_PER_RUN,
+    })
+    expect(result.errors.evaluation_budget).toBeUndefined()
+
+    const auditRows = mocks.botRunListingCreateMany.mock.calls[0][0].data
+    expect(auditRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sequence: 0,
+          stage: 'hard_filter',
+          flags: ['wrong_location'],
+          scoringInputs: expect.objectContaining({
+            note: expect.stringContaining('before spending an AI evaluation budget slot'),
+          }),
+        }),
+        expect.objectContaining({
+          sequence: BOT_SEARCH_AI_EVAL_MAX_PER_RUN,
+          title: 'Frontend Engineer',
+          company: 'ValidLateCo',
+          stage: 'saved',
+        }),
+      ]),
+    )
+  })
 })
