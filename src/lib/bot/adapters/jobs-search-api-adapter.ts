@@ -16,7 +16,7 @@
 
 import * as XLSX from 'xlsx'
 
-import type { SearchJobResult } from '../types'
+import type { SearchJobResult, SearchProviderPassMeta } from '../types'
 import { extractRapidApiJobRows, normalizeRapidApiJobFromUnknownRow } from './rapidapi-linkedin-job-json'
 
 const BASE = 'https://jobs-search-api.p.rapidapi.com'
@@ -124,6 +124,10 @@ export async function searchJobsSearchApiExcel(
      * BotConfig.experienceLevel in the caller — no hardcoded value here.
      */
     experienceHint?: string | null
+    /** Region-aware board selection from the unified search planner. */
+    siteNames?: string[]
+    /** Pass provenance persisted on every normalized row. */
+    providerPass?: SearchProviderPassMeta
   },
   apiKey: string
 ): Promise<{ jobs: SearchJobResult[]; error?: string }> {
@@ -142,6 +146,7 @@ export async function searchJobsSearchApiExcel(
   const hours_old = Number(process.env.JOBS_SEARCH_HOURS_OLD) || 72
   const job_type = process.env.JOBS_SEARCH_JOB_TYPE?.trim() || 'fulltime'
   const linkedin_fetch_description = process.env.JOBS_SEARCH_LINKEDIN_DESC === '1'
+  const site_name = params.siteNames?.length ? params.siteNames : parseSiteNames()
 
   try {
     const res = await fetch(`${BASE}/getjobs_excel`, {
@@ -156,7 +161,7 @@ export async function searchJobsSearchApiExcel(
         location: location.toLowerCase(),
         country_indeed,
         results_wanted,
-        site_name: parseSiteNames(),
+        site_name,
         distance,
         job_type,
         is_remote: params.isRemote,
@@ -212,6 +217,7 @@ export async function searchJobsSearchApiExcel(
       const j = normalizeRapidApiJobFromUnknownRow(row as Record<string, unknown>, 'jobs_search_api')
       if (j) {
         j.jobBoard = board
+        if (params.providerPass) j.providerPass = params.providerPass
         jobs.push(j)
       }
     }

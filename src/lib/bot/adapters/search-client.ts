@@ -11,7 +11,12 @@
  * same run to save time and log noise.
  */
 
-import type { SearchRequest, SearchResponse, SearchJobResult } from '../types'
+import type {
+  SearchRequest,
+  SearchResponse,
+  SearchJobResult,
+  SearchProviderPassMeta,
+} from '../types'
 import {
   BOT_SEARCH_RAPIDAPI_CONCURRENCY,
   BOT_SEARCH_RESULTS_WANTED,
@@ -28,11 +33,24 @@ import {
   jobsSearchApiSearchHint,
   normalizeExperienceLevel,
 } from '../experience-level'
+import {
+  buildProviderSearchQuery,
+  resolveJobsSearchSiteNames,
+} from '../search-quality'
 
 function countBySource(jobs: SearchJobResult[]): Record<string, number> {
   const acc: Record<string, number> = {}
   for (const j of jobs) {
     const k = j.source || 'unknown'
+    acc[k] = (acc[k] ?? 0) + 1
+  }
+  return acc
+}
+
+function countByJobBoard(jobs: SearchJobResult[]): Record<string, number> {
+  const acc: Record<string, number> = {}
+  for (const j of jobs) {
+    const k = j.jobBoard || j.providerPass?.provider || j.source || 'unknown'
     acc[k] = (acc[k] ?? 0) + 1
   }
   return acc
@@ -92,6 +110,28 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
 
   const normalizedLevel = normalizeExperienceLevel(req.experience_level)
   const jobsSearchExperienceHint = jobsSearchApiSearchHint(normalizedLevel)
+  const jobsSearchSiteSelection = resolveJobsSearchSiteNames({
+    locations: req.locations,
+    remoteOnly: !!req.remote_only,
+  })
+  const providerPasses: SearchProviderPassMeta[] = searchPlan.passes.map((pass, passIndex) => ({
+    provider: 'jobs_search_api',
+    passIndex,
+    searchTerm: pass.searchTerm,
+    providerQuery: buildProviderSearchQuery({
+      searchTerm: pass.searchTerm,
+      location: pass.location,
+      allLocations: searchPlan.locations,
+      remoteOnly: !!req.remote_only,
+    }),
+    location: pass.location,
+    termIndex: pass.termIndex,
+    locationIndex: pass.locationIndex,
+    isRemote: !!req.remote_only,
+    siteNames: jobsSearchSiteSelection.siteNames,
+    resultsWanted: perCombo,
+    experienceHint: jobsSearchExperienceHint,
+  }))
 
   if (src('jobs_search_api') && jobsSearchApiKey) {
     await runLimited<BotSearchProviderPass>(
@@ -102,15 +142,20 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
 
         const locTag = `loc:${pass.locationIndex + 1}`
         const termTag = `term:${pass.termIndex + 1}`
+        const passMeta = providerPasses.find(
+          (p) => p.termIndex === pass.termIndex && p.locationIndex === pass.locationIndex
+        )
         executedPasses++
 
         const { jobs, error } = await searchJobsSearchApiExcel(
           {
-            searchTerm: pass.searchTerm,
+            searchTerm: passMeta?.providerQuery ?? pass.searchTerm,
             location: pass.location,
             resultsWanted: perCombo,
             isRemote: !!req.remote_only,
             experienceHint: jobsSearchExperienceHint,
+            siteNames: jobsSearchSiteSelection.siteNames,
+            providerPass: passMeta,
           },
           jobsSearchApiKey
         )
@@ -169,8 +214,17 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
         capped: searchPlan.capped,
         concurrency: jobsSearchApiKey && src('jobs_search_api') ? BOT_SEARCH_RAPIDAPI_CONCURRENCY : 0,
       },
+      provider_passes: providerPasses,
+      provider_site_names: {
+        jobs_search_api: jobsSearchSiteSelection.siteNames,
+        reason: jobsSearchSiteSelection.reason,
+      },
+      query_strategy:
+        'keyword_location_query_v2: provider search_term includes remote/location qualifier when needed',
       by_source_raw: countBySource(allJobs),
       by_source_deduped: countBySource(deduped),
+      by_job_board_raw: countByJobBoard(allJobs),
+      by_job_board_deduped: countByJobBoard(deduped),
     },
   }
 }

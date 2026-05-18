@@ -137,6 +137,7 @@ describe('bot settings actions', () => {
       jobsFound: 33,
       jobsNew: 0,
       jobsApproved: 0,
+      jobsHardFiltered: 25,
       jobsSkippedLowScore: 27,
       jobsEvaluationFailed: 0,
     })
@@ -148,6 +149,7 @@ describe('bot settings actions', () => {
       jobsFound: 33,
       jobsNew: 0,
       jobsApproved: 0,
+      jobsHardFiltered: 25,
       jobsSkippedLowScore: 27,
       jobsEvaluationFailed: 0,
     })
@@ -166,6 +168,7 @@ describe('bot settings actions', () => {
       jobsFound: 3,
       jobsNew: 0,
       jobsApproved: 0,
+      jobsHardFiltered: 0,
       jobsSkippedLowScore: 0,
       jobsEvaluationFailed: 3,
       error: 'Search found jobs, but AI scoring failed for all candidates.',
@@ -178,6 +181,7 @@ describe('bot settings actions', () => {
       jobsFound: 3,
       jobsNew: 0,
       jobsApproved: 0,
+      jobsHardFiltered: 0,
       jobsSkippedLowScore: 0,
       jobsEvaluationFailed: 3,
       error: 'Search found jobs, but AI scoring failed for all candidates.',

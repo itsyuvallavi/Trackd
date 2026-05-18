@@ -76,6 +76,8 @@ function job(partial: Partial<SearchJobResult>): SearchJobResult {
     description: partial.description ?? 'React TypeScript role.',
     source: partial.source ?? 'jobs_search_api',
     is_remote: partial.is_remote ?? true,
+    jobBoard: partial.jobBoard,
+    providerPass: partial.providerPass,
   }
 }
 
@@ -244,5 +246,58 @@ describe('runBotSearch orchestration', () => {
     expect(result.errors).toEqual({
       'save_Approved But Unsaved Role': 'database write failed',
     })
+  })
+
+  it('separates deterministic hard filters from AI-scored low matches', async () => {
+    const wrongLocation = job({
+      title: 'Frontend Developer',
+      company: 'OffRegionCo',
+      location: 'Pune, India',
+      url: 'https://example.com/off-region',
+      providerPass: {
+        provider: 'jobs_search_api',
+        passIndex: 0,
+        searchTerm: 'Frontend Developer',
+        providerQuery: 'Frontend Developer remote Europe',
+        location: 'Remote',
+        termIndex: 0,
+        locationIndex: 0,
+        isRemote: false,
+        siteNames: ['linkedin', 'glassdoor'],
+        resultsWanted: 5,
+      },
+      jobBoard: 'linkedin',
+    })
+
+    mocks.runSearch.mockResolvedValue(searchResponse([wrongLocation]))
+    mocks.jobFindMany.mockResolvedValue([])
+    mocks.evaluateJob.mockResolvedValue({
+      evaluation: {
+        score: 20,
+        shouldApply: false,
+        reasoning: 'Job location "Pune, India" is not in your Target locations.',
+        flags: ['wrong_location'],
+      },
+      scoringInputs: { model: 'pre-filter' },
+    })
+
+    const { runBotSearch } = await import('./search-orchestrator')
+    const result = await runBotSearch(config(), 'user_1')
+
+    expect(result).toMatchObject({
+      jobsFound: 1,
+      jobsNew: 0,
+      jobsEvaluated: 0,
+      jobsHardFiltered: 1,
+      jobsSkippedLowScore: 1,
+    })
+    expect(result.evaluationSkips[0]).toMatchObject({
+      filterKind: 'hard_filter',
+      jobBoard: 'linkedin',
+      providerPass: expect.objectContaining({
+        providerQuery: 'Frontend Developer remote Europe',
+      }),
+    })
+    expect(mocks.jobCreate).not.toHaveBeenCalled()
   })
 })

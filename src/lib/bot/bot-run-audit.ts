@@ -15,6 +15,7 @@ export const BOT_LISTING_STAGE = {
   /** User deleted this listing earlier — do not re-import */
   DEDUP_DISMISSED: 'dedup_dismissed',
   DEDUP_BATCH: 'dedup_batch',
+  HARD_FILTER: 'hard_filter',
   BELOW_THRESHOLD: 'below_threshold',
   SAVED: 'saved',
   SAVED_NO_AI: 'saved_no_ai',
@@ -45,6 +46,8 @@ export function compactJobForAudit(job: SearchJobResult): Prisma.InputJsonValue 
     salary_currency: job.salary_currency ?? null,
     job_type: job.job_type ?? null,
     is_remote: job.is_remote ?? null,
+    jobBoard: job.jobBoard ?? null,
+    providerPass: job.providerPass ?? null,
     posted_date: job.posted_date ?? null,
     company_logo: job.company_logo ?? null,
   } as Prisma.InputJsonValue

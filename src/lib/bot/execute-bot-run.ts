@@ -10,6 +10,7 @@ export type BotRunExecutionResult = {
   jobsFound: number
   jobsNew: number
   jobsApproved: number
+  jobsHardFiltered: number
   jobsSkippedLowScore: number
   jobsEvaluationFailed: number
   error?: string
@@ -23,6 +24,7 @@ async function createBotRunNotification(input: {
   jobsFound: number
   jobsNew: number
   jobsApproved: number
+  hardFiltered: number
   skippedLowScore: number
   evaluationFailed: number
   fatalError?: string
@@ -48,7 +50,13 @@ async function createBotRunNotification(input: {
     lines.push(`${input.jobsApproved} strong match${input.jobsApproved === 1 ? '' : 'es'} approved.`)
   }
   if (input.skippedLowScore > 0) {
-    lines.push(`${input.skippedLowScore} below your match threshold or filtered out.`)
+    const aiLowScore = Math.max(0, input.skippedLowScore - input.hardFiltered)
+    if (input.hardFiltered > 0) {
+      lines.push(`${input.hardFiltered} filtered before AI scoring by location or seniority rules.`)
+    }
+    if (aiLowScore > 0) {
+      lines.push(`${aiLowScore} below your AI match threshold.`)
+    }
   }
   if (input.evaluationFailed > 0) {
     lines.push(`${input.evaluationFailed} could not be scored because the AI provider failed or timed out.`)
@@ -71,6 +79,7 @@ async function createBotRunNotification(input: {
         jobsFound: input.jobsFound,
         jobsNew: input.jobsNew,
         jobsApproved: input.jobsApproved,
+        hardFiltered: input.hardFiltered,
         skippedLowScore: input.skippedLowScore,
         evaluationFailed: input.evaluationFailed,
         fatalError: input.fatalError ?? null,
@@ -111,11 +120,16 @@ export async function executeBotRunForConfig(
       `dedup_dismissed=${orchestratorResult.skippedPreviouslyDismissed} ` +
       `saved=${orchestratorResult.jobsNew} ` +
       `below_min_score=${orchestratorResult.jobsSkippedLowScore} ` +
+      `hard_filter=${orchestratorResult.jobsHardFiltered} ` +
       `eval_failed=${orchestratorResult.jobsEvaluationFailed} ` +
       `evaluated=${orchestratorResult.jobsEvaluated} ` +
       `approved=${orchestratorResult.jobsApproved}`
     if (orchestratorResult.jobsSkippedLowScore > 0) {
-      mergedErrors.skippedBelowMinScore = `${orchestratorResult.jobsSkippedLowScore} listing(s) not saved (AI score below your minimum)`
+      const aiLowScore = Math.max(
+        0,
+        orchestratorResult.jobsSkippedLowScore - orchestratorResult.jobsHardFiltered,
+      )
+      mergedErrors.skippedBelowMinScore = `${orchestratorResult.jobsSkippedLowScore} listing(s) not saved (${orchestratorResult.jobsHardFiltered} hard-filtered, ${aiLowScore} below AI minimum)`
     }
     if (orchestratorResult.evaluationSkips.length > 0) {
       mergedErrors.evaluationSkips = orchestratorResult.evaluationSkips
@@ -168,6 +182,7 @@ export async function executeBotRunForConfig(
         jobsFound: orchestratorResult.jobsFound,
         jobsNew: orchestratorResult.jobsNew,
         jobsApproved: orchestratorResult.jobsApproved,
+        hardFiltered: orchestratorResult.jobsHardFiltered,
         skippedLowScore: orchestratorResult.jobsSkippedLowScore,
         evaluationFailed: orchestratorResult.jobsEvaluationFailed,
       })
@@ -197,6 +212,7 @@ export async function executeBotRunForConfig(
           skippedBatchDuplicate: orchestratorResult.skippedBatchDuplicate,
           skippedPreviouslyDismissed: orchestratorResult.skippedPreviouslyDismissed,
           skippedLowScore: orchestratorResult.jobsSkippedLowScore,
+          hardFiltered: orchestratorResult.jobsHardFiltered,
           minScore: config.minScore,
           topJobs: topJobs.map((j) => ({
             title: j.title,
@@ -220,6 +236,7 @@ export async function executeBotRunForConfig(
         jobsFound: orchestratorResult.jobsFound,
         jobsNew: orchestratorResult.jobsNew,
         jobsApproved: orchestratorResult.jobsApproved,
+        jobsHardFiltered: orchestratorResult.jobsHardFiltered,
         jobsSkippedLowScore: orchestratorResult.jobsSkippedLowScore,
         jobsEvaluationFailed: orchestratorResult.jobsEvaluationFailed,
         error:
@@ -232,6 +249,7 @@ export async function executeBotRunForConfig(
       jobsFound: orchestratorResult.jobsFound,
       jobsNew: orchestratorResult.jobsNew,
       jobsApproved: orchestratorResult.jobsApproved,
+      jobsHardFiltered: orchestratorResult.jobsHardFiltered,
       jobsSkippedLowScore: orchestratorResult.jobsSkippedLowScore,
       jobsEvaluationFailed: orchestratorResult.jobsEvaluationFailed,
     }
@@ -258,6 +276,7 @@ export async function executeBotRunForConfig(
         jobsFound: 0,
         jobsNew: 0,
         jobsApproved: 0,
+        hardFiltered: 0,
         skippedLowScore: 0,
         evaluationFailed: 0,
         fatalError: msg,
@@ -271,6 +290,7 @@ export async function executeBotRunForConfig(
       jobsFound: 0,
       jobsNew: 0,
       jobsApproved: 0,
+      jobsHardFiltered: 0,
       jobsSkippedLowScore: 0,
       jobsEvaluationFailed: 0,
       error: msg,

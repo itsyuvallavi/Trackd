@@ -67,6 +67,7 @@ function orchestratorResult(overrides = {}) {
     jobsEvaluated: 2,
     jobsApproved: 1,
     jobsEvaluationFailed: 0,
+    jobsHardFiltered: 0,
     jobsSkippedLowScore: 1,
     skippedExistingByUrl: 0,
     skippedExistingByTitle: 0,
@@ -139,6 +140,7 @@ describe('executeBotRunForConfig Telegram routing', () => {
         jobsFound: 3,
         jobsNew: 1,
         jobsApproved: 1,
+        hardFiltered: 0,
         minScore: 75,
       }),
     )

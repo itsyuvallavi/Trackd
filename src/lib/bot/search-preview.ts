@@ -9,6 +9,7 @@ import {
   jobsSearchApiSearchHint,
   normalizeExperienceLevel,
 } from '@/lib/bot/experience-level'
+import { buildProviderSearchQuery } from '@/lib/bot/search-quality'
 
 export type BotSearchBackends = {
   /** RapidAPI Jobs Search API — POST getjobs_excel (multi-board). */
@@ -125,10 +126,26 @@ export function buildBotSearchPreview(input: {
       : base
   }
 
-  const providerSearchTerms = searchPlan.searchTerms.map(displayTerm).filter(Boolean)
+  const displayProviderQuery = (term: string, location: string) =>
+    displayTerm(
+      buildProviderSearchQuery({
+        searchTerm: term,
+        location,
+        allLocations: searchPlan.locations,
+        remoteOnly: input.remoteOnly,
+      }),
+    )
+
+  const providerSearchTerms = Array.from(
+    new Set(
+      searchPlan.passes
+        .map((pass) => displayProviderQuery(pass.searchTerm, pass.location))
+        .filter(Boolean),
+    ),
+  )
   const jobsSearchPhrase = providerSearchTerms.join(' OR ')
   const providerPassesPreview = searchPlan.passes.map((pass) => ({
-    searchTerm: displayTerm(pass.searchTerm),
+    searchTerm: displayProviderQuery(pass.searchTerm, pass.location),
     location: pass.location,
   }))
 

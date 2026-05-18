@@ -24,10 +24,14 @@ describe('buildBotSearchPreview', () => {
 
     expect(preview.keywordQuery).toBe('Product Manager OR Product Owner')
     expect(preview.providerSearchTerms).toEqual([
-      'senior Product Manager',
-      'senior Product Owner',
+      'senior Product Manager remote',
+      'senior Product Owner remote',
+      'senior Product Manager remote United States',
+      'senior Product Owner remote United States',
     ])
-    expect(preview.jobsSearchPhrase).toBe('senior Product Manager OR senior Product Owner')
+    expect(preview.jobsSearchPhrase).toBe(
+      'senior Product Manager remote OR senior Product Owner remote OR senior Product Manager remote United States OR senior Product Owner remote United States'
+    )
     expect(preview.locationRuns).toEqual(['Remote', 'USA'])
     expect(preview.providerPassesPlanned).toBe(4)
     expect(preview.providerPassesSelected).toBe(4)

@@ -67,12 +67,14 @@ export function BotStatusStrip({
     jobsFound?: number
     jobsNew?: number
     jobsApproved?: number
+    jobsHardFiltered?: number
     jobsSkippedLowScore?: number
     jobsEvaluationFailed?: number
   }) {
     const found = res.jobsFound ?? 0
     const saved = res.jobsNew ?? 0
     const approved = res.jobsApproved ?? 0
+    const hardFiltered = res.jobsHardFiltered ?? 0
     const belowScore = res.jobsSkippedLowScore ?? 0
     const evalFailed = res.jobsEvaluationFailed ?? 0
 
@@ -82,6 +84,10 @@ export function BotStatusStrip({
 
     if (saved === 0) {
       if (belowScore > 0) {
+        const aiLowScore = Math.max(0, belowScore - hardFiltered)
+        if (hardFiltered > 0 && aiLowScore === 0) {
+          return `Search found ${found} listing${found === 1 ? '' : 's'}, but all matches were filtered by location or seniority. Open Runs for details.`
+        }
         return `Search found ${found} listing${found === 1 ? '' : 's'}, but none met your match threshold. Open Runs for reasoning.`
       }
       return `Search finished: ${found} listing${found === 1 ? '' : 's'} found, 0 saved. Open Runs for details.`

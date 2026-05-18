@@ -1,3 +1,17 @@
+export interface SearchProviderPassMeta {
+  provider: 'jobs_search_api'
+  passIndex: number
+  searchTerm: string
+  providerQuery: string
+  location: string
+  termIndex: number
+  locationIndex: number
+  isRemote: boolean
+  siteNames: string[]
+  resultsWanted: number
+  experienceHint?: string | null
+}
+
 /** Raw job result from the trackd-search microservice */
 export interface SearchJobResult {
   title: string
@@ -18,6 +32,8 @@ export interface SearchJobResult {
    * The API product is always `source`; this is only the board the Excel/JSON row came from.
    */
   jobBoard?: string | null
+  /** Provider pass provenance for diagnostics and run audit JSON. */
+  providerPass?: SearchProviderPassMeta | null
 }
 
 export interface SearchMeta {
@@ -36,10 +52,20 @@ export interface SearchMeta {
     capped: boolean
     concurrency: number
   }
+  provider_passes?: SearchProviderPassMeta[]
+  provider_site_names?: {
+    jobs_search_api?: string[]
+    reason?: string
+  }
+  query_strategy?: string
   /** Counts by `job.source` after all platforms merged, before exclude filters and dedup. */
   by_source_raw: Record<string, number>
   /** Counts by `job.source` after exclude filters + URL dedup (full list before `results_wanted` slice). */
   by_source_deduped: Record<string, number>
+  /** Counts by provider job board after all platforms merged, before exclude filters and dedup. */
+  by_job_board_raw?: Record<string, number>
+  /** Counts by provider job board after exclude filters + URL dedup. */
+  by_job_board_deduped?: Record<string, number>
 }
 
 export interface SearchResponse {
@@ -76,6 +102,9 @@ export interface EvaluationSkipAudit {
   flags: string[]
   reasoning: string
   resumeMatch?: string
+  filterKind?: 'hard_filter' | 'ai_score'
+  jobBoard?: string | null
+  providerPass?: SearchProviderPassMeta | null
 }
 
 export interface EvaluationFailureAudit {
@@ -89,6 +118,8 @@ export interface OrchestratorResult {
   jobsNew: number
   jobsEvaluated: number
   jobsApproved: number
+  /** Listings rejected by deterministic code before model scoring. */
+  jobsHardFiltered: number
   /** Listings that could not be evaluated because the AI/provider request failed. */
   jobsEvaluationFailed: number
   /** Saved candidates that were not persisted because AI score &lt; minScore */

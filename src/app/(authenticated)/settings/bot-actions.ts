@@ -117,6 +117,7 @@ export async function triggerBotSearch() {
       jobsFound: out.jobsFound,
       jobsNew: out.jobsNew,
       jobsApproved: out.jobsApproved,
+      jobsHardFiltered: out.jobsHardFiltered,
       jobsSkippedLowScore: out.jobsSkippedLowScore,
       jobsEvaluationFailed: out.jobsEvaluationFailed,
     }
@@ -128,6 +129,7 @@ export async function triggerBotSearch() {
     jobsFound: out.jobsFound,
     jobsNew: out.jobsNew,
     jobsApproved: out.jobsApproved,
+    jobsHardFiltered: out.jobsHardFiltered,
     jobsSkippedLowScore: out.jobsSkippedLowScore,
     jobsEvaluationFailed: out.jobsEvaluationFailed,
   }

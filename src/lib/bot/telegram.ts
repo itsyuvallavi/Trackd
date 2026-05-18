@@ -62,6 +62,8 @@ export interface BotRunSummary {
   skippedPreviouslyDismissed: number
   /** Evaluated but score below minScore — not written to the DB */
   skippedLowScore: number
+  /** Deterministic rejects before AI scoring, included in skippedLowScore. */
+  hardFiltered?: number
   minScore: number
   topJobs: Array<{
     title: string
@@ -102,7 +104,14 @@ export async function sendBotRunSummary(
     text += `• Already in Trackd: 0 (no URL/title duplicates or removed listings)\n`
   }
   if (summary.skippedLowScore > 0) {
-    text += `• Below AI threshold (${summary.minScore}/100): ${summary.skippedLowScore} not saved\n`
+    const hardFiltered = summary.hardFiltered ?? 0
+    const aiLowScore = Math.max(0, summary.skippedLowScore - hardFiltered)
+    if (hardFiltered > 0) {
+      text += `• Filtered before AI: ${hardFiltered} wrong location/seniority\n`
+    }
+    if (aiLowScore > 0) {
+      text += `• Below AI threshold (${summary.minScore}/100): ${aiLowScore} not saved\n`
+    }
   }
   text += `• Saved to your list: ${summary.jobsNew}\n`
   text += `• Strong matches (≥${summary.minScore}): ${summary.jobsApproved}\n`

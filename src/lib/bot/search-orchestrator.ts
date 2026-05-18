@@ -78,6 +78,15 @@ function noOpenAiSnapshot(): Prisma.InputJsonValue {
   }
 }
 
+function isPreFilterScoringInput(value: unknown): boolean {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    (value as { model?: unknown }).model === 'pre-filter'
+  )
+}
+
 export type RunBotSearchOptions = {
   /** When set, pipeline log lines → BotRunLog; per-listing audit → BotRunListing. */
   botRunId?: string
@@ -199,6 +208,7 @@ export async function runBotSearch(
     jobsEvaluated: 0,
     jobsApproved: 0,
     jobsEvaluationFailed: 0,
+    jobsHardFiltered: 0,
     jobsSkippedLowScore: 0,
     skippedExistingByUrl: 0,
     skippedExistingByTitle: 0,
@@ -496,6 +506,7 @@ export async function runBotSearch(
         let reasoning = ''
         let flags: string[] = []
         let evaluated = false
+        let hardFiltered = false
         let resumeMatch: string | null = null
         let scoringInputs: Prisma.InputJsonValue | null = null
 
@@ -507,9 +518,14 @@ export async function runBotSearch(
             reasoning = evaluation.reasoning
             flags = evaluation.flags
             resumeMatch = evaluation.resumeMatch ?? null
+            hardFiltered = isPreFilterScoringInput(si)
             scoringInputs = si as unknown as Prisma.InputJsonValue
-            evaluated = true
-            result.jobsEvaluated++
+            evaluated = !hardFiltered
+            if (hardFiltered) {
+              result.jobsHardFiltered++
+            } else {
+              result.jobsEvaluated++
+            }
           } catch (evalErr) {
             const errMsg = evalErr instanceof Error ? evalErr.message : String(evalErr)
             pushLog('warn', `Eval failed for "${job.title}"`, errMsg)
@@ -542,6 +558,7 @@ export async function runBotSearch(
         } else {
           const preFilter = preFilterJob(job, botConfig)
           if (preFilter.rejected) {
+            result.jobsHardFiltered++
             result.jobsSkippedLowScore++
             result.evaluationSkips.push({
               title: job.title.slice(0, 200),
@@ -550,6 +567,9 @@ export async function runBotSearch(
               minScore: botConfig.minScore,
               flags: [preFilter.flag],
               reasoning: preFilter.reason.slice(0, REASONING_STORE_MAX),
+              filterKind: 'hard_filter',
+              jobBoard: job.jobBoard ?? null,
+              providerPass: job.providerPass ?? null,
             })
             pushLog(
               'info',
@@ -558,7 +578,7 @@ export async function runBotSearch(
             auditBySeq.set(seq, {
               ...audit,
               finalized: true,
-              stage: BOT_LISTING_STAGE.BELOW_THRESHOLD,
+              stage: BOT_LISTING_STAGE.HARD_FILTER,
               outcome: BOT_LISTING_OUTCOME.REJECTED,
               evaluated: false,
               score: preFilter.score,
@@ -578,9 +598,10 @@ export async function runBotSearch(
           scoringInputs = noOpenAiSnapshot()
         }
 
-        if (evaluated && !shouldApply) {
+        if ((evaluated || hardFiltered) && !shouldApply) {
           result.jobsSkippedLowScore++
           const minS = botConfig.minScore
+          const filterKind = hardFiltered ? 'hard_filter' : 'ai_score'
           result.evaluationSkips.push({
             title: job.title.slice(0, 200),
             company: job.company.slice(0, 120),
@@ -589,25 +610,32 @@ export async function runBotSearch(
             flags,
             reasoning: reasoning.slice(0, REASONING_STORE_MAX),
             resumeMatch: resumeMatch ?? undefined,
+            filterKind,
+            jobBoard: job.jobBoard ?? null,
+            providerPass: job.providerPass ?? null,
           })
           const flagStr = flags.length ? flags.join(', ') : 'none'
           pushLog(
             'info',
-            `Below AI threshold (not saved): ${job.title} @ ${job.company} — score ${score}/${minS} | flags: ${flagStr} | ${oneLineExcerpt(reasoning, REASONING_LOG_MAX)}`
+            hardFiltered
+              ? `Hard filter rejected (not saved): ${job.title} @ ${job.company} — score ${score}/${minS} | flags: ${flagStr} | ${oneLineExcerpt(reasoning, REASONING_LOG_MAX)}`
+              : `Below AI threshold (not saved): ${job.title} @ ${job.company} — score ${score}/${minS} | flags: ${flagStr} | ${oneLineExcerpt(reasoning, REASONING_LOG_MAX)}`
           )
           auditBySeq.set(seq, {
             ...audit,
             finalized: true,
-            stage: BOT_LISTING_STAGE.BELOW_THRESHOLD,
+            stage: hardFiltered ? BOT_LISTING_STAGE.HARD_FILTER : BOT_LISTING_STAGE.BELOW_THRESHOLD,
             outcome: BOT_LISTING_OUTCOME.REJECTED,
-            evaluated: true,
+            evaluated,
             score,
             shouldApply: false,
             flags,
             reasoning,
             resumeMatch,
             scoringInputs,
-            decisionReason: `AI score ${score} is below your minimum (${minS}).`,
+            decisionReason: hardFiltered
+              ? reasoning || `Deterministic filter rejected this listing before AI scoring.`
+              : `AI score ${score} is below your minimum (${minS}).`,
           })
           continue
         }
@@ -711,6 +739,7 @@ export async function runBotSearch(
       'info',
       `Pipeline done: found=${result.jobsFound} saved=${result.jobsNew} ` +
         `approved=${result.jobsApproved} below_AI_threshold=${result.jobsSkippedLowScore} ` +
+        `hard_filter=${result.jobsHardFiltered} ` +
         `eval_failed=${result.jobsEvaluationFailed} ` +
         `dedup_url=${result.skippedExistingByUrl} dedup_title=${result.skippedExistingByTitle} dedup_batch=${result.skippedBatchDuplicate} dedup_dismissed=${result.skippedPreviouslyDismissed}`
     )

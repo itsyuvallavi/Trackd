@@ -29,11 +29,13 @@ describe('runSearch settings plumbing', () => {
     vi.clearAllMocks()
     process.env.JOBS_SEARCH_API_KEY = 'jobs-search-key'
     delete process.env.BOT_SEARCH_SOURCES
+    delete process.env.JOBS_SEARCH_SITE_NAMES
   })
 
   afterEach(() => {
     delete process.env.JOBS_SEARCH_API_KEY
     delete process.env.BOT_SEARCH_SOURCES
+    delete process.env.JOBS_SEARCH_SITE_NAMES
   })
 
   it('fans out keywords by location and passes remote, excludes, and seniority settings to adapters', async () => {
@@ -54,35 +56,50 @@ describe('runSearch settings plumbing', () => {
 
     expect(searchJobsSearchApiExcelMock).toHaveBeenCalledTimes(4)
     expect(searchJobsSearchApiExcelMock.mock.calls[0][0]).toMatchObject({
-      searchTerm: 'Frontend Engineer',
+      searchTerm: 'Frontend Engineer remote Portugal',
       location: 'Portugal',
       resultsWanted: 5,
       isRemote: true,
       experienceHint: 'senior',
+      siteNames: ['linkedin', 'glassdoor'],
     })
     expect(searchJobsSearchApiExcelMock.mock.calls[1][0]).toMatchObject({
-      searchTerm: 'Backend Engineer',
+      searchTerm: 'Backend Engineer remote Portugal',
       location: 'Portugal',
       resultsWanted: 5,
       isRemote: true,
       experienceHint: 'senior',
+      siteNames: ['linkedin', 'glassdoor'],
     })
     expect(searchJobsSearchApiExcelMock.mock.calls[2][0]).toMatchObject({
-      searchTerm: 'Frontend Engineer',
+      searchTerm: 'Frontend Engineer remote Europe',
       location: 'Remote Europe',
       resultsWanted: 5,
       isRemote: true,
       experienceHint: 'senior',
+      siteNames: ['linkedin', 'glassdoor'],
     })
     expect(searchJobsSearchApiExcelMock.mock.calls[3][0]).toMatchObject({
-      searchTerm: 'Backend Engineer',
+      searchTerm: 'Backend Engineer remote Europe',
       location: 'Remote Europe',
       resultsWanted: 5,
       isRemote: true,
       experienceHint: 'senior',
+      siteNames: ['linkedin', 'glassdoor'],
     })
 
     expect(response.jobs.map((job) => job.url)).toEqual(['https://example.com/jobs-search'])
+    expect(response.meta.provider_site_names).toEqual({
+      jobs_search_api: ['linkedin', 'glassdoor'],
+      reason: 'europe_scope',
+    })
+    expect(response.meta.provider_passes?.[0]).toMatchObject({
+      provider: 'jobs_search_api',
+      searchTerm: 'Frontend Engineer',
+      providerQuery: 'Frontend Engineer remote Portugal',
+      location: 'Portugal',
+      siteNames: ['linkedin', 'glassdoor'],
+    })
   })
 
   it('uses a remote fallback term only when no keywords are provided', async () => {
@@ -146,6 +163,29 @@ describe('runSearch settings plumbing', () => {
       dropped: 15,
       capped: true,
       concurrency: BOT_SEARCH_RAPIDAPI_CONCURRENCY,
+    })
+  })
+
+  it('uses regional boards for India/APAC searches instead of Europe defaults', async () => {
+    searchJobsSearchApiExcelMock.mockResolvedValue({
+      jobs: [result({ url: 'https://example.com/india', source: 'jobs_search_api' })],
+    })
+
+    const { runSearch } = await import('./search-client')
+    const response = await runSearch({
+      keywords: ['Data Analyst'],
+      locations: ['India'],
+      remote_only: false,
+      results_wanted: 10,
+    })
+
+    expect(searchJobsSearchApiExcelMock.mock.calls[0][0]).toMatchObject({
+      searchTerm: 'Data Analyst India',
+      siteNames: ['linkedin', 'glassdoor', 'naukri'],
+    })
+    expect(response.meta.provider_site_names).toEqual({
+      jobs_search_api: ['linkedin', 'glassdoor', 'naukri'],
+      reason: 'india_or_apac_scope',
     })
   })
 

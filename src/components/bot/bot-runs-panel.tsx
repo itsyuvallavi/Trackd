@@ -36,6 +36,13 @@ type EvaluationSkipRow = {
   minScore: number
   flags: string[]
   reasoning: string
+  filterKind: 'hard_filter' | 'ai_score'
+  jobBoard: string | null
+  providerPass: {
+    providerQuery?: string
+    location?: string
+    siteNames?: string[]
+  } | null
 }
 
 type EvaluationFailureRow = {
@@ -60,6 +67,16 @@ function evaluationSkipsFromRun(
     const flags = Array.isArray(o.flags)
       ? o.flags.filter((f): f is string => typeof f === 'string')
       : []
+    const rawKind = typeof o.filterKind === 'string' ? o.filterKind : null
+    const inferredHardFilter =
+      rawKind === 'hard_filter' ||
+      (!rawKind &&
+        o.score <= 30 &&
+        flags.some((f) => ['wrong_location', 'underqualified', 'overqualified'].includes(f)))
+    const providerPass =
+      o.providerPass && typeof o.providerPass === 'object' && !Array.isArray(o.providerPass)
+        ? (o.providerPass as EvaluationSkipRow['providerPass'])
+        : null
     out.push({
       title: o.title,
       company: o.company,
@@ -67,6 +84,9 @@ function evaluationSkipsFromRun(
       minScore: o.minScore,
       flags,
       reasoning,
+      filterKind: inferredHardFilter ? 'hard_filter' : 'ai_score',
+      jobBoard: typeof o.jobBoard === 'string' ? o.jobBoard : null,
+      providerPass,
     })
   }
   return out
@@ -143,6 +163,8 @@ export function BotRunsPanel({ runs }: BotRunsPanelProps) {
         {runs.map((run) => {
           const pipeline = pipelineSummaryFromRun(run.errors)
           const evalSkips = evaluationSkipsFromRun(run.errors)
+          const hardFilterSkips = evalSkips.filter((s) => s.filterKind === 'hard_filter')
+          const aiScoreSkips = evalSkips.filter((s) => s.filterKind !== 'hard_filter')
           const evalFailures = evaluationFailuresFromRun(run.errors)
           return (
             <div key={run.id} className="px-5 py-3 space-y-1.5">
@@ -170,14 +192,48 @@ export function BotRunsPanel({ runs }: BotRunsPanelProps) {
                   {pipeline}
                 </p>
               )}
-              {evalSkips.length > 0 && (
+              {hardFilterSkips.length > 0 && (
                 <details className="text-xs group">
                   <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
-                    AI skipped {evalSkips.length} below your min score — show
+                    Filtered {hardFilterSkips.length} before AI scoring — show
+                    reasons
+                  </summary>
+                  <ul className="mt-2 space-y-3 border-l-2 border-border pl-3 max-h-64 overflow-y-auto">
+                    {hardFilterSkips.map((s, i) => (
+                      <li key={`${run.id}-hard-filter-${i}`}>
+                        <p className="font-medium text-foreground leading-tight">
+                          {s.title}{' '}
+                          <span className="text-muted-foreground font-normal">
+                            @ {s.company}
+                          </span>
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
+                          Filtered before scoring · Score {s.score}/{s.minScore}
+                          {s.flags.length > 0 ? ` · ${s.flags.join(', ')}` : ''}
+                        </p>
+                        {(s.jobBoard || s.providerPass?.providerQuery) && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {s.jobBoard ? `Board ${s.jobBoard}` : 'Provider pass'}
+                            {s.providerPass?.providerQuery ? ` · "${s.providerPass.providerQuery}"` : ''}
+                            {s.providerPass?.location ? ` · ${s.providerPass.location}` : ''}
+                          </p>
+                        )}
+                        <p className="text-[11px] leading-snug text-foreground/90 mt-1">
+                          {s.reasoning}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+              {aiScoreSkips.length > 0 && (
+                <details className="text-xs group">
+                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
+                    AI scored {aiScoreSkips.length} below your min score — show
                     model reasoning
                   </summary>
                   <ul className="mt-2 space-y-3 border-l-2 border-border pl-3 max-h-64 overflow-y-auto">
-                    {evalSkips.map((s, i) => (
+                    {aiScoreSkips.map((s, i) => (
                       <li key={`${run.id}-eval-skip-${i}`}>
                         <p className="font-medium text-foreground leading-tight">
                           {s.title}{' '}
@@ -189,6 +245,13 @@ export function BotRunsPanel({ runs }: BotRunsPanelProps) {
                           Score {s.score}/{s.minScore}
                           {s.flags.length > 0 ? ` · ${s.flags.join(', ')}` : ''}
                         </p>
+                        {(s.jobBoard || s.providerPass?.providerQuery) && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {s.jobBoard ? `Board ${s.jobBoard}` : 'Provider pass'}
+                            {s.providerPass?.providerQuery ? ` · "${s.providerPass.providerQuery}"` : ''}
+                            {s.providerPass?.location ? ` · ${s.providerPass.location}` : ''}
+                          </p>
+                        )}
                         <p className="text-[11px] leading-snug text-foreground/90 mt-1">
                           {s.reasoning}
                         </p>
