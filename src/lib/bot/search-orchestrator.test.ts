@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BotConfig } from '@prisma/client'
-import { BOT_SEARCH_RESULTS_WANTED } from './search-constants'
+import { BOT_SEARCH_AI_EVAL_MAX_PER_RUN, BOT_SEARCH_RESULTS_WANTED } from './search-constants'
 import type { SearchJobResult, SearchResponse } from './types'
 
 const mocks = vi.hoisted(() => ({
@@ -241,11 +241,62 @@ describe('runBotSearch orchestration', () => {
       jobsNew: 0,
       jobsEvaluated: 1,
       jobsApproved: 0,
+      jobsSaveFailed: 1,
       jobsSkippedLowScore: 0,
+      fatalError: 'One or more matched listings could not be saved to your tracker.',
     })
     expect(result.errors).toEqual({
       'save_Approved But Unsaved Role': 'database write failed',
     })
+  })
+
+  it('treats all-provider search failure as fatal instead of a clean zero-result run', async () => {
+    mocks.runSearch.mockResolvedValue({
+      jobs: [],
+      meta: {
+        platforms_succeeded: [],
+        platforms_failed: { jobs_search_api_loc_1_term_1: 'request timed out' },
+        fallback_used: false,
+        total_raw: 0,
+        total_deduped: 0,
+        by_source_raw: {},
+        by_source_deduped: {},
+      },
+    })
+
+    const { runBotSearch } = await import('./search-orchestrator')
+    const result = await runBotSearch(config(), 'user_1')
+
+    expect(result).toMatchObject({
+      jobsFound: 0,
+      jobsNew: 0,
+      fatalError: 'All configured search providers failed: request timed out',
+      errors: {
+        search: 'All configured search providers failed: request timed out',
+      },
+    })
+    expect(mocks.jobFindMany).not.toHaveBeenCalled()
+    expect(mocks.evaluateJob).not.toHaveBeenCalled()
+    expect(mocks.jobCreate).not.toHaveBeenCalled()
+  })
+
+  it('treats thrown search-client errors as fatal', async () => {
+    mocks.runSearch.mockRejectedValue(new Error('provider request timed out'))
+
+    const { runBotSearch } = await import('./search-orchestrator')
+    const result = await runBotSearch(config(), 'user_1')
+
+    expect(result).toMatchObject({
+      jobsFound: 0,
+      jobsNew: 0,
+      fatalError: 'provider request timed out',
+      errors: {
+        search: 'provider request timed out',
+      },
+    })
+    expect(mocks.jobFindMany).not.toHaveBeenCalled()
+    expect(mocks.evaluateJob).not.toHaveBeenCalled()
+    expect(mocks.jobCreate).not.toHaveBeenCalled()
   })
 
   it('separates deterministic hard filters from AI-scored low matches', async () => {
@@ -299,5 +350,77 @@ describe('runBotSearch orchestration', () => {
       }),
     })
     expect(mocks.jobCreate).not.toHaveBeenCalled()
+  })
+
+  it('audits AI budgeted listings without evaluating or saving them', async () => {
+    const approvedJobs = Array.from({ length: BOT_SEARCH_AI_EVAL_MAX_PER_RUN }, (_, index) =>
+      job({
+        title: `Approved Role ${index + 1}`,
+        company: `GoodCo ${index + 1}`,
+        url: `https://example.com/approved-budget-${index + 1}`,
+      }),
+    )
+    const budgeted = job({
+      title: 'Budgeted Role',
+      company: 'LaterCo',
+      url: 'https://example.com/budgeted',
+    })
+
+    mocks.runSearch.mockResolvedValue(searchResponse([...approvedJobs, budgeted]))
+    mocks.jobFindMany.mockResolvedValue([])
+    mocks.evaluateJob.mockResolvedValue({
+      evaluation: {
+        score: 92,
+        shouldApply: true,
+        reasoning: 'Strong match.',
+        flags: ['good_match'],
+      },
+      scoringInputs: { source: 'test' },
+    })
+
+    const { runBotSearch } = await import('./search-orchestrator')
+    const result = await runBotSearch(config(), 'user_1', { botRunId: 'run_1' })
+
+    expect(mocks.evaluateJob).toHaveBeenCalledTimes(BOT_SEARCH_AI_EVAL_MAX_PER_RUN)
+    expect(mocks.evaluateJob).not.toHaveBeenCalledWith(budgeted, expect.any(Object))
+    expect(mocks.jobCreate).toHaveBeenCalledTimes(BOT_SEARCH_AI_EVAL_MAX_PER_RUN)
+    expect(result).toMatchObject({
+      jobsFound: BOT_SEARCH_AI_EVAL_MAX_PER_RUN + 1,
+      jobsNew: BOT_SEARCH_AI_EVAL_MAX_PER_RUN,
+      jobsEvaluated: BOT_SEARCH_AI_EVAL_MAX_PER_RUN,
+      jobsApproved: BOT_SEARCH_AI_EVAL_MAX_PER_RUN,
+      jobsEvaluationFailed: 0,
+      jobsSkippedLowScore: 1,
+    })
+    expect(result.errors.evaluation_budget).toContain('1 left unscored and not saved')
+    expect(result.evaluationSkips.filter((skip) => skip.filterKind === 'eval_budget')).toHaveLength(1)
+
+    expect(mocks.botRunListingCreateMany).toHaveBeenCalledTimes(1)
+    const auditRows = mocks.botRunListingCreateMany.mock.calls[0][0].data
+    expect(auditRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          botRunId: 'run_1',
+          sequence: 0,
+          title: 'Approved Role 1',
+          stage: 'saved',
+          outcome: 'accepted',
+          evaluated: true,
+          shouldApply: true,
+        }),
+        expect.objectContaining({
+          botRunId: 'run_1',
+          sequence: BOT_SEARCH_AI_EVAL_MAX_PER_RUN,
+          title: 'Budgeted Role',
+          stage: 'eval_budget',
+          outcome: 'rejected',
+          evaluated: false,
+          score: null,
+          shouldApply: false,
+          flags: ['eval_budget'],
+          decisionReason: expect.stringContaining('not saved'),
+        }),
+      ]),
+    )
   })
 })

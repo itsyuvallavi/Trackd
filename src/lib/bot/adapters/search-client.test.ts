@@ -197,6 +197,30 @@ describe('runSearch settings plumbing', () => {
     })
   })
 
+  it('returns jobs in planned pass order', async () => {
+    searchJobsSearchApiExcelMock.mockImplementation(
+      async (params: { searchTerm: string; location: string }) => ({
+        jobs: [
+          result({
+            title: params.searchTerm,
+            location: params.location,
+            url: `https://example.com/${params.searchTerm}`.replace(/\s+/g, '-'),
+          }),
+        ],
+      })
+    )
+
+    const { runSearch } = await import('./search-client')
+    const response = await runSearch({
+      keywords: ['A', 'B'],
+      locations: ['Remote'],
+      remote_only: true,
+      results_wanted: 10,
+    })
+
+    expect(response.jobs.map((job) => job.title)).toEqual(['A remote', 'B remote'])
+  })
+
   it('uses regional boards for India/APAC searches instead of Europe defaults', async () => {
     searchJobsSearchApiExcelMock.mockResolvedValue({
       jobs: [result({ url: 'https://example.com/india', source: 'jobs_search_api' })],
@@ -234,11 +258,11 @@ describe('runSearch settings plumbing', () => {
       results_wanted: 45,
     })
 
-    expect(searchJobsSearchApiExcelMock).toHaveBeenCalledTimes(1)
+    expect(searchJobsSearchApiExcelMock).toHaveBeenCalledTimes(BOT_SEARCH_RAPIDAPI_CONCURRENCY)
     expect(response.meta.search_passes).toMatchObject({
       planned: 25,
       selected: BOT_SEARCH_PROVIDER_PASSES_MAX,
-      executed: 1,
+      executed: BOT_SEARCH_RAPIDAPI_CONCURRENCY,
       max: BOT_SEARCH_PROVIDER_PASSES_MAX,
       dropped: 15,
       capped: true,

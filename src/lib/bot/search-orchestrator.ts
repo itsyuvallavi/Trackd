@@ -19,6 +19,10 @@ import { runSearch } from './adapters/search-client'
 import { botSearchHasQueryableBackend } from './bot-search-sources'
 import { buildBotSearchRequest } from './search-request'
 import {
+  BOT_SEARCH_AI_EVAL_CONCURRENCY,
+  BOT_SEARCH_AI_EVAL_MAX_PER_RUN,
+} from './search-constants'
+import {
   BOT_LISTING_OUTCOME,
   BOT_LISTING_STAGE,
   compactJobForAudit,
@@ -69,6 +73,24 @@ function skippedScoringNote(stage: string): Prisma.InputJsonValue {
     note: 'AI evaluator was not run for this listing.',
     filterStage: stage,
   }
+}
+
+async function runLimited<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> {
+  const limit = Math.max(1, Math.min(concurrency, items.length || 1))
+  let next = 0
+
+  await Promise.all(
+    Array.from({ length: limit }, async () => {
+      while (next < items.length) {
+        const item = items[next++]
+        await worker(item)
+      }
+    })
+  )
 }
 
 function noOpenAiSnapshot(): Prisma.InputJsonValue {
@@ -208,6 +230,7 @@ export async function runBotSearch(
     jobsEvaluated: 0,
     jobsApproved: 0,
     jobsEvaluationFailed: 0,
+    jobsSaveFailed: 0,
     jobsHardFiltered: 0,
     jobsSkippedLowScore: 0,
     skippedExistingByUrl: 0,
@@ -224,6 +247,7 @@ export async function runBotSearch(
     if (!botSearchHasQueryableBackend()) {
       result.errors['config'] =
         'No search backend available for current env / BOT_SEARCH_SOURCES — set JOBS_SEARCH_API_KEY.'
+      result.fatalError = result.errors['config']
       pushLog('warn', result.errors['config'])
       return result
     }
@@ -247,6 +271,7 @@ export async function runBotSearch(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       result.errors['search'] = msg
+      result.fatalError = msg
       pushLog('error', `Search failed: ${msg}`)
       return result
     }
@@ -265,6 +290,18 @@ export async function runBotSearch(
 
     if (searchResponse.meta.platforms_failed && Object.keys(searchResponse.meta.platforms_failed).length > 0) {
       pushLog('warn', 'Platform issues', searchResponse.meta.platforms_failed)
+    }
+
+    if (
+      searchResponse.jobs.length === 0 &&
+      searchResponse.meta.platforms_succeeded.length === 0 &&
+      Object.keys(searchResponse.meta.platforms_failed).length > 0
+    ) {
+      const details = Object.values(searchResponse.meta.platforms_failed).join('; ')
+      result.errors['search'] = `All configured search providers failed: ${details}`
+      result.fatalError = result.errors['search']
+      pushLog('error', result.errors['search'])
+      return result
     }
 
     if (searchResponse.jobs.length === 0) {
@@ -481,7 +518,7 @@ export async function runBotSearch(
 
     let noUrlIdx = 0
     const openAi = !!process.env.OPENAI_API_KEY
-
+    const jobsWithAudit: Array<{ job: SearchJobResult; seq: number; audit: MutableListing }> = []
     for (const job of allNewJobs) {
       let seq: number | undefined
       if (job.url?.trim()) {
@@ -500,6 +537,71 @@ export async function runBotSearch(
         continue
       }
 
+      jobsWithAudit.push({ job, seq, audit })
+    }
+
+    const aiEvalMax = BOT_SEARCH_AI_EVAL_MAX_PER_RUN
+    const aiEvalConcurrency = BOT_SEARCH_AI_EVAL_CONCURRENCY
+    const jobsToProcess = openAi ? jobsWithAudit.slice(0, aiEvalMax) : jobsWithAudit
+    const budgetedJobs = openAi ? jobsWithAudit.slice(aiEvalMax) : []
+
+    if (openAi && budgetedJobs.length > 0) {
+      const message =
+        `AI evaluation budget reached: evaluating ${jobsToProcess.length}/${jobsWithAudit.length} ` +
+        `new listing(s); ${budgetedJobs.length} left unscored and not saved.`
+      result.errors['evaluation_budget'] = message
+      pushLog('warn', message, {
+        maxEvaluations: aiEvalMax,
+        concurrency: aiEvalConcurrency,
+        skipped: budgetedJobs.length,
+      })
+      for (const { job, seq, audit } of budgetedJobs) {
+        result.jobsSkippedLowScore++
+        result.evaluationSkips.push({
+          title: job.title.slice(0, 200),
+          company: job.company.slice(0, 120),
+          score: 0,
+          minScore: botConfig.minScore,
+          flags: ['eval_budget'],
+          reasoning:
+            `Skipped AI scoring because this run reached the production evaluation budget (${aiEvalMax}).`,
+          filterKind: 'eval_budget',
+          jobBoard: job.jobBoard ?? null,
+          providerPass: job.providerPass ?? null,
+        })
+        auditBySeq.set(seq, {
+          ...audit,
+          finalized: true,
+          stage: BOT_LISTING_STAGE.EVAL_BUDGET,
+          outcome: BOT_LISTING_OUTCOME.REJECTED,
+          evaluated: false,
+          score: null,
+          shouldApply: false,
+          flags: ['eval_budget'],
+          reasoning:
+            `Skipped AI scoring because this run reached the production evaluation budget (${aiEvalMax}).`,
+          resumeMatch: null,
+          scoringInputs: {
+            note: 'AI evaluator was not run because the per-run evaluation budget was exhausted.',
+            maxEvaluations: aiEvalMax,
+            concurrency: aiEvalConcurrency,
+          },
+          decisionReason:
+            'AI evaluation budget was exhausted before this listing was scored — listing not saved.',
+        })
+        pushLog('info', `Budget skipped (not saved): ${job.title} @ ${job.company}`)
+      }
+    }
+
+    const processJob = async ({
+      job,
+      seq,
+      audit,
+    }: {
+      job: SearchJobResult
+      seq: number
+      audit: MutableListing
+    }) => {
       try {
         let score = 0
         let shouldApply = false
@@ -553,7 +655,7 @@ export async function runBotSearch(
               decisionReason: 'AI evaluation failed — listing not saved.',
               errorMessage: errMsg.slice(0, 4000),
             })
-            continue
+            return
           }
         } else {
           const preFilter = preFilterJob(job, botConfig)
@@ -593,7 +695,7 @@ export async function runBotSearch(
               },
               decisionReason: preFilter.reason,
             })
-            continue
+            return
           }
           scoringInputs = noOpenAiSnapshot()
         }
@@ -637,7 +739,7 @@ export async function runBotSearch(
               ? reasoning || `Deterministic filter rejected this listing before AI scoring.`
               : `AI score ${score} is below your minimum (${minS}).`,
           })
-          continue
+          return
         }
 
         let salary: string | undefined
@@ -722,7 +824,9 @@ export async function runBotSearch(
       } catch (saveErr) {
         const msg = saveErr instanceof Error ? saveErr.message : String(saveErr)
         pushLog('error', `Failed to save "${job.title}": ${msg}`)
+        result.jobsSaveFailed++
         result.errors[`save_${job.title.slice(0, 30)}`] = msg
+        result.fatalError ??= 'One or more matched listings could not be saved to your tracker.'
         const prev = auditBySeq.get(seq)!
         auditBySeq.set(seq, {
           ...prev,
@@ -735,12 +839,25 @@ export async function runBotSearch(
       }
     }
 
+    if (openAi) {
+      pushLog(
+        'info',
+        `Running AI evaluation with concurrency=${Math.min(aiEvalConcurrency, jobsToProcess.length || 1)} max=${aiEvalMax}`
+      )
+      await runLimited(jobsToProcess, aiEvalConcurrency, processJob)
+    } else {
+      for (const item of jobsToProcess) {
+        await processJob(item)
+      }
+    }
+
     pushLog(
       'info',
       `Pipeline done: found=${result.jobsFound} saved=${result.jobsNew} ` +
         `approved=${result.jobsApproved} below_AI_threshold=${result.jobsSkippedLowScore} ` +
         `hard_filter=${result.jobsHardFiltered} ` +
         `eval_failed=${result.jobsEvaluationFailed} ` +
+        `save_failed=${result.jobsSaveFailed} ` +
         `dedup_url=${result.skippedExistingByUrl} dedup_title=${result.skippedExistingByTitle} dedup_batch=${result.skippedBatchDuplicate} dedup_dismissed=${result.skippedPreviouslyDismissed}`
     )
 

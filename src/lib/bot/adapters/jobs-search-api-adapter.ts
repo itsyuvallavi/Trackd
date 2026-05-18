@@ -21,6 +21,7 @@ import { extractRapidApiJobRows, normalizeRapidApiJobFromUnknownRow } from './ra
 
 const BASE = 'https://jobs-search-api.p.rapidapi.com'
 const HOST = 'jobs-search-api.p.rapidapi.com'
+const REQUEST_TIMEOUT_MS = 30_000
 
 function str(v: unknown): string | null {
   return typeof v === 'string' && v.trim() ? v.trim() : null
@@ -176,7 +177,7 @@ export async function searchJobsSearchApiExcel(
         linkedin_fetch_description,
         hours_old,
       }),
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     })
 
     const buf = await res.arrayBuffer().catch(() => null)

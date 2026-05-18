@@ -2,8 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BotConfig } from '@prisma/client'
 
 const mocks = vi.hoisted(() => ({
+  transaction: vi.fn(),
+  executeRaw: vi.fn(),
   botRunCreate: vi.fn(),
   botRunUpdate: vi.fn(),
+  botRunUpdateMany: vi.fn(),
+  botRunFindFirst: vi.fn(),
   botConfigUpdate: vi.fn(),
   notificationCreate: vi.fn(),
   jobFindMany: vi.fn(),
@@ -13,9 +17,13 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    $transaction: mocks.transaction,
+    $executeRaw: mocks.executeRaw,
     botRun: {
       create: mocks.botRunCreate,
       update: mocks.botRunUpdate,
+      updateMany: mocks.botRunUpdateMany,
+      findFirst: mocks.botRunFindFirst,
     },
     botConfig: {
       update: mocks.botConfigUpdate,
@@ -67,6 +75,7 @@ function orchestratorResult(overrides = {}) {
     jobsEvaluated: 2,
     jobsApproved: 1,
     jobsEvaluationFailed: 0,
+    jobsSaveFailed: 0,
     jobsHardFiltered: 0,
     jobsSkippedLowScore: 1,
     skippedExistingByUrl: 0,
@@ -84,8 +93,22 @@ function orchestratorResult(overrides = {}) {
 describe('executeBotRunForConfig Telegram routing', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.transaction.mockImplementation(async (callback) =>
+      callback({
+        $executeRaw: mocks.executeRaw,
+        botRun: {
+          create: mocks.botRunCreate,
+          update: mocks.botRunUpdate,
+          updateMany: mocks.botRunUpdateMany,
+          findFirst: mocks.botRunFindFirst,
+        },
+      }),
+    )
+    mocks.executeRaw.mockResolvedValue(1)
     mocks.botRunCreate.mockResolvedValue({ id: 'run_1' })
     mocks.botRunUpdate.mockResolvedValue({})
+    mocks.botRunUpdateMany.mockResolvedValue({ count: 0 })
+    mocks.botRunFindFirst.mockResolvedValue(null)
     mocks.botConfigUpdate.mockResolvedValue({})
     mocks.notificationCreate.mockResolvedValue({})
     mocks.jobFindMany.mockResolvedValue([])
@@ -116,6 +139,50 @@ describe('executeBotRunForConfig Telegram routing', () => {
         }),
       }),
     )
+  })
+
+  it('expires stale running rows before creating a fresh run', async () => {
+    const { executeBotRunForConfig } = await import('./execute-bot-run')
+    await executeBotRunForConfig(config(), 'manual')
+
+    expect(mocks.botRunUpdateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user_1',
+        botConfigId: 'cfg_1',
+        status: 'RUNNING',
+        startedAt: { lt: expect.any(Date) },
+      },
+      data: expect.objectContaining({
+        status: 'FAILED',
+        completedAt: expect.any(Date),
+        duration: 10 * 60 * 1000,
+        errors: expect.objectContaining({
+          stale: true,
+          fatal: expect.stringContaining('runtime budget'),
+        }),
+      }),
+    })
+    expect(mocks.botRunUpdateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.botRunCreate.mock.invocationCallOrder[0],
+    )
+    expect(mocks.executeRaw).toHaveBeenCalledTimes(1)
+    expect(mocks.executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.botRunFindFirst.mock.invocationCallOrder[0],
+    )
+  })
+
+  it('does not start a duplicate run while a fresh run is already active', async () => {
+    mocks.botRunFindFirst.mockResolvedValue({ id: 'run_active' })
+
+    const { executeBotRunForConfig } = await import('./execute-bot-run')
+    const result = await executeBotRunForConfig(config(), 'manual')
+
+    expect(mocks.botRunCreate).not.toHaveBeenCalled()
+    expect(mocks.runBotSearch).not.toHaveBeenCalled()
+    expect(result).toMatchObject({
+      runId: 'run_active',
+      error: expect.stringContaining('already running'),
+    })
   })
 
   it('sends Telegram summaries only to the explicit chat ID saved on the user config', async () => {
@@ -185,6 +252,48 @@ describe('executeBotRunForConfig Telegram routing', () => {
           title: 'Job search could not score jobs',
           message: expect.stringContaining('3 could not be scored'),
           actionUrl: '/bot/runs',
+        }),
+      }),
+    )
+  })
+
+  it('marks fatal orchestrator errors failed instead of reporting a clean no-match run', async () => {
+    mocks.runBotSearch.mockResolvedValue(
+      orchestratorResult({
+        jobsFound: 0,
+        jobsNew: 0,
+        jobsEvaluated: 0,
+        jobsApproved: 0,
+        jobsSkippedLowScore: 0,
+        errors: { search: 'All configured search providers failed: timeout' },
+        fatalError: 'All configured search providers failed: timeout',
+      }),
+    )
+
+    const { executeBotRunForConfig } = await import('./execute-bot-run')
+    const result = await executeBotRunForConfig(config(), 'manual')
+
+    expect(result).toMatchObject({
+      error: 'All configured search providers failed: timeout',
+    })
+    expect(mocks.botRunUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'run_1' },
+        data: expect.objectContaining({
+          status: 'FAILED',
+          errors: expect.objectContaining({
+            search: 'All configured search providers failed: timeout',
+            fatal: 'All configured search providers failed: timeout',
+          }),
+        }),
+      }),
+    )
+    expect(mocks.notificationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: 'SYNC_ERROR',
+          title: 'Job search failed',
+          message: expect.stringContaining('All configured search providers failed'),
         }),
       }),
     )

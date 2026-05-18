@@ -5,6 +5,8 @@ import { runBotSearch } from '@/lib/bot/search-orchestrator'
 import { sendBotRunSummary } from '@/lib/bot/telegram'
 import type { BotRunSummary } from '@/lib/bot/telegram'
 
+const STALE_RUNNING_BOT_RUN_MS = 10 * 60 * 1000
+
 export type BotRunExecutionResult = {
   runId: string
   jobsFound: number
@@ -26,14 +28,22 @@ async function createBotRunNotification(input: {
   jobsApproved: number
   hardFiltered: number
   skippedLowScore: number
+  evaluationBudgetSkipped: number
   evaluationFailed: number
+  saveFailed: number
   fatalError?: string
 }) {
-  const isError = input.status === BotRunStatus.FAILED || !!input.fatalError || input.evaluationFailed > 0
+  const isError =
+    input.status === BotRunStatus.FAILED ||
+    !!input.fatalError ||
+    input.evaluationFailed > 0 ||
+    input.saveFailed > 0
   const type = isError ? 'SYNC_ERROR' : 'SYNC_COMPLETE'
 
   let title = 'Job search complete'
-  if (input.evaluationFailed > 0 && input.jobsNew === 0) {
+  if (input.saveFailed > 0 && input.jobsNew === 0) {
+    title = 'Job search could not save matches'
+  } else if (input.evaluationFailed > 0 && input.jobsNew === 0) {
     title = 'Job search could not score jobs'
   } else if (input.status === BotRunStatus.FAILED) {
     title = 'Job search failed'
@@ -50,16 +60,25 @@ async function createBotRunNotification(input: {
     lines.push(`${input.jobsApproved} strong match${input.jobsApproved === 1 ? '' : 'es'} approved.`)
   }
   if (input.skippedLowScore > 0) {
-    const aiLowScore = Math.max(0, input.skippedLowScore - input.hardFiltered)
+    const aiLowScore = Math.max(
+      0,
+      input.skippedLowScore - input.hardFiltered - input.evaluationBudgetSkipped,
+    )
     if (input.hardFiltered > 0) {
       lines.push(`${input.hardFiltered} filtered before AI scoring by location or seniority rules.`)
     }
     if (aiLowScore > 0) {
       lines.push(`${aiLowScore} below your AI match threshold.`)
     }
+    if (input.evaluationBudgetSkipped > 0) {
+      lines.push(`${input.evaluationBudgetSkipped} left unscored because the run reached its evaluation budget.`)
+    }
   }
   if (input.evaluationFailed > 0) {
     lines.push(`${input.evaluationFailed} could not be scored because the AI provider failed or timed out.`)
+  }
+  if (input.saveFailed > 0) {
+    lines.push(`${input.saveFailed} could not be saved to your tracker.`)
   }
   if (input.fatalError) {
     lines.push(`Error: ${input.fatalError.slice(0, 500)}`)
@@ -81,7 +100,9 @@ async function createBotRunNotification(input: {
         jobsApproved: input.jobsApproved,
         hardFiltered: input.hardFiltered,
         skippedLowScore: input.skippedLowScore,
+        evaluationBudgetSkipped: input.evaluationBudgetSkipped,
         evaluationFailed: input.evaluationFailed,
+        saveFailed: input.saveFailed,
         fatalError: input.fatalError ?? null,
       },
       actionUrl: '/bot/runs',
@@ -98,18 +119,84 @@ export async function executeBotRunForConfig(
   source: 'cron' | 'manual'
 ): Promise<BotRunExecutionResult> {
   const startedAt = new Date()
-  const botRun = await prisma.botRun.create({
-    data: {
-      userId: config.userId,
-      botConfigId: config.id,
-      status: BotRunStatus.RUNNING,
-      source,
-    },
+  const staleStartedBefore = new Date(startedAt.getTime() - STALE_RUNNING_BOT_RUN_MS)
+
+  const runStart = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'trackd_bot_run'}), hashtext(${config.id}))`
+
+    await tx.botRun.updateMany({
+      where: {
+        userId: config.userId,
+        botConfigId: config.id,
+        status: BotRunStatus.RUNNING,
+        startedAt: { lt: staleStartedBefore },
+      },
+      data: {
+        status: BotRunStatus.FAILED,
+        completedAt: startedAt,
+        duration: STALE_RUNNING_BOT_RUN_MS,
+        errors: {
+          fatal:
+            'Previous job search exceeded the runtime budget and was marked failed before starting a new run.',
+          stale: true,
+        },
+      },
+    })
+
+    const activeRun = await tx.botRun.findFirst({
+      where: {
+        userId: config.userId,
+        botConfigId: config.id,
+        status: BotRunStatus.RUNNING,
+      },
+      select: { id: true },
+    })
+
+    if (activeRun) {
+      return { activeRun, botRun: null }
+    }
+
+    const botRun = await tx.botRun.create({
+      data: {
+        userId: config.userId,
+        botConfigId: config.id,
+        status: BotRunStatus.RUNNING,
+        source,
+      },
+    })
+
+    return { activeRun: null, botRun }
   })
+
+  if (runStart.activeRun || !runStart.botRun) {
+    return {
+      runId: runStart.activeRun?.id ?? '',
+      jobsFound: 0,
+      jobsNew: 0,
+      jobsApproved: 0,
+      jobsHardFiltered: 0,
+      jobsSkippedLowScore: 0,
+      jobsEvaluationFailed: 0,
+      error: 'A job search is already running. Wait for it to finish before starting another run.',
+    }
+  }
+
+  const botRun = runStart.botRun
 
   try {
     const orchestratorResult = await runBotSearch(config, config.userId, { botRunId: botRun.id })
     const duration = Date.now() - startedAt.getTime()
+    const evaluationBudgetSkipped = orchestratorResult.evaluationSkips.filter(
+      (skip) => skip.filterKind === 'eval_budget',
+    ).length
+    const scoredOrHardFilteredSkipped = Math.max(
+      0,
+      orchestratorResult.jobsSkippedLowScore - evaluationBudgetSkipped,
+    )
+    const allEvaluationsFailed =
+      orchestratorResult.jobsEvaluationFailed > 0 &&
+      orchestratorResult.jobsNew === 0 &&
+      scoredOrHardFilteredSkipped === 0
 
     const mergedErrors: Record<string, unknown> = { ...orchestratorResult.errors }
     mergedErrors.pipeline =
@@ -122,12 +209,15 @@ export async function executeBotRunForConfig(
       `below_min_score=${orchestratorResult.jobsSkippedLowScore} ` +
       `hard_filter=${orchestratorResult.jobsHardFiltered} ` +
       `eval_failed=${orchestratorResult.jobsEvaluationFailed} ` +
+      `save_failed=${orchestratorResult.jobsSaveFailed} ` +
       `evaluated=${orchestratorResult.jobsEvaluated} ` +
       `approved=${orchestratorResult.jobsApproved}`
     if (orchestratorResult.jobsSkippedLowScore > 0) {
       const aiLowScore = Math.max(
         0,
-        orchestratorResult.jobsSkippedLowScore - orchestratorResult.jobsHardFiltered,
+        orchestratorResult.jobsSkippedLowScore -
+          orchestratorResult.jobsHardFiltered -
+          evaluationBudgetSkipped,
       )
       mergedErrors.skippedBelowMinScore = `${orchestratorResult.jobsSkippedLowScore} listing(s) not saved (${orchestratorResult.jobsHardFiltered} hard-filtered, ${aiLowScore} below AI minimum)`
     }
@@ -140,11 +230,15 @@ export async function executeBotRunForConfig(
     if (orchestratorResult.evaluationFailures.length > 0) {
       mergedErrors.evaluationFailures = orchestratorResult.evaluationFailures
     }
+    if (orchestratorResult.jobsSaveFailed > 0) {
+      mergedErrors.saveFailed = `${orchestratorResult.jobsSaveFailed} listing(s) could not be saved`
+    }
+    if (orchestratorResult.fatalError) {
+      mergedErrors.fatal = orchestratorResult.fatalError
+    }
 
     const status =
-      orchestratorResult.jobsEvaluationFailed > 0 &&
-      orchestratorResult.jobsNew === 0 &&
-      orchestratorResult.jobsSkippedLowScore === 0
+      orchestratorResult.fatalError || allEvaluationsFailed
         ? BotRunStatus.FAILED
         : BotRunStatus.COMPLETED
 
@@ -184,7 +278,10 @@ export async function executeBotRunForConfig(
         jobsApproved: orchestratorResult.jobsApproved,
         hardFiltered: orchestratorResult.jobsHardFiltered,
         skippedLowScore: orchestratorResult.jobsSkippedLowScore,
+        evaluationBudgetSkipped,
         evaluationFailed: orchestratorResult.jobsEvaluationFailed,
+        saveFailed: orchestratorResult.jobsSaveFailed,
+        fatalError: orchestratorResult.fatalError,
       })
     } catch (notificationErr) {
       console.error(`[bot-run] In-app notification failed for user ${config.userId}:`, notificationErr)
@@ -240,6 +337,7 @@ export async function executeBotRunForConfig(
         jobsSkippedLowScore: orchestratorResult.jobsSkippedLowScore,
         jobsEvaluationFailed: orchestratorResult.jobsEvaluationFailed,
         error:
+          orchestratorResult.fatalError ??
           'Search found jobs, but AI scoring failed for all candidates. Check Job Search runs for details.',
       }
     }
@@ -278,7 +376,9 @@ export async function executeBotRunForConfig(
         jobsApproved: 0,
         hardFiltered: 0,
         skippedLowScore: 0,
+        evaluationBudgetSkipped: 0,
         evaluationFailed: 0,
+        saveFailed: 0,
         fatalError: msg,
       })
     } catch (notificationErr) {

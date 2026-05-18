@@ -109,7 +109,7 @@ export interface EvaluationSkipAudit {
   flags: string[]
   reasoning: string
   resumeMatch?: string
-  filterKind?: 'hard_filter' | 'ai_score'
+  filterKind?: 'hard_filter' | 'ai_score' | 'eval_budget'
   jobBoard?: string | null
   providerPass?: SearchProviderPassMeta | null
 }
@@ -129,6 +129,8 @@ export interface OrchestratorResult {
   jobsHardFiltered: number
   /** Listings that could not be evaluated because the AI/provider request failed. */
   jobsEvaluationFailed: number
+  /** Listings that passed scoring but could not be persisted. */
+  jobsSaveFailed: number
   /** Saved candidates that were not persisted because AI score &lt; minScore */
   jobsSkippedLowScore: number
   /** Had same normalized URL as a row already in the DB for this user */
@@ -140,6 +142,8 @@ export interface OrchestratorResult {
   /** Matched a fingerprint saved when the user deleted this job earlier */
   skippedPreviouslyDismissed: number
   errors: Record<string, string>
+  /** Fatal pipeline/config/save error that should mark the BotRun failed. */
+  fatalError?: string
   /** Below minScore after OpenAI eval — inspect flags/reasoning in UI or DB */
   evaluationSkips: EvaluationSkipAudit[]
   /** Evaluation failures — inspect errors when provider/model requests fail. */

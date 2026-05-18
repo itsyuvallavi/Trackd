@@ -19,6 +19,7 @@ export const BOT_LISTING_STAGE = {
   BELOW_THRESHOLD: 'below_threshold',
   SAVED: 'saved',
   SAVED_NO_AI: 'saved_no_ai',
+  EVAL_BUDGET: 'eval_budget',
   EVAL_FAILED: 'eval_failed',
   SAVE_FAILED: 'save_failed',
 } as const

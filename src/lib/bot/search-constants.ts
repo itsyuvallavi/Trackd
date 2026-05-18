@@ -19,7 +19,15 @@ export const BOT_SEARCH_LOCATION_PASSES_MAX = 5
 export const BOT_SEARCH_PROVIDER_PASSES_MAX = 10
 
 /**
- * RapidAPI calls stay serial by default to avoid provider rate limits.
- * Raise only after production telemetry shows the provider handles it safely.
+ * Jobs Search API's RapidAPI plan rate-limits by second. Keep provider calls
+ * serial and lightly spaced; AI scoring is where we use bounded parallelism.
  */
 export const BOT_SEARCH_RAPIDAPI_CONCURRENCY = 1
+export const BOT_SEARCH_RAPIDAPI_MIN_INTERVAL_MS = 1_100
+
+/**
+ * AI scoring is the slowest part of a run. Keep it bounded so the production
+ * "Run now" action completes instead of leaving BotRun rows stuck RUNNING.
+ */
+export const BOT_SEARCH_AI_EVAL_CONCURRENCY = 3
+export const BOT_SEARCH_AI_EVAL_MAX_PER_RUN = 12

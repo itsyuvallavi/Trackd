@@ -18,6 +18,7 @@ import type {
   SearchProviderPassMeta,
 } from '../types'
 import {
+  BOT_SEARCH_RAPIDAPI_MIN_INTERVAL_MS,
   BOT_SEARCH_RAPIDAPI_CONCURRENCY,
   BOT_SEARCH_RESULTS_WANTED,
 } from '../search-constants'
@@ -86,6 +87,10 @@ async function runLimited<T>(
   )
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
   const allow = botSearchSourcesAllowlist()
   const src = (t: BotSearchSourceToken) => botSearchSourceAllowed(allow, t)
@@ -94,7 +99,7 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
 
   const platformsSucceeded: string[] = []
   const platformsFailed: Record<string, string> = {}
-  const allJobs: SearchJobResult[] = []
+  let allJobs: SearchJobResult[] = []
 
   const searchPlan = buildBotSearchPassPlan({
     keywords: req.keywords,
@@ -110,6 +115,9 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
 
   let skipJobsSearchApi = false
   let executedPasses = 0
+  let lastJobsSearchApiStartedAt = 0
+  const rapidApiPassSpacingMs =
+    process.env.NODE_ENV === 'test' ? 0 : BOT_SEARCH_RAPIDAPI_MIN_INTERVAL_MS
 
   const normalizedLevel = normalizeExperienceLevel(req.experience_level)
   const jobsSearchExperienceHint = jobsSearchApiSearchHint(normalizedLevel)
@@ -151,6 +159,7 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
       experienceHint: jobsSearchExperienceHint,
     }
   })
+  const jobsByPassIndex = new Map<number, SearchJobResult[]>()
 
   if (src('jobs_search_api') && jobsSearchApiKey) {
     await runLimited<BotSearchProviderPass>(
@@ -165,6 +174,13 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
           (p) => p.termIndex === pass.termIndex && p.locationIndex === pass.locationIndex
         )
         executedPasses++
+
+        if (rapidApiPassSpacingMs > 0 && lastJobsSearchApiStartedAt > 0) {
+          const elapsed = Date.now() - lastJobsSearchApiStartedAt
+          const waitMs = Math.max(0, rapidApiPassSpacingMs - elapsed)
+          if (waitMs > 0) await sleep(waitMs)
+        }
+        lastJobsSearchApiStartedAt = Date.now()
 
         const { jobs, error } = await searchJobsSearchApiExcel(
           {
@@ -185,7 +201,7 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
           platformsFailed[`jobs_search_api_${locTag}_${termTag}`] = error
           if (rapidApiTerminalFailure(error)) skipJobsSearchApi = true
         } else {
-          allJobs.push(...jobs)
+          jobsByPassIndex.set(passMeta?.passIndex ?? 0, jobs)
           if (!platformsSucceeded.includes('jobs_search_api')) {
             platformsSucceeded.push('jobs_search_api')
           }
@@ -194,6 +210,7 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
       },
       () => skipJobsSearchApi
     )
+    allJobs = providerPasses.flatMap((pass) => jobsByPassIndex.get(pass.passIndex) ?? [])
   } else if (src('jobs_search_api') && !jobsSearchApiKey) {
     platformsFailed['jobs_search_api'] = 'JOBS_SEARCH_API_KEY not set'
   }
