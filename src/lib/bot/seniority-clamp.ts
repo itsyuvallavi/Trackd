@@ -2,10 +2,11 @@
  * Deterministic guardrail for seniority mismatch between the user's preferred
  * experience level (BotConfig.experienceLevel) and the JD's evident seniority.
  *
- *   mid / entry / internship vs "Staff / Principal / 10+ yrs"   → cap, underqualified
- *   senior / director          vs "Intern / Fresher / Junior"   → cap, overqualified
+ *   mid / entry / internship vs "Staff / Principal / 10+ yrs"   → soft penalty, underqualified
+ *   senior / director          vs "Intern / Fresher / Junior"   → soft penalty, overqualified
  *
  * Purely regex-based. The evaluator has the same info but may still over-score.
+ * Seniority is a user preference, so this is intentionally not a hard reject.
  */
 
 import type { BotConfig } from '@prisma/client'
@@ -26,8 +27,11 @@ export type SeniorityClampMeta = {
   }
 }
 
-const UNDERQUALIFIED_CAP = 38
-const OVERQUALIFIED_CAP = 30
+const SENIOR_TITLE_PENALTY = 5
+const VERY_SENIOR_TITLE_PENALTY = 14
+const JUNIOR_TITLE_PENALTY = 6
+const YEARS_GAP_PENALTY = 4
+const VERY_SENIOR_CAP = 68
 
 type NormalizedLevel =
   | 'internship'
@@ -89,6 +93,10 @@ function titleSuggestsSenior(title: string): boolean {
   return /\b(?:senior|sr\.?|staff|principal|lead|architect|director|head\s+of|chief)\b/i.test(title)
 }
 
+function titleSuggestsVerySenior(title: string): boolean {
+  return /\b(?:staff|principal|architect|director|head\s+of|chief|vp|vice\s+president)\b/i.test(title)
+}
+
 function titleSuggestsJunior(title: string): boolean {
   return /\b(?:intern(?:ship)?|fresher|junior|jr\.?|entry[-\s]?level|graduate|trainee)\b/i.test(
     title
@@ -107,13 +115,7 @@ function buildUnderqualifiedReasons(
     )
   }
   if (titleSuggestsSenior(title)) {
-    reasons.push(`JD title "${title}" indicates a senior/staff-level role`)
-  }
-  if (facts.hasSeniorityTitleHint && !titleSuggestsJunior(title)) {
-    const lowered = title.toLowerCase()
-    if (!/\b(senior|sr\.?|staff|principal|lead)\b/.test(lowered)) {
-      reasons.push('JD body mentions senior-level expectations')
-    }
+    reasons.push(`JD title "${title}" suggests a more senior role`)
   }
   return reasons
 }
@@ -152,33 +154,53 @@ export function applySeniorityClamp(
   const underReasons = buildUnderqualifiedReasons(job.title, facts, ceiling)
   const overReasons = buildOverqualifiedReasons(job.title, facts, floor)
 
-  let cap = 100
   let direction: SeniorityClampMeta['direction'] | null = null
   let reasons: string[] = []
 
   if (underReasons.length > 0) {
-    cap = Math.min(cap, UNDERQUALIFIED_CAP)
     direction = 'underqualified'
     reasons = underReasons
   }
-  if (overReasons.length > 0 && (!direction || OVERQUALIFIED_CAP < cap)) {
-    cap = Math.min(cap, OVERQUALIFIED_CAP)
+  if (overReasons.length > 0 && !direction) {
     direction = 'overqualified'
     reasons = overReasons
   }
 
-  if (!direction || cap >= evaluation.score) {
+  if (!direction) {
     return { evaluation }
   }
 
   const beforeScore = evaluation.score
-  const afterScore = Math.min(beforeScore, cap)
+  let afterScore = beforeScore
+
+  if (direction === 'underqualified') {
+    const yearsGap = Math.max(0, facts.maxYearsRequired - ceiling)
+    const verySenior = titleSuggestsVerySenior(job.title)
+    if (titleSuggestsSenior(job.title)) {
+      afterScore -= verySenior ? VERY_SENIOR_TITLE_PENALTY : SENIOR_TITLE_PENALTY
+    }
+    if (yearsGap > 0) {
+      afterScore -= Math.min(18, yearsGap * YEARS_GAP_PENALTY)
+    }
+    if (verySenior) {
+      afterScore = Math.min(afterScore, VERY_SENIOR_CAP)
+    }
+  } else {
+    afterScore -= JUNIOR_TITLE_PENALTY
+  }
+
+  afterScore = Math.max(0, Math.min(beforeScore, Math.round(afterScore)))
+
+  if (afterScore >= beforeScore) {
+    return { evaluation }
+  }
+
   const flag = direction === 'underqualified' ? 'underqualified' : 'overqualified'
   const flags = Array.from(new Set([...evaluation.flags, flag]))
 
-  const note = ` [Match score adjusted: ${reasons.join('; ')}.]`
+  const note = ` [Seniority preference adjustment: ${reasons.join('; ')}.]`
   const reasoning =
-    evaluation.reasoning && !evaluation.reasoning.includes('Match score adjusted')
+    evaluation.reasoning && !evaluation.reasoning.includes('Seniority preference adjustment')
       ? `${evaluation.reasoning}${note}`
       : evaluation.reasoning || note.trim()
 

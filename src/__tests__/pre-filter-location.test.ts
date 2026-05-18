@@ -226,3 +226,27 @@ describe('preFilterJob location (US remote HQ)', () => {
     expect(r.rejected).toBe(false)
   })
 })
+
+describe('preFilterJob seniority guidance', () => {
+  it('does not hard-reject senior or lead titles when experience level is mid-level', () => {
+    const config = cfg(['Remote', 'Europe'], true)
+    config.experienceLevel = 'mid_level'
+
+    for (const title of [
+      'Senior Software Engineer - Full Stack',
+      'Lead Frontend React Engineer - Work from home',
+    ]) {
+      const r = preFilterJob(
+        job({
+          title,
+          company: 'Acme',
+          location: 'Remote',
+          is_remote: true,
+          description: 'Remote role building React product interfaces.',
+        }),
+        config,
+      )
+      expect(r.rejected).toBe(false)
+    }
+  })
+})

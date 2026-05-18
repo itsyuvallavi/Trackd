@@ -146,75 +146,6 @@ function checkRemoteWorkPolicy(job: SearchJobResult, config: BotConfig): PreFilt
   return { rejected: false }
 }
 
-// ── Seniority pre-filter ──────────────────────────────────────────────────
-
-type SeniorityLevel =
-  | 'internship'
-  | 'entry_level'
-  | 'mid_level'
-  | 'senior_level'
-  | 'director'
-  | 'any'
-
-function normaliseLevel(raw: string | null | undefined): SeniorityLevel {
-  const v = (raw ?? '').trim().toLowerCase()
-  if (!v || v === 'any') return 'any'
-  if (v.startsWith('intern')) return 'internship'
-  if (v.startsWith('entry')) return 'entry_level'
-  if (v.startsWith('mid')) return 'mid_level'
-  if (v.startsWith('senior') || v === 'sr' || v === 'sr.') return 'senior_level'
-  if (
-    v.startsWith('director') ||
-    v.startsWith('head') ||
-    v.startsWith('principal') ||
-    v.startsWith('vp')
-  )
-    return 'director'
-  return 'any'
-}
-
-// Titles that are clearly senior/staff-level regardless of the word "senior"
-const SENIOR_TITLE_RE =
-  /\b(?:senior|sr\.?|staff|principal|lead|architect|director|head\s+of|chief|vp|vice\s+president)\b/i
-// Titles that are clearly entry-level / internship
-const JUNIOR_TITLE_RE =
-  /\b(?:intern(?:ship)?|fresher|junior|jr\.?|entry[-\s]?level|graduate\s+developer|graduate\s+engineer|trainee|associate\s+(?:developer|engineer|software))\b/i
-
-function checkSeniority(job: SearchJobResult, config: BotConfig): PreFilterResult {
-  const level = normaliseLevel(config.experienceLevel)
-  if (level === 'any') return { rejected: false }
-
-  const title = job.title ?? ''
-
-  // Mid / entry / intern user applying to a Senior/Staff/Lead/Principal title → underqualified
-  if (
-    (level === 'mid_level' || level === 'entry_level' || level === 'internship') &&
-    SENIOR_TITLE_RE.test(title)
-  ) {
-    return {
-      rejected: true,
-      score: 20,
-      flag: 'underqualified',
-      reason: `Job title "${title}" is a senior-level role; your experience level is ${level}.`,
-    }
-  }
-
-  // Senior / Director user applying to a Junior/Intern title → overqualified
-  if (
-    (level === 'senior_level' || level === 'director') &&
-    JUNIOR_TITLE_RE.test(title)
-  ) {
-    return {
-      rejected: true,
-      score: 20,
-      flag: 'overqualified',
-      reason: `Job title "${title}" is an entry-level role; your experience level is ${level}.`,
-    }
-  }
-
-  return { rejected: false }
-}
-
 // ── Public API ────────────────────────────────────────────────────────────
 
 /**
@@ -224,7 +155,8 @@ function checkSeniority(job: SearchJobResult, config: BotConfig): PreFilterResul
  * checks pass and the LLM evaluation should proceed.
  *
  * Order matters: location is checked first because it is the most definitive
- * and cheapest check.
+ * and cheapest check. Seniority is intentionally not a hard pre-filter because
+ * users treat the experience-level setting as guidance, not an absolute block.
  */
 export function preFilterJob(job: SearchJobResult, config: BotConfig): PreFilterResult {
   const locResult = checkLocation(job, config)
@@ -232,9 +164,6 @@ export function preFilterJob(job: SearchJobResult, config: BotConfig): PreFilter
 
   const remotePolicy = checkRemoteWorkPolicy(job, config)
   if (remotePolicy.rejected) return remotePolicy
-
-  const seniorityResult = checkSeniority(job, config)
-  if (seniorityResult.rejected) return seniorityResult
 
   return { rejected: false }
 }

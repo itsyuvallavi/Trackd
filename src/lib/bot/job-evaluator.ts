@@ -26,17 +26,17 @@ import { preFilterJob } from './pre-filter'
 
 const EVALUATOR_MODEL = 'gpt-5-mini'
 
-const EVALUATOR_SYSTEM_PROMPT = `You score job listings for a specific candidate. Be strict. Prefer false negatives (rejecting a maybe-good job) over false positives (recommending a wrong job), because the user manually reviews every job you save.
+const EVALUATOR_SYSTEM_PROMPT = `You score job listings for a specific candidate. Be strict, but do not turn user preferences into absolute rules unless the job clearly conflicts with them. The user manually reviews every job you save.
 
-Your ONE job: assess whether the job description's required skills and experience match the candidate's resume and stated keywords. Location and seniority have already been verified by a separate deterministic system before you were called — do NOT re-evaluate them.
+Your ONE job: assess whether the job description's required skills and experience match the candidate's resume and stated keywords. Location hard rules have already been checked. Seniority preference is advisory and should be treated as a soft fit signal.
 
 Rules:
-1. Score based on SKILL and EXPERIENCE FIT only. Assume location and seniority are already acceptable — they have been pre-checked.
+1. Score primarily on SKILL and EXPERIENCE FIT. Use seniority only as a soft adjustment, not an automatic rejection.
 2. If the description mandates a primary technology ecosystem the candidate's resume does not mention (e.g. N+ years of a specific language/framework), score below 45 unless it is marked optional / "nice to have".
 3. If the description mandates a spoken language NOT in the candidate's language list, it is a significant negative.
 4. Do not inflate the score just because the job title matches keywords — the description must substantively align when text exists.
 5. If the description is empty or under ~80 characters: you have almost no evidence of stack fit — cap the score at 55 even when the title matches (title-only is not a "Good" match). Below 50 when the title clearly signals a wrong primary stack (e.g. "PHP Developer" when the resume only shows React/TS).
-6. Never penalise on location or seniority — those are handled elsewhere.
+6. Never penalise on location. Location is handled elsewhere.
 
 Your "reasoning" MUST cite at least one concrete phrase from the description, title, or company. If you cannot cite one, cap the score at 40.`
 
@@ -99,6 +99,82 @@ function resumeString(value: unknown, fallback = ''): string {
 
 function resumeStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
+}
+
+const KNOWN_SKILL_PATTERNS: Array<[string, RegExp]> = [
+  ['React', /\breact(?:\.js|js)?\b/i],
+  ['Next.js', /\bnext(?:\.js|js)\b/i],
+  ['TypeScript', /\btypescript\b|\bts\b/i],
+  ['JavaScript', /\bjavascript\b|\bjs\b/i],
+  ['Node.js', /\bnode(?:\.js|js)\b/i],
+  ['HTML', /\bhtml5?\b/i],
+  ['CSS', /\bcss3?\b/i],
+  ['Tailwind CSS', /\btailwind\b/i],
+  ['Python', /\bpython\b/i],
+  ['SQL', /\bsql\b/i],
+  ['PostgreSQL', /\bpostgres(?:ql)?\b/i],
+  ['Supabase', /\bsupabase\b/i],
+  ['Firebase', /\bfirebase\b/i],
+  ['Prisma', /\bprisma\b/i],
+  ['GraphQL', /\bgraphql\b/i],
+  ['REST APIs', /\brest(?:ful)?\s+apis?\b|\bapi integrations?\b/i],
+  ['Flutter', /\bflutter\b/i],
+  ['React Native', /\breact native\b/i],
+  ['AWS', /\baws\b|\bamazon web services\b/i],
+  ['Docker', /\bdocker\b/i],
+]
+
+function deriveKnownSkillsFromText(rawText: string | null | undefined): string[] {
+  if (!rawText) return []
+  return KNOWN_SKILL_PATTERNS
+    .filter(([, pattern]) => pattern.test(rawText))
+    .map(([skill]) => skill)
+}
+
+function enrichResumeWithRawText(
+  resume: ResumeStructuredData,
+  rawText: string | null | undefined
+): ResumeStructuredData {
+  const rawSkills = deriveKnownSkillsFromText(rawText)
+  if (rawSkills.length === 0) return resume
+
+  const skills = Array.from(new Set([...resumeStringArray(resume.skills), ...rawSkills]))
+  const rawSignalLine = `Additional parsed resume text signals: ${rawSkills.join(', ')}.`
+  const summary = resume.summary
+    ? resume.summary.includes(rawSignalLine)
+      ? resume.summary
+      : `${resume.summary} ${rawSignalLine}`
+    : rawSignalLine
+
+  return {
+    ...resume,
+    summary,
+    skills,
+  }
+}
+
+function resumeFromRawText(rawText: string | null | undefined, label: string): ResumeStructuredData | null {
+  if (!rawText?.trim()) return null
+  const skills = deriveKnownSkillsFromText(rawText)
+  return {
+    name: 'Candidate',
+    email: '',
+    summary: rawText.trim().slice(0, 1200),
+    skills,
+    languages: [],
+    experience: [
+      {
+        company: label || 'Uploaded resume',
+        title: 'Resume text',
+        startDate: '',
+        endDate: 'Present',
+        description: rawText.trim().slice(0, 1200),
+        achievements: [],
+      },
+    ],
+    education: [],
+    certifications: [],
+  }
 }
 
 function buildEvalPrompt(
@@ -209,7 +285,8 @@ SKILL FIT (your only job):
 - If the posting mandates a primary ecosystem (e.g. N+ years of a specific language/framework) the candidate resume does not mention, score below 45 unless the posting clearly marks it optional / "nice to have".
 - Do not inflate the score because the title matches the user's keywords when the core bullets demand a different stack.
 - Language requirements labeled mandatory for languages NOT in the candidate's spoken-language list are a major negative. If the user listed no spoken languages, do not penalise on language.
-- Do NOT flag or score-down on location or seniority — those have already been verified in code before you were called.
+- Do NOT flag or score-down on location — location hard rules are checked in code before you are called.
+- Seniority preference is advisory. If a role is senior/lead or junior/graduate relative to the user's preference, mention it as a soft risk only when it materially affects fit.
 
 JOB LISTING:
 ${jobInfo}
@@ -226,8 +303,8 @@ Respond with ONLY a JSON object:
 }
 
 Score guide: 80-100 strong skill match, 60-79 reasonable match, 40-59 partial/uncertain, 0-39 wrong primary stack.
-Flags (skill-related only): good_match, salary_too_low, stack_mismatch, missing_required_language, remote_friendly, requires_visa, contract_only, career_change.
-Do NOT use wrong_location, overqualified, or underqualified — those are already handled by code before this call.`
+Flags: good_match, salary_too_low, stack_mismatch, missing_required_language, remote_friendly, requires_visa, contract_only, career_change, underqualified, overqualified.
+Do NOT use wrong_location — location is already handled by code before this call.`
 }
 
 function buildScoringInputsSnapshot(
@@ -304,6 +381,31 @@ function hasApplicationProfileData(profile: ApplicationProfile): boolean {
   )
 }
 
+function derivePreferenceSkills(config: BotConfig): string[] {
+  const text = `${config.keywords.join(' ')} ${config.experienceLevel ?? ''}`.toLowerCase()
+  const skills = new Set<string>()
+
+  const addIf = (pattern: RegExp, values: string[]) => {
+    if (!pattern.test(text)) return
+    for (const value of values) skills.add(value)
+  }
+
+  addIf(/\breact\b/, ['React', 'Frontend Engineering'])
+  addIf(/\bnext(?:\.js|js)?\b/, ['Next.js', 'React'])
+  addIf(/\bfront(?:end|-end)\b/, ['Frontend Engineering'])
+  addIf(/\bfull\s*stack\b|\bfullstack\b/, ['Full-stack Development'])
+  addIf(/\bnode(?:\.js|js)?\b/, ['Node.js', 'Backend Engineering'])
+  addIf(/\bback(?:end|-end)\b/, ['Backend Engineering'])
+  addIf(/\btypescript\b|\bts\b/, ['TypeScript'])
+  addIf(/\bjavascript\b|\bjs\b/, ['JavaScript'])
+  addIf(/\bpython\b/, ['Python'])
+  addIf(/\bai\b|\bartificial intelligence\b|\bgenai\b|\bgenerative ai\b/, ['AI Engineering'])
+  addIf(/\bmachine learning\b|\bml\b/, ['Machine Learning'])
+  addIf(/\bdata\b/, ['Data'])
+
+  return [...skills]
+}
+
 function buildIdentityFallbackResume(
   profile: ApplicationProfile,
   config: BotConfig
@@ -317,11 +419,16 @@ function buildIdentityFallbackResume(
     .filter((part): part is string => Boolean(part))
     .join(', ')
 
+  const preferenceSkills = derivePreferenceSkills(config)
+
   const summaryParts = [
     'No parsed resume is available; this profile is built from application identity fields and search preferences.',
     profile.yearsExperience ? `Reported experience: ${profile.yearsExperience} years` : null,
     config.experienceLevel ? `Preferred seniority: ${config.experienceLevel}` : null,
     config.keywords.length > 0 ? `Target roles: ${config.keywords.join(', ')}` : null,
+    preferenceSkills.length > 0
+      ? `Preference-derived role/stack signals: ${preferenceSkills.join(', ')}`
+      : null,
     profile.workAuthorization ? `Work authorization: ${profile.workAuthorization}` : null,
     profile.requiresSponsorship ? 'Requires visa sponsorship' : 'Does not require visa sponsorship',
     profile.salaryExpectation ? `Salary expectation: ${profile.salaryExpectation}` : null,
@@ -331,6 +438,9 @@ function buildIdentityFallbackResume(
   const experienceDescription = [
     profile.yearsExperience ? `Candidate reported ${profile.yearsExperience} years of experience.` : null,
     config.keywords.length > 0 ? `Target roles from settings: ${config.keywords.join(', ')}.` : null,
+    preferenceSkills.length > 0
+      ? `Role/stack signals derived from settings: ${preferenceSkills.join(', ')}.`
+      : null,
     config.experienceLevel ? `Preferred experience level: ${config.experienceLevel}.` : null,
   ]
     .filter(Boolean)
@@ -345,7 +455,7 @@ function buildIdentityFallbackResume(
     github: profile.githubUrl || undefined,
     portfolio: profile.portfolioUrl || undefined,
     summary: summaryParts.join(' '),
-    skills: [],
+    skills: preferenceSkills,
     languages: config.spokenLanguages ?? [],
     experience: experienceDescription
       ? [
@@ -372,18 +482,37 @@ async function loadResumeForEvaluation(
   try {
     const resumes = await prisma.botResume.findMany({
       where: { userId },
-      select: { id: true, label: true, matchKeywords: true, isDefault: true, structuredData: true },
+      select: {
+        id: true,
+        label: true,
+        matchKeywords: true,
+        isDefault: true,
+        structuredData: true,
+        rawText: true,
+      },
     })
 
     if (resumes.length > 0) {
       const bestId = pickResumeForJob(resumes, jobTitle)
       const matched = resumes.find((r) => r.id === bestId)
       if (matched?.structuredData) {
+        const structured = matched.structuredData as unknown as ResumeStructuredData
         return {
-          resume: matched.structuredData as unknown as ResumeStructuredData,
+          resume: enrichResumeWithRawText(structured, matched.rawText),
           resumeId: matched.id,
           label: matched.label,
           selection: 'matched_by_keywords',
+        }
+      }
+      if (matched?.rawText) {
+        const rawResume = resumeFromRawText(matched.rawText, matched.label)
+        if (rawResume) {
+          return {
+            resume: rawResume,
+            resumeId: matched.id,
+            label: matched.label,
+            selection: 'matched_by_keywords',
+          }
         }
       }
     }
