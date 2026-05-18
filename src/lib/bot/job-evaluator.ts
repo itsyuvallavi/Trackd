@@ -19,7 +19,7 @@ import { applyGeoMismatchClamp } from './geo-mismatch-clamp'
 import type { SeniorityClampMeta } from './seniority-clamp'
 import { applySeniorityClamp } from './seniority-clamp'
 import { buildSmartJdExcerpt, type JdFacts } from './jd-excerpt'
-import type { BotConfig } from '@prisma/client'
+import type { ApplicationProfile, BotConfig } from '@prisma/client'
 import type { SearchJobResult, JobEvaluation } from './types'
 import type { ResumeStructuredData } from './resume/types'
 import { preFilterJob } from './pre-filter'
@@ -57,7 +57,7 @@ export type ScoringInputsSnapshot = {
   resumeUsed: {
     resumeId: string | null
     label: string | null
-    selection: 'matched_by_keywords' | 'none'
+    selection: ResumeSelection
     skillsSentToPrompt: string[]
     summaryIncluded: boolean
     experienceRolesInPrompt: number
@@ -90,6 +90,8 @@ export type EvaluateJobResult = {
   evaluation: JobEvaluation
   scoringInputs: ScoringInputsSnapshot
 }
+
+type ResumeSelection = 'matched_by_keywords' | 'identity_fallback' | 'none'
 
 function resumeString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback
@@ -232,7 +234,7 @@ function buildScoringInputsSnapshot(
   job: SearchJobResult,
   config: BotConfig,
   resume: ResumeStructuredData | null,
-  resumeMeta: { id: string | null; label: string | null }
+  resumeMeta: { id: string | null; label: string | null; selection: ResumeSelection }
 ): ScoringInputsSnapshot {
   const jd = buildSmartJdExcerpt(job.description)
   const desc = jd.excerpt
@@ -252,7 +254,7 @@ function buildScoringInputsSnapshot(
     resumeUsed: {
       resumeId: resumeMeta.id,
       label: resumeMeta.label,
-      selection: resume ? 'matched_by_keywords' : 'none',
+      selection: resumeMeta.selection,
       skillsSentToPrompt: resume ? resumeStringArray(resume.skills).slice(0, 30) : [],
       summaryIncluded: !!resume?.summary,
       experienceRolesInPrompt: resume
@@ -281,11 +283,91 @@ type LoadedResume = {
   resume: ResumeStructuredData | null
   resumeId: string | null
   label: string | null
+  selection: ResumeSelection
+}
+
+function hasApplicationProfileData(profile: ApplicationProfile): boolean {
+  return Boolean(
+    profile.applicationFullName ||
+      profile.applicationEmail ||
+      profile.phone ||
+      profile.city ||
+      profile.state ||
+      profile.country ||
+      profile.linkedinUrl ||
+      profile.githubUrl ||
+      profile.portfolioUrl ||
+      profile.workAuthorization ||
+      profile.salaryExpectation ||
+      profile.noticePeriod ||
+      profile.yearsExperience
+  )
+}
+
+function buildIdentityFallbackResume(
+  profile: ApplicationProfile,
+  config: BotConfig
+): ResumeStructuredData | null {
+  if (!hasApplicationProfileData(profile)) {
+    return null
+  }
+
+  const location = [profile.city, profile.state, profile.country]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(', ')
+
+  const summaryParts = [
+    'No parsed resume is available; this profile is built from application identity fields and search preferences.',
+    profile.yearsExperience ? `Reported experience: ${profile.yearsExperience} years` : null,
+    config.experienceLevel ? `Preferred seniority: ${config.experienceLevel}` : null,
+    config.keywords.length > 0 ? `Target roles: ${config.keywords.join(', ')}` : null,
+    profile.workAuthorization ? `Work authorization: ${profile.workAuthorization}` : null,
+    profile.requiresSponsorship ? 'Requires visa sponsorship' : 'Does not require visa sponsorship',
+    profile.salaryExpectation ? `Salary expectation: ${profile.salaryExpectation}` : null,
+    profile.noticePeriod ? `Notice period: ${profile.noticePeriod}` : null,
+  ].filter(Boolean)
+
+  const experienceDescription = [
+    profile.yearsExperience ? `Candidate reported ${profile.yearsExperience} years of experience.` : null,
+    config.keywords.length > 0 ? `Target roles from settings: ${config.keywords.join(', ')}.` : null,
+    config.experienceLevel ? `Preferred experience level: ${config.experienceLevel}.` : null,
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  return {
+    name: profile.applicationFullName || 'Candidate',
+    email: profile.applicationEmail || '',
+    phone: profile.phone || undefined,
+    location: location || undefined,
+    linkedin: profile.linkedinUrl || undefined,
+    github: profile.githubUrl || undefined,
+    portfolio: profile.portfolioUrl || undefined,
+    summary: summaryParts.join(' '),
+    skills: [],
+    languages: config.spokenLanguages ?? [],
+    experience: experienceDescription
+      ? [
+          {
+            company: 'Application identity',
+            title: config.experienceLevel ? `${config.experienceLevel} candidate profile` : 'Candidate profile',
+            startDate: '',
+            endDate: 'Present',
+            description: experienceDescription,
+            achievements: [],
+          },
+        ]
+      : [],
+    education: [],
+    certifications: [],
+  }
 }
 
 async function loadResumeForEvaluation(
   userId: string,
-  jobTitle: string
+  jobTitle: string,
+  config: BotConfig
 ): Promise<LoadedResume> {
   try {
     const resumes = await prisma.botResume.findMany({
@@ -293,23 +375,79 @@ async function loadResumeForEvaluation(
       select: { id: true, label: true, matchKeywords: true, isDefault: true, structuredData: true },
     })
 
-    if (resumes.length === 0) {
-      return { resume: null, resumeId: null, label: null }
+    if (resumes.length > 0) {
+      const bestId = pickResumeForJob(resumes, jobTitle)
+      const matched = resumes.find((r) => r.id === bestId)
+      if (matched?.structuredData) {
+        return {
+          resume: matched.structuredData as unknown as ResumeStructuredData,
+          resumeId: matched.id,
+          label: matched.label,
+          selection: 'matched_by_keywords',
+        }
+      }
     }
 
-    const bestId = pickResumeForJob(resumes, jobTitle)
-    const matched = resumes.find((r) => r.id === bestId)
-    if (matched?.structuredData) {
-      return {
-        resume: matched.structuredData as unknown as ResumeStructuredData,
-        resumeId: matched.id,
-        label: matched.label,
+    const profile = await prisma.applicationProfile.findUnique({ where: { userId } })
+    if (profile) {
+      const fallbackResume = buildIdentityFallbackResume(profile, config)
+      if (fallbackResume) {
+        return {
+          resume: fallbackResume,
+          resumeId: null,
+          label: 'Application identity',
+          selection: 'identity_fallback',
+        }
       }
     }
   } catch (err) {
     console.warn('[evaluator] Could not load resumes:', err instanceof Error ? err.message : err)
   }
-  return { resume: null, resumeId: null, label: null }
+  return { resume: null, resumeId: null, label: null, selection: 'none' }
+}
+
+function parseEvaluatorJson(raw: string): Partial<JobEvaluation> & { resumeMatch?: string } {
+  const trimmed = raw.trim()
+  const jsonStart = trimmed.indexOf('{')
+  const jsonEnd = trimmed.lastIndexOf('}')
+  const candidate =
+    jsonStart >= 0 && jsonEnd > jsonStart ? trimmed.slice(jsonStart, jsonEnd + 1) : trimmed
+  return JSON.parse(candidate) as Partial<JobEvaluation> & { resumeMatch?: string }
+}
+
+async function requestEvaluatorJson(
+  ai: ReturnType<typeof getAIClient>,
+  prompt: string
+): Promise<Partial<JobEvaluation> & { resumeMatch?: string }> {
+  const request = async (systemPrompt: string, userPrompt: string): Promise<string> => {
+    const response = await ai.chatCompletion(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      { model: EVALUATOR_MODEL, responseFormat: 'json_object', maxTokens: 1500 }
+    )
+
+    return response.data.choices[0]?.message?.content ?? ''
+  }
+
+  const raw = await request(EVALUATOR_SYSTEM_PROMPT, prompt)
+  try {
+    return parseEvaluatorJson(raw)
+  } catch (firstError) {
+    const retryRaw = await request(
+      `${EVALUATOR_SYSTEM_PROMPT}\nReturn exactly one complete valid JSON object. Do not include markdown, comments, or trailing text.`,
+      `${prompt}\n\nYour previous response was invalid or incomplete JSON. Retry with a smaller complete JSON object that matches the requested schema exactly.`
+    )
+
+    try {
+      return parseEvaluatorJson(retryRaw)
+    } catch (retryError) {
+      const message = retryError instanceof Error ? retryError.message : String(retryError)
+      const firstMessage = firstError instanceof Error ? firstError.message : String(firstError)
+      throw new Error(`Evaluator returned invalid JSON after retry: ${message}; first error: ${firstMessage}`)
+    }
+  }
 }
 
 export async function evaluateJob(job: SearchJobResult, config: BotConfig): Promise<EvaluateJobResult> {
@@ -354,21 +492,11 @@ export async function evaluateJob(job: SearchJobResult, config: BotConfig): Prom
   }
 
   const ai = getAIClient()
-  const { resume, resumeId, label } = await loadResumeForEvaluation(config.userId, job.title)
-  const resumeMeta = { id: resumeId, label }
+  const { resume, resumeId, label, selection } = await loadResumeForEvaluation(config.userId, job.title, config)
+  const resumeMeta = { id: resumeId, label, selection }
   const prompt = buildEvalPrompt(job, config, resume)
   const scoringInputs = buildScoringInputsSnapshot(job, config, resume, resumeMeta)
-
-  const response = await ai.chatCompletion(
-    [
-      { role: 'system', content: EVALUATOR_SYSTEM_PROMPT },
-      { role: 'user', content: prompt },
-    ],
-    { model: EVALUATOR_MODEL, responseFormat: 'json_object', maxTokens: 1500 }
-  )
-
-  const raw = response.data.choices[0]?.message?.content ?? '{}'
-  const parsed = JSON.parse(raw) as Partial<JobEvaluation> & { resumeMatch?: string }
+  const parsed = await requestEvaluatorJson(ai, prompt)
 
   const score =
     typeof parsed.score === 'number' ? Math.max(0, Math.min(100, parsed.score)) : 0

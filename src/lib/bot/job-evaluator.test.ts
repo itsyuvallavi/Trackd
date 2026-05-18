@@ -4,6 +4,7 @@ import type { SearchJobResult } from './types'
 
 const chatCompletionMock = vi.fn()
 const findManyMock = vi.fn()
+const applicationProfileFindUniqueMock = vi.fn()
 
 vi.mock('@/lib/ai/client', () => ({
   getAIClient: () => ({
@@ -15,6 +16,9 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     botResume: {
       findMany: findManyMock,
+    },
+    applicationProfile: {
+      findUnique: applicationProfileFindUniqueMock,
     },
   },
 }))
@@ -60,6 +64,7 @@ describe('evaluateJob minScore behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     findManyMock.mockResolvedValue([])
+    applicationProfileFindUniqueMock.mockResolvedValue(null)
   })
 
   it('does not boost a raw model score to bypass the user minimum', async () => {
@@ -178,6 +183,150 @@ describe('evaluateJob minScore behavior', () => {
       selection: 'matched_by_keywords',
       skillsSentToPrompt: ['React', 'TypeScript'],
     })
+  })
+
+  it('falls back to application identity when no parsed resume is available', async () => {
+    applicationProfileFindUniqueMock.mockResolvedValue({
+      id: 'profile-1',
+      userId: 'user-1',
+      applicationFullName: 'Yuval Lavi',
+      applicationEmail: 'info@example.com',
+      portalSignupPassword: null,
+      phone: '+351910203349',
+      address: null,
+      city: 'Lisbon',
+      state: null,
+      country: 'Portugal',
+      linkedinUrl: 'https://www.linkedin.com/in/example/',
+      githubUrl: 'https://github.com/example',
+      portfolioUrl: 'https://example.com',
+      workAuthorization: 'EU / EEA Citizen',
+      requiresSponsorship: false,
+      salaryExpectation: null,
+      noticePeriod: 'immediately',
+      yearsExperience: 4,
+      createdAt: new Date('2026-05-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-01T00:00:00.000Z'),
+    })
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 62,
+                reasoning: 'The listing asks for "React TypeScript" product work.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'application identity fallback',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJob } = await import('./job-evaluator')
+    const result = await evaluateJob(
+      job({
+        title: 'Frontend React Developer',
+        description:
+          'Build product interfaces with React TypeScript, accessibility, API integrations, and testing.',
+      }),
+      cfg({ minScore: 60, spokenLanguages: ['English'], keywords: ['Frontend Developer'] }),
+    )
+
+    expect(result.evaluation.shouldApply).toBe(true)
+    expect(result.scoringInputs.resumeUsed).toMatchObject({
+      resumeId: null,
+      label: 'Application identity',
+      selection: 'identity_fallback',
+      summaryIncluded: true,
+      experienceRolesInPrompt: 1,
+    })
+
+    const prompt = chatCompletionMock.mock.calls[0]?.[0]?.[1]?.content as string
+    expect(prompt).toContain('No parsed resume is available')
+    expect(prompt).toContain('Yuval Lavi')
+    expect(prompt).toContain('Reported experience: 4 years')
+  })
+
+  it('retries once when the evaluator returns malformed JSON', async () => {
+    chatCompletionMock
+      .mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                content: '{"score": 76',
+              },
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  score: 76,
+                  reasoning: 'The listing asks for "React TypeScript" product work.',
+                  shouldApply: true,
+                  flags: ['good_match'],
+                  resumeMatch: 'no resume',
+                }),
+              },
+            },
+          ],
+        },
+      })
+
+    const { evaluateJob } = await import('./job-evaluator')
+    const result = await evaluateJob(
+      job({
+        title: 'Frontend React Developer',
+        description:
+          'Build product interfaces with React TypeScript, accessibility, API integrations, and testing.',
+      }),
+      cfg({ minScore: 75 }),
+    )
+
+    expect(chatCompletionMock).toHaveBeenCalledTimes(2)
+    expect(result.evaluation.score).toBe(76)
+    expect(result.evaluation.shouldApply).toBe(true)
+  })
+
+  it('throws a clear evaluator error when JSON retry also fails', async () => {
+    chatCompletionMock
+      .mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                content: '{"score": 76',
+              },
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                content: '{"score":',
+              },
+            },
+          ],
+        },
+      })
+
+    const { evaluateJob } = await import('./job-evaluator')
+    await expect(evaluateJob(job(), cfg({ minScore: 75 }))).rejects.toThrow(
+      'Evaluator returned invalid JSON after retry'
+    )
+    expect(chatCompletionMock).toHaveBeenCalledTimes(2)
   })
 
   it('does not crash on sparse parsed resume experience rows', async () => {

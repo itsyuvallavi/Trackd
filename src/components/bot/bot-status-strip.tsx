@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { createPortal } from 'react-dom'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { CheckCircle2, Loader2, Play, X, AlertCircle } from 'lucide-react'
@@ -22,6 +23,11 @@ interface BotStatusStripProps {
   } | null
   canRun: boolean
   runDisabledReason?: string
+  resumeReadiness: {
+    totalCount: number
+    parsedCount: number
+    hasIdentityFallback: boolean
+  }
 }
 
 function relativeTime(iso: string): string {
@@ -43,6 +49,7 @@ export function BotStatusStrip({
   lastRun,
   canRun,
   runDisabledReason,
+  resumeReadiness,
 }: BotStatusStripProps) {
   const router = useRouter()
   const [running, startRun] = useTransition()
@@ -129,70 +136,100 @@ export function BotStatusStrip({
     })
   }
 
-  return (
-    <div className="flex flex-wrap items-center gap-3 text-sm">
-      <span className="inline-flex items-center gap-2">
-        <span
-          aria-hidden
-          className={cn(
-            'relative inline-flex size-2 rounded-full',
-            isActive ? 'bg-success' : 'bg-muted-foreground/50'
-          )}
-        >
-          {isActive && (
-            <span className="absolute inset-0 rounded-full bg-success/50 trackd-breath" />
-          )}
-        </span>
-        <span className="font-medium">
-          {isActive ? 'Active' : 'Paused'}
-        </span>
-        <span className="text-muted-foreground">·</span>
-        <span className="text-muted-foreground">{frequencyLabel}</span>
-      </span>
+  const hasParsedResume = resumeReadiness.parsedCount > 0
+  const resumeActionLabel =
+    resumeReadiness.totalCount > 0 ? 'Review resumes' : 'Add resume'
+  const fallbackMessage = resumeReadiness.hasIdentityFallback
+    ? 'Scoring will fall back to Identity and search preferences.'
+    : 'Scoring will fall back to search preferences until Identity is filled.'
 
-      {lastRun && (
-        <>
-          <span aria-hidden className="text-muted-foreground/50">·</span>
-          <span className="text-muted-foreground">
-            Last run{' '}
-            <span className="text-foreground" suppressHydrationWarning>
-              {mounted ? relativeTime(lastRun.startedAt) : 'recently'}
-            </span>
-            {' · '}
-            <span className="text-foreground tabular-nums">{lastRun.jobsFound}</span> found
-            {' · '}
-            <span className="text-foreground tabular-nums">{lastRun.jobsNew}</span> new
-            {lastRun.jobsApproved > 0 && (
-              <>
-                {' · '}
-                <span className="text-foreground tabular-nums">{lastRun.jobsApproved}</span> approved
-              </>
+  return (
+    <div className="flex flex-col gap-2 text-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="inline-flex items-center gap-2">
+          <span
+            aria-hidden
+            className={cn(
+              'relative inline-flex size-2 rounded-full',
+              isActive ? 'bg-success' : 'bg-muted-foreground/50'
+            )}
+          >
+            {isActive && (
+              <span className="absolute inset-0 rounded-full bg-success/50 trackd-breath" />
             )}
           </span>
-        </>
-      )}
+          <span className="font-medium">
+            {isActive ? 'Active' : 'Paused'}
+          </span>
+          <span className="text-muted-foreground">·</span>
+          <span className="text-muted-foreground">{frequencyLabel}</span>
+        </span>
 
-      <div className="ml-auto flex items-center gap-2">
-        <button
-          type="button"
-          onClick={handleRun}
-          disabled={running || !canRun}
-          title={!canRun ? runDisabledReason : undefined}
-          className={cn(
-            'inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium',
-            'bg-primary text-primary-foreground transition-[transform,background-color] duration-150',
-            'ease-[var(--ease-ios)] hover:bg-primary/90 active:scale-[0.98]',
-            'disabled:opacity-50 disabled:hover:bg-primary disabled:active:scale-100'
-          )}
-        >
-          {running ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <Play className="size-3.5" fill="currentColor" />
-          )}
-          {running ? 'Running…' : 'Run now'}
-        </button>
+        {lastRun && (
+          <>
+            <span aria-hidden className="text-muted-foreground/50">·</span>
+            <span className="text-muted-foreground">
+              Last run{' '}
+              <span className="text-foreground" suppressHydrationWarning>
+                {mounted ? relativeTime(lastRun.startedAt) : 'recently'}
+              </span>
+              {' · '}
+              <span className="text-foreground tabular-nums">{lastRun.jobsFound}</span> found
+              {' · '}
+              <span className="text-foreground tabular-nums">{lastRun.jobsNew}</span> new
+              {lastRun.jobsApproved > 0 && (
+                <>
+                  {' · '}
+                  <span className="text-foreground tabular-nums">{lastRun.jobsApproved}</span> approved
+                </>
+              )}
+            </span>
+          </>
+        )}
+
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleRun}
+            disabled={running || !canRun}
+            title={!canRun ? runDisabledReason : undefined}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium',
+              'bg-primary text-primary-foreground transition-[transform,background-color] duration-150',
+              'ease-[var(--ease-ios)] hover:bg-primary/90 active:scale-[0.98]',
+              'disabled:opacity-50 disabled:hover:bg-primary disabled:active:scale-100'
+            )}
+          >
+            {running ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Play className="size-3.5" fill="currentColor" />
+            )}
+            {running ? 'Running…' : 'Run now'}
+          </button>
+        </div>
       </div>
+
+      {!hasParsedResume && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-warning/25 bg-warning-bg/60 px-3 py-2 text-xs text-warning-text">
+          <AlertCircle className="size-3.5 shrink-0" />
+          <span className="font-medium">No parsed resume.</span>
+          <span>{fallbackMessage}</span>
+          <Link
+            href="/bot/resumes"
+            className="font-medium underline underline-offset-2 hover:text-foreground"
+          >
+            {resumeActionLabel}
+          </Link>
+          <span aria-hidden className="text-warning-text/50">·</span>
+          <Link
+            href="/bot/identity"
+            className="font-medium underline underline-offset-2 hover:text-foreground"
+          >
+            Identity
+          </Link>
+        </div>
+      )}
 
       {mounted && toast && createPortal(
         <SearchToast toast={toast} onDismiss={() => setToast(null)} />,

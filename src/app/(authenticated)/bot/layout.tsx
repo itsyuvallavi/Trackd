@@ -4,6 +4,7 @@ import { getBotConfigByUserId, getBotLastRunForStrip } from '@/lib/cached-querie
 import { BotStatusStrip } from '@/components/bot/bot-status-strip'
 import { BotTabs } from '@/components/bot/bot-tabs'
 import { botSearchHasQueryableBackend } from '@/lib/bot/bot-search-sources'
+import { prisma } from '@/lib/prisma'
 import type { BotSearchFrequency } from '@prisma/client'
 
 /** Allow long-running bot search from "Run now" in the status strip. */
@@ -28,14 +29,39 @@ export default async function BotLayout({
 }) {
   const user = await requireAuth()
 
-  const [botConfig, lastRun] = await Promise.all([
+  const [botConfig, lastRun, botResumes, appProfile] = await Promise.all([
     getBotConfigByUserId(user.id),
     getBotLastRunForStrip(user.id),
+    prisma.botResume.findMany({
+      where: { userId: user.id },
+      select: { structuredData: true },
+    }),
+    prisma.applicationProfile.findUnique({
+      where: { userId: user.id },
+      select: {
+        applicationFullName: true,
+        applicationEmail: true,
+        city: true,
+        country: true,
+        workAuthorization: true,
+        yearsExperience: true,
+      },
+    }),
   ])
 
   const searchServiceConfigured = botSearchHasQueryableBackend()
   const hasKeywords = (botConfig?.keywords?.length ?? 0) > 0
   const canRun = searchServiceConfigured && hasKeywords
+  const parsedResumeCount = botResumes.filter((r) => r.structuredData != null).length
+  const hasIdentityFallback = Boolean(
+    appProfile &&
+      (appProfile.applicationFullName?.trim() ||
+        appProfile.applicationEmail?.trim() ||
+        appProfile.city?.trim() ||
+        appProfile.country?.trim() ||
+        appProfile.workAuthorization?.trim() ||
+        appProfile.yearsExperience != null)
+  )
   const runDisabledReason = !searchServiceConfigured
     ? 'No search backend configured.'
     : !hasKeywords
@@ -72,6 +98,11 @@ export default async function BotLayout({
                 }
                 canRun={canRun}
                 runDisabledReason={runDisabledReason}
+                resumeReadiness={{
+                  totalCount: botResumes.length,
+                  parsedCount: parsedResumeCount,
+                  hasIdentityFallback,
+                }}
               />
             </div>
           </header>
