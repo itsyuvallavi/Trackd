@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BotConfig } from '@prisma/client'
 import type { SearchJobResult } from './types'
+import type { CandidateProfile } from './candidate-profile'
 
 const chatCompletionMock = vi.fn()
 const findManyMock = vi.fn()
@@ -57,6 +58,43 @@ function job(partial: Partial<SearchJobResult> = {}): SearchJobResult {
     source: 'jobs_search_api',
     is_remote: true,
     ...partial,
+  }
+}
+
+function candidateProfile(partial: Partial<NonNullable<CandidateProfile['resume']>> = {}): CandidateProfile {
+  return {
+    resume: {
+      name: 'Synthetic Candidate',
+      email: 'synthetic@example.invalid',
+      summary: 'Entry-level software engineer focused on JavaScript product work.',
+      skills: ['JavaScript', 'TypeScript', 'React', 'Node.js', 'SQL'],
+      languages: ['English'],
+      experience: [
+        {
+          company: 'Starter Systems',
+          title: 'Software Engineering Intern',
+          startDate: '2025',
+          endDate: '2026',
+          description: 'Built React features, Node.js endpoints, SQL reports, and automated tests.',
+          achievements: [],
+        },
+      ],
+      education: [],
+      certifications: [],
+      ...partial,
+    },
+    source: {
+      kind: 'parsed_resume',
+      label: 'Parsed resume',
+      resumeId: 'eval_resume_entry',
+      resumeLabel: 'Entry Software Engineering',
+      parsedResumeUsed: true,
+      rawResumeTextUsed: false,
+      applicationIdentitySupplemented: false,
+      settingsDerivedSignalsUsed: false,
+      settingsSignals: [],
+      limitations: [],
+    },
   }
 }
 
@@ -467,6 +505,148 @@ describe('evaluateJob minScore behavior', () => {
     expect(result.evaluation.shouldApply).toBe(true)
     expect(result.evaluation.flags).toContain('underqualified')
     expect(result.evaluation.reasoning).toContain('Seniority preference adjustment')
+  })
+
+  it('does not mark entry-level candidates overqualified for graduate roles', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 72,
+                reasoning:
+                  'The title says "Graduate Software Engineer" and the role asks for product engineering work.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'JavaScript, TypeScript, React, Node.js, and SQL internship work',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Graduate Software Engineer',
+        description:
+          'Graduate Software Engineer role building product features with JavaScript, TypeScript, React, Node.js, SQL, and mentor support. 0-2 years of experience.',
+      }),
+      cfg({
+        minScore: 65,
+        keywords: ['Junior Software Engineer', 'Graduate Developer'],
+        experienceLevel: 'entry',
+      }),
+      candidateProfile()
+    )
+
+    expect(result.evaluation.score).toBe(72)
+    expect(result.evaluation.shouldApply).toBe(true)
+    expect(result.evaluation.flags).toContain('good_match')
+    expect(result.evaluation.flags).not.toContain('overqualified')
+    expect(result.scoringInputs.seniorityClamp).toBeUndefined()
+  })
+
+  it('removes model-returned overqualified flags when the user is entry-level', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 69,
+                reasoning:
+                  'The title says "Graduate Software Engineer" and the role asks for React product features.',
+                shouldApply: true,
+                flags: ['good_match', 'overqualified'],
+                resumeMatch: 'React and Node.js internship work',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Graduate Software Engineer',
+        description:
+          'Graduate Software Engineer role building React product features with JavaScript, Node.js, and SQL. 0-2 years of experience.',
+      }),
+      cfg({
+        minScore: 65,
+        keywords: ['Junior Software Engineer', 'Graduate Developer'],
+        experienceLevel: 'entry_level',
+      }),
+      candidateProfile()
+    )
+
+    expect(result.evaluation.score).toBe(69)
+    expect(result.evaluation.shouldApply).toBe(true)
+    expect(result.evaluation.flags).toEqual(['good_match'])
+    expect(result.scoringInputs.seniorityClamp).toBeUndefined()
+  })
+
+  it('keeps overqualified as a soft preference for senior users on graduate roles', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 82,
+                reasoning:
+                  'The title says "Graduate Software Engineer" and the role is an early-career product engineering role.',
+                shouldApply: true,
+                flags: ['good_match', 'underqualified'],
+                resumeMatch: 'Senior product engineering experience',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Graduate Software Engineer',
+        description:
+          'Graduate Software Engineer role building product features with JavaScript and TypeScript. 0-2 years of experience.',
+      }),
+      cfg({
+        minScore: 75,
+        keywords: ['Software Engineer'],
+        experienceLevel: 'senior_level',
+      }),
+      candidateProfile({
+        summary: 'Senior software engineer with JavaScript, TypeScript, React, Node.js, and SQL.',
+        experience: [
+          {
+            company: 'Scale Systems',
+            title: 'Senior Software Engineer',
+            startDate: '2018',
+            endDate: 'Present',
+            description: 'Led product engineering teams building React and Node.js systems.',
+            achievements: [],
+          },
+        ],
+      })
+    )
+
+    expect(result.evaluation.score).toBe(76)
+    expect(result.evaluation.shouldApply).toBe(true)
+    expect(result.evaluation.flags).toContain('good_match')
+    expect(result.evaluation.flags).toContain('overqualified')
+    expect(result.evaluation.flags).not.toContain('underqualified')
+    expect(result.scoringInputs.seniorityClamp).toMatchObject({
+      direction: 'overqualified',
+      beforeScore: 82,
+      afterScore: 76,
+    })
   })
 
   it('retries once when the evaluator returns malformed JSON', async () => {

@@ -122,7 +122,7 @@ function buildUnderqualifiedReasons(
 
 function buildOverqualifiedReasons(title: string, facts: JdFacts, floorYears: number): string[] {
   const reasons: string[] = []
-  if (titleSuggestsJunior(title)) {
+  if (floorYears > 0 && titleSuggestsJunior(title)) {
     reasons.push(`JD title "${title}" indicates an entry-level role`)
   }
   if (
@@ -138,6 +138,20 @@ function buildOverqualifiedReasons(title: string, facts: JdFacts, floorYears: nu
   return reasons
 }
 
+function normalizeSeniorityFlags(
+  flags: string[],
+  direction: SeniorityClampMeta['direction'] | null
+): string[] {
+  const cleaned = flags.filter((flag) => {
+    if (flag === 'overqualified') return direction === 'overqualified'
+    if (flag === 'underqualified') return direction !== 'overqualified'
+    return true
+  })
+
+  if (direction) cleaned.push(direction)
+  return Array.from(new Set(cleaned))
+}
+
 export function applySeniorityClamp(
   job: SearchJobResult,
   config: BotConfig,
@@ -145,7 +159,14 @@ export function applySeniorityClamp(
   minScore: number
 ): { evaluation: JobEvaluation; clampMeta?: SeniorityClampMeta } {
   const level = normalizeLevel(config.experienceLevel)
-  if (level === 'any') return { evaluation }
+  if (level === 'any') {
+    return {
+      evaluation: {
+        ...evaluation,
+        flags: normalizeSeniorityFlags(evaluation.flags, null),
+      },
+    }
+  }
 
   const facts = analyzeJd(job.description ?? '')
   const ceiling = yearsCeilingForLevel(level)
@@ -167,7 +188,12 @@ export function applySeniorityClamp(
   }
 
   if (!direction) {
-    return { evaluation }
+    return {
+      evaluation: {
+        ...evaluation,
+        flags: normalizeSeniorityFlags(evaluation.flags, null),
+      },
+    }
   }
 
   const beforeScore = evaluation.score
@@ -191,12 +217,16 @@ export function applySeniorityClamp(
 
   afterScore = Math.max(0, Math.min(beforeScore, Math.round(afterScore)))
 
-  if (afterScore >= beforeScore) {
-    return { evaluation }
-  }
+  const flags = normalizeSeniorityFlags(evaluation.flags, direction)
 
-  const flag = direction === 'underqualified' ? 'underqualified' : 'overqualified'
-  const flags = Array.from(new Set([...evaluation.flags, flag]))
+  if (afterScore >= beforeScore) {
+    return {
+      evaluation: {
+        ...evaluation,
+        flags,
+      },
+    }
+  }
 
   const note = ` [Seniority preference adjustment: ${reasons.join('; ')}.]`
   const reasoning =
