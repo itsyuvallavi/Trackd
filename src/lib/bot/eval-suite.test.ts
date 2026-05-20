@@ -21,7 +21,28 @@ describe('bot eval suite fixtures', () => {
 
     expect(result.passed).toBe(true)
     expect(result.totals.personas).toBeGreaterThanOrEqual(8)
+    expect(result.totals.jobs).toBeGreaterThanOrEqual(128)
     expect(result.totals.failedChecks).toBe(0)
+  })
+
+  it('keeps the deterministic corpus broad enough per persona', () => {
+    const result = runDeterministicBotEvalSuite()
+
+    for (const persona of result.personas) {
+      const counts = persona.jobs.reduce(
+        (acc, job) => {
+          acc[job.gold] += 1
+          return acc
+        },
+        { good: 0, partial: 0, bad: 0, hard_filter: 0 }
+      )
+
+      expect(persona.jobs.length).toBeGreaterThanOrEqual(16)
+      expect(counts.good).toBeGreaterThanOrEqual(3)
+      expect(counts.partial).toBeGreaterThanOrEqual(2)
+      expect(counts.bad).toBeGreaterThanOrEqual(3)
+      expect(counts.hard_filter).toBeGreaterThanOrEqual(1)
+    }
   })
 
   it('keeps every persona on parsed Job Search resume evidence', () => {

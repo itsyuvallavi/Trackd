@@ -290,7 +290,7 @@ describe('search profile', () => {
         keywords: ['DevOps Engineer', 'Site Reliability Engineer'],
         resume: {
           summary:
-            'DevOps and SRE engineer with Kubernetes, Terraform, AWS, CI CD, observability, and incident response.',
+            'DevOps and SRE platform engineer with Kubernetes, Terraform, AWS, CI CD, observability, and incident response.',
           skills: ['DevOps', 'Kubernetes', 'Terraform', 'AWS', 'Observability'],
           experience: [
             {
@@ -300,7 +300,7 @@ describe('search profile', () => {
             },
           ],
         },
-        expected: ['Site Reliability Engineer', 'DevOps Engineer'],
+        expected: ['Site Reliability Engineer', 'SRE', 'Platform Engineer', 'DevOps Engineer'],
       },
       {
         keywords: ['Product Designer', 'UX Designer'],
@@ -376,5 +376,6 @@ describe('search profile', () => {
     expect(refineSearchKeywordForProvider('SDET')).toBe('SDET')
     expect(refineSearchKeywordForProvider('Playwright QA')).toBe('Playwright QA Engineer')
     expect(refineSearchKeywordForProvider('SRE')).toBe('Site Reliability Engineer')
+    expect(refineSearchKeywordForProvider('Platform Engineer')).toBe('Platform Engineer')
   })
 })

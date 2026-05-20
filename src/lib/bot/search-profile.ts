@@ -108,7 +108,11 @@ export function refineSearchKeywordForProvider(raw: string): string {
     return 'Site Reliability Engineer'
   }
 
-  if (/\bdevops\b|\bplatform engineer\b|\binfrastructure engineer\b/.test(text)) {
+  if (/\bplatform engineer\b|\bplatform engineering\b/.test(text)) {
+    return 'Platform Engineer'
+  }
+
+  if (/\bdevops\b|\binfrastructure engineer\b/.test(text)) {
     return 'DevOps Engineer'
   }
 
@@ -384,6 +388,12 @@ export function deriveSafeResumeSearchTerms(profile: CandidateProfile | null): s
     /\bobservability\b/,
     /\bincident response\b/,
   ])
+  const hasPlatformEngineering = hasAny(text, [
+    /\bplatform engineer\b/,
+    /\bplatform engineering\b/,
+    /\bdeveloper platform\b/,
+    /\bplatform reliability\b/,
+  ])
   const hasUxDesign = hasAny(text, [
     /\bux\b/,
     /\buser experience\b/,
@@ -437,6 +447,8 @@ export function deriveSafeResumeSearchTerms(profile: CandidateProfile | null): s
   if (hasQaAutomation && hasBrowserAutomation) terms.push('SDET')
   if (hasQaAutomation && hasAny(text, [/\bplaywright\b/])) terms.push('Playwright QA Engineer')
   if (hasSre) terms.push('Site Reliability Engineer')
+  if (hasSre) terms.push('SRE')
+  if (hasPlatformEngineering) terms.push('Platform Engineer')
   if (hasDevOps) terms.push('DevOps Engineer')
   if (hasProductDesign && hasUxDesign) terms.push('UX Product Designer')
   if (hasUxDesign) terms.push('UI UX Designer')

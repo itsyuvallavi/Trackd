@@ -146,6 +146,25 @@ function searchTermsLeakSensitiveData(persona: BotEvalPersonaFixture, safeTerms:
   return null
 }
 
+function countGoldLabels(jobs: BotEvalGoldJob[]): Record<BotEvalGoldJob['gold'], number> {
+  const counts: Record<BotEvalGoldJob['gold'], number> = {
+    good: 0,
+    partial: 0,
+    bad: 0,
+    hard_filter: 0,
+  }
+
+  for (const job of jobs) {
+    counts[job.gold] += 1
+  }
+
+  return counts
+}
+
+function formatGoldCounts(counts: Record<BotEvalGoldJob['gold'], number>): string {
+  return `good=${counts.good}, partial=${counts.partial}, bad=${counts.bad}, hard_filter=${counts.hard_filter}`
+}
+
 function runPersona(persona: BotEvalPersonaFixture): BotEvalPersonaResult {
   const candidateProfile = buildCandidateProfileFromSources({
     resumes: [persona.resume],
@@ -177,6 +196,7 @@ function runPersona(persona: BotEvalPersonaFixture): BotEvalPersonaResult {
   )
   const bestAcceptedJob = rankedAcceptedJobs[0]
   const leak = searchTermsLeakSensitiveData(persona, safeSearchProfile.terms)
+  const goldCounts = countGoldLabels(persona.jobs)
 
   const checks: BotEvalCheckResult[] = [
     {
@@ -205,6 +225,20 @@ function runPersona(persona: BotEvalPersonaFixture): BotEvalPersonaResult {
       detail: leak ?? 'no leakage detected',
     },
     {
+      name: 'fixture_job_breadth',
+      passed: persona.jobs.length >= 12,
+      detail: `jobs=${persona.jobs.length}`,
+    },
+    {
+      name: 'fixture_gold_label_coverage',
+      passed:
+        goldCounts.good >= 3 &&
+        goldCounts.partial >= 2 &&
+        goldCounts.bad >= 3 &&
+        goldCounts.hard_filter >= 1,
+      detail: formatGoldCounts(goldCounts),
+    },
+    {
       name: 'hard_filter_jobs_are_rejected',
       passed: jobs
         .filter((job) => job.gold === 'hard_filter')
@@ -221,6 +255,16 @@ function runPersona(persona: BotEvalPersonaFixture): BotEvalPersonaResult {
         .filter((job) => job.gold === 'good')
         .map((job) => `${job.id}:${job.preFilterRejected ? job.preFilterFlag : 'accepted'}`)
         .join(', '),
+    },
+    {
+      name: 'good_jobs_have_search_signal',
+      passed: jobs
+        .filter((job) => job.gold === 'good')
+        .every((job) => job.searchTermCoverageScore > 0),
+      detail: jobs
+        .filter((job) => job.gold === 'good' && job.searchTermCoverageScore === 0)
+        .map((job) => `${job.id}:0`)
+        .join(', ') || 'all good jobs have search signal',
     },
     {
       name: 'best_ranked_accepted_job_is_good',
