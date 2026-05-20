@@ -292,6 +292,55 @@ function profileSkillText(profile: CandidateProfile | null): string {
   )
 }
 
+function isDesignerFirstProfile(profile: CandidateProfile | null): boolean {
+  const text = profileSkillText(profile)
+  if (!text) return false
+
+  const hasDesignEvidence = hasAnyPattern(text, [
+    /\bproduct designer\b/,
+    /\bproduct design\b/,
+    /\bux\b/,
+    /\buser experience\b/,
+    /\bfigma\b/,
+    /\bprototype\b/,
+    /\bdesign systems?\b/,
+  ])
+  const hasProductManagementEvidence = hasAnyPattern(text, [
+    /\bproduct manager\b/,
+    /\bproduct management\b/,
+    /\broadmap\b/,
+    /\bbacklog\b/,
+    /\bgo to market\b/,
+    /\bstakeholder management\b/,
+  ])
+
+  return hasDesignEvidence && !hasProductManagementEvidence
+}
+
+function profileAwareHardFilter(
+  job: SearchJobResult,
+  profile: CandidateProfile | null
+): PreFilterResult {
+  const title = normalizePriorityText(job.title)
+
+  if (
+    isDesignerFirstProfile(profile) &&
+    /\bproduct manager\b/.test(title) &&
+    !/\bproduct designer\b/.test(title)
+  ) {
+    return {
+      rejected: true,
+      score: 20,
+      flag: 'career_change',
+      reason:
+        `Job title "${job.title}" is a Product Manager role, but the active Job Search resume ` +
+        'is designer-first (UX/product design evidence, no product-management evidence).',
+    }
+  }
+
+  return { rejected: false }
+}
+
 function priorityAuditSnapshot(priority: CandidatePriority): Prisma.InputJsonObject {
   return {
     budgetRanking: {
@@ -1180,6 +1229,12 @@ export async function runBotSearch(
         const preFilter = preFilterJob(candidate.job, botConfig)
         if (preFilter.rejected) {
           finalizePreFilteredCandidate(candidate, preFilter)
+          continue
+        }
+
+        const profileFilter = profileAwareHardFilter(candidate.job, runProfile)
+        if (profileFilter.rejected) {
+          finalizePreFilteredCandidate(candidate, profileFilter)
         } else {
           aiEligibleJobs.push(candidate)
         }

@@ -434,6 +434,107 @@ describe('runBotSearch orchestration', () => {
     expect(mocks.jobCreate).not.toHaveBeenCalled()
   })
 
+  it('hard-filters Product Manager title rows for designer-first resumes', async () => {
+    mocks.botResumeFindMany.mockResolvedValue([
+      {
+        id: 'resume_design',
+        label: 'UX Product Design',
+        matchKeywords: [],
+        isDefault: true,
+        structuredData: {
+          name: 'Designer Candidate',
+          email: '',
+          summary:
+            'Product designer with UX research, Figma, prototypes, accessibility, and design systems.',
+          skills: ['Product design', 'UX research', 'Figma', 'Design systems', 'Accessibility'],
+          languages: [],
+          experience: [
+            {
+              company: 'Design Studio',
+              title: 'Product Designer',
+              startDate: '2021',
+              endDate: 'Present',
+              description: 'Designed SaaS workflows, research plans, prototypes, and component libraries.',
+              achievements: [],
+            },
+          ],
+          education: [],
+          certifications: [],
+        },
+        rawText: null,
+      },
+    ])
+
+    const productManagerNoise = job({
+      title: 'Product Manager, Core Markets',
+      company: 'PMNoiseCo',
+      location: 'Remote Europe',
+      url: 'https://example.com/product-manager-noise',
+      description: 'Own roadmap, backlog, GTM priorities, stakeholder alignment, and product strategy.',
+      is_remote: true,
+    })
+    const designerMatch = job({
+      title: 'Product Designer, B2B SaaS',
+      company: 'DesignGoodCo',
+      location: 'Remote Europe',
+      url: 'https://example.com/product-designer-good',
+      description: 'Design SaaS UX workflows using Figma, research, prototypes, accessibility, and design systems.',
+      is_remote: true,
+    })
+
+    mocks.runSearch.mockResolvedValue(searchResponse([productManagerNoise, designerMatch]))
+    mocks.jobFindMany.mockResolvedValue([])
+    mocks.evaluateJob.mockResolvedValue({
+      evaluation: {
+        score: 88,
+        shouldApply: true,
+        reasoning: 'Strong product design match.',
+        flags: ['good_match'],
+      },
+      scoringInputs: { source: 'test' },
+    })
+
+    const { runBotSearch } = await import('./search-orchestrator')
+    const result = await runBotSearch(
+      config({
+        keywords: ['Product Designer', 'UX Designer', 'UI UX Designer'],
+        locations: ['Remote Europe', 'Copenhagen'],
+      }),
+      'user_1',
+      { botRunId: 'run_1' }
+    )
+
+    expect(mocks.evaluateJob).toHaveBeenCalledTimes(1)
+    expect(mocks.evaluateJob).toHaveBeenCalledWith(designerMatch, expect.any(Object))
+    expect(result).toMatchObject({
+      jobsFound: 2,
+      jobsEvaluated: 1,
+      jobsHardFiltered: 1,
+      jobsApproved: 1,
+    })
+    expect(result.evaluationSkips[0]).toMatchObject({
+      title: 'Product Manager, Core Markets',
+      filterKind: 'hard_filter',
+      flags: ['career_change'],
+    })
+
+    const auditRows = mocks.botRunListingCreateMany.mock.calls[0][0].data
+    expect(auditRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: 'Product Manager, Core Markets',
+          stage: 'hard_filter',
+          flags: ['career_change'],
+        }),
+        expect.objectContaining({
+          title: 'Product Designer, B2B SaaS',
+          stage: 'saved',
+          evaluated: true,
+        }),
+      ])
+    )
+  })
+
   it('evaluates every eligible listing returned by the search pipeline', async () => {
     const approvedJobs = Array.from({ length: MANY_JOBS_COUNT }, (_, index) =>
       job({

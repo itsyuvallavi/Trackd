@@ -113,6 +113,8 @@ export function refineSearchKeywordForProvider(raw: string): string {
   }
 
   if (/\bproduct manager\b|\bproduct management\b|\bpm\b/.test(text)) {
+    if (/\bb2b\b/.test(text) && /\bsaas\b/.test(text)) return 'B2B SaaS Product Manager'
+    if (/\bplatform\b/.test(text)) return 'Platform Product Manager'
     return 'Product Manager'
   }
 
@@ -220,6 +222,8 @@ function termMatchesIntent(term: string, intents: Set<string>): boolean {
       /\bqa\b/,
       /\bquality assurance\b/,
       /\btest automation\b/,
+      /\bsoftware engineer in test\b/,
+      /\btest engineer\b/,
       /\bautomation\b/,
       /\bsdet\b/,
       /\bplaywright\b/,
@@ -341,6 +345,14 @@ export function deriveSafeResumeSearchTerms(profile: CandidateProfile | null): s
     /\buser stories\b/,
     /\bstakeholder\b/,
   ])
+  const hasB2BSaasProduct = hasAny(text, [
+    /\bb2b\b/,
+    /\bsaas\b/,
+  ])
+  const hasPlatformProduct = hasAny(text, [
+    /\bplatform\b/,
+    /\binternal tools?\b/,
+  ])
   const hasQaAutomation = hasAny(text, [
     /\bqa\b/,
     /\bquality assurance\b/,
@@ -378,12 +390,17 @@ export function deriveSafeResumeSearchTerms(profile: CandidateProfile | null): s
     /\bfigma\b/,
     /\bwireframes?\b/,
     /\buser research\b/,
-    /\bdesign systems?\b/,
   ])
   const hasProductDesign = hasAny(text, [
     /\bproduct designer\b/,
+    /\bproduct design\b/,
     /\binteraction design\b/,
     /\bprototype\b/,
+  ])
+  const hasDesignSystems = hasAny(text, [
+    /\bdesign systems?\b/,
+    /\bcomponent librar/,
+    /\baccessibility\b/,
   ])
   const hasGeneralSoftware = hasAny(text, [
     /\bsoftware engineer\b/,
@@ -411,13 +428,19 @@ export function deriveSafeResumeSearchTerms(profile: CandidateProfile | null): s
   if (hasDeveloperTooling) terms.push('Developer Tooling Engineer')
   if (hasDataScience) terms.push('Data Scientist')
   if (hasMachineLearning) terms.push('Machine Learning Engineer')
+  if (hasProductManagement && hasB2BSaasProduct) terms.push('B2B SaaS Product Manager')
+  if (hasProductManagement && hasPlatformProduct) terms.push('Platform Product Manager')
   if (hasProductManagement) terms.push('Product Manager')
   if (hasQaAutomation) terms.push('QA Automation Engineer')
+  if (hasQaAutomation && hasBrowserAutomation) terms.push('Software Engineer in Test')
   if (hasQaAutomation && hasBrowserAutomation) terms.push('Test Automation Engineer')
   if (hasQaAutomation && hasBrowserAutomation) terms.push('SDET')
   if (hasQaAutomation && hasAny(text, [/\bplaywright\b/])) terms.push('Playwright QA Engineer')
   if (hasSre) terms.push('Site Reliability Engineer')
   if (hasDevOps) terms.push('DevOps Engineer')
+  if (hasProductDesign && hasUxDesign) terms.push('UX Product Designer')
+  if (hasUxDesign) terms.push('UI UX Designer')
+  if (hasDesignSystems && (hasProductDesign || hasUxDesign)) terms.push('Design Systems Designer')
   if (hasProductDesign) terms.push('Product Designer')
   if (hasUxDesign) terms.push('UX Designer')
   if (hasGeneralSoftware) terms.push('Software Engineer')

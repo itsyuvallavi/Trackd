@@ -191,6 +191,45 @@ describe('search profile', () => {
     expect(refineSearchKeywordForProvider('Product Engineer')).toBe('Software Product Engineer')
   })
 
+  it('expands product-manager searches with resume-backed B2B/SaaS and platform terms', () => {
+    const profile = buildSafeSearchProfile({
+      config: config({
+        keywords: ['Product Manager', 'Senior Product Manager', 'Platform Product Manager'],
+      }),
+      candidateProfile: parsedProfile({
+        resume: {
+          ...parsedProfile().resume!,
+          summary:
+            'Product manager for B2B SaaS platforms, discovery, roadmaps, analytics, and cross-functional delivery.',
+          skills: ['Product Management', 'Roadmapping', 'B2B SaaS', 'Analytics'],
+          experience: [
+            {
+              company: 'Synthetic Platform Co',
+              title: 'Product Manager',
+              startDate: '2020',
+              endDate: 'Present',
+              description:
+                'Led platform roadmap discovery and delivery for internal and customer-facing workflow products.',
+              achievements: [],
+            },
+          ],
+        },
+      }),
+    })
+
+    expect(profile.terms).toEqual([
+      'B2B SaaS Product Manager',
+      'Platform Product Manager',
+      'Product Manager',
+    ])
+    expect(profile.terms.map(refineSearchKeywordForProvider)).toEqual([
+      'B2B SaaS Product Manager',
+      'Platform Product Manager',
+      'Product Manager',
+    ])
+    expect(profile.derivedFromResume).toBe(true)
+  })
+
   it('derives safe resume-backed terms for non-frontend professions', () => {
     const cases = [
       {
@@ -241,6 +280,7 @@ describe('search profile', () => {
         },
         expected: [
           'QA Automation Engineer',
+          'Software Engineer in Test',
           'Test Automation Engineer',
           'SDET',
           'Playwright QA Engineer',
@@ -276,7 +316,13 @@ describe('search profile', () => {
             },
           ],
         },
-        expected: ['Product Designer', 'UX Designer'],
+        expected: [
+          'UX Product Designer',
+          'UI UX Designer',
+          'Design Systems Designer',
+          'Product Designer',
+          'UX Designer',
+        ],
       },
       {
         keywords: ['Junior Software Engineer'],

@@ -423,7 +423,7 @@ export const BOT_EVAL_PERSONA_FIXTURES: BotEvalPersonaFixture[] = [
       },
       rawText: 'Product manager with B2B SaaS, product strategy, roadmapping, user research, analytics, and stakeholder management.',
     }),
-    expectedSafeTerms: ['Product Manager'],
+    expectedSafeTerms: ['B2B SaaS Product Manager', 'Platform Product Manager', 'Product Manager'],
     jobs: [
       job({
         id: 'pm-good',
@@ -498,6 +498,7 @@ export const BOT_EVAL_PERSONA_FIXTURES: BotEvalPersonaFixture[] = [
     }),
     expectedSafeTerms: [
       'QA Automation Engineer',
+      'Software Engineer in Test',
       'Test Automation Engineer',
       'SDET',
       'Playwright QA Engineer',
@@ -649,7 +650,13 @@ export const BOT_EVAL_PERSONA_FIXTURES: BotEvalPersonaFixture[] = [
       },
       rawText: 'Product designer with UX research, Figma, prototyping, design systems, accessibility, and SaaS workflow design.',
     }),
-    expectedSafeTerms: ['Product Designer', 'UX Designer'],
+    expectedSafeTerms: [
+      'UX Product Designer',
+      'UI UX Designer',
+      'Design Systems Designer',
+      'Product Designer',
+      'UX Designer',
+    ],
     jobs: [
       job({
         id: 'design-good',

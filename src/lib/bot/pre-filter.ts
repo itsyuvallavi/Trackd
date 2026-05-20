@@ -33,7 +33,7 @@ export type PreFilterResult =
   | {
       rejected: true
       score: number
-      flag: 'wrong_location' | 'underqualified' | 'overqualified'
+      flag: 'wrong_location' | 'underqualified' | 'overqualified' | 'career_change'
       reason: string
     }
 
