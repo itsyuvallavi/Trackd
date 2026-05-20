@@ -19,6 +19,17 @@ import { runSearch } from './adapters/search-client'
 import { botSearchHasQueryableBackend } from './bot-search-sources'
 import { buildBotSearchRequest } from './search-request'
 import {
+  buildSafeSearchProfile,
+  type SafeSearchProfile,
+} from './search-profile'
+import {
+  loadCandidateProfileForEvaluation,
+  resumeString,
+  resumeStringArray,
+  type CandidateProfile,
+  type CandidateProfileSourceMetadata,
+} from './candidate-profile'
+import {
   countryTokensFromJobLocationLine,
   hasRemoteWorkSignal,
   jdLocationOverlapsUser,
@@ -26,7 +37,6 @@ import {
 } from './user-locations'
 import {
   BOT_SEARCH_AI_EVAL_CONCURRENCY,
-  BOT_SEARCH_AI_EVAL_MAX_PER_RUN,
 } from './search-constants'
 import {
   BOT_LISTING_OUTCOME,
@@ -43,6 +53,32 @@ import {
 
 const REASONING_LOG_MAX = 280
 const REASONING_STORE_MAX = 800
+
+const EMPTY_PROFILE_SOURCE: CandidateProfileSourceMetadata = {
+  kind: 'none',
+  label: 'No profile source',
+  resumeId: null,
+  resumeLabel: null,
+  parsedResumeUsed: false,
+  rawResumeTextUsed: false,
+  applicationIdentitySupplemented: false,
+  settingsDerivedSignalsUsed: false,
+  settingsSignals: [],
+  limitations: [],
+}
+
+const EMPTY_SEARCH_PROFILE: SafeSearchProfile = {
+  terms: [],
+  resumeSearchTerms: [],
+  settingsKeywords: [],
+  derivedFromResume: false,
+  profileSource: {
+    kind: 'none',
+    label: 'No profile source',
+    resumeId: null,
+    resumeLabel: null,
+  },
+}
 
 function oneLineExcerpt(text: string, max: number): string {
   const t = text.replace(/\s+/g, ' ').trim()
@@ -74,10 +110,60 @@ function sourceToPrismaSource(source: string): JobSource {
   return map[source.toLowerCase()] ?? JobSource.BOT
 }
 
-function skippedScoringNote(stage: string): Prisma.InputJsonValue {
+function profileAuditSnapshot(profile: CandidateProfile | null): Prisma.InputJsonObject {
+  const source = profile?.source ?? EMPTY_PROFILE_SOURCE
+  const resume = profile?.resume ?? null
+
+  return {
+    profileSource: source as unknown as Prisma.InputJsonObject,
+    resumeUsed: {
+      resumeId: source.resumeId,
+      label: source.resumeLabel,
+      selection: source.kind,
+      sourceKind: source.kind,
+      sourceLabel: source.label,
+      skillsSentToPrompt: resume ? resumeStringArray(resume.skills).slice(0, 30) : [],
+      summaryIncluded: Boolean(resumeString(resume?.summary)),
+      experienceRolesInPrompt: resume
+        ? Math.min(4, Array.isArray(resume.experience) ? resume.experience.length : 0)
+        : 0,
+      educationRowsInPrompt: resume && Array.isArray(resume.education) ? resume.education.length : 0,
+      applicationIdentitySupplemented: source.applicationIdentitySupplemented,
+      settingsDerivedSignalsUsed: source.settingsDerivedSignalsUsed,
+      settingsSignals: source.settingsSignals,
+      limitations: source.limitations,
+    },
+  }
+}
+
+function searchProfileAuditSnapshot(
+  searchProfile: SafeSearchProfile | null
+): Prisma.InputJsonObject {
+  const safeProfile = searchProfile ?? EMPTY_SEARCH_PROFILE
+
+  return {
+    searchProfile: {
+      terms: safeProfile.terms,
+      resumeSearchTerms: safeProfile.resumeSearchTerms,
+      settingsKeywords: safeProfile.settingsKeywords,
+      derivedFromResume: safeProfile.derivedFromResume,
+      profileSource: safeProfile.profileSource,
+    },
+  }
+}
+
+function skippedScoringNote(
+  stage: string,
+  profile: CandidateProfile | null,
+  searchProfile: SafeSearchProfile | null,
+  extra?: Prisma.InputJsonObject
+): Prisma.InputJsonValue {
   return {
     note: 'AI evaluator was not run for this listing.',
     filterStage: stage,
+    ...profileAuditSnapshot(profile),
+    ...searchProfileAuditSnapshot(searchProfile),
+    ...(extra ?? {}),
   }
 }
 
@@ -99,10 +185,17 @@ async function runLimited<T>(
   )
 }
 
-function noOpenAiSnapshot(): Prisma.InputJsonValue {
+function noOpenAiSnapshot(
+  profile: CandidateProfile | null,
+  priority?: CandidatePriority,
+  searchProfile?: SafeSearchProfile | null
+): Prisma.InputJsonValue {
   return {
     note: 'OPENAI_API_KEY was not set — listing saved without AI scoring.',
     gateway: 'none',
+    ...profileAuditSnapshot(profile),
+    ...searchProfileAuditSnapshot(searchProfile ?? null),
+    ...(priority ? priorityAuditSnapshot(priority) : {}),
   }
 }
 
@@ -165,6 +258,259 @@ function normalizePriorityText(value: string | null | undefined): string {
     .replace(/[^a-z0-9+#.]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function hasAnyPattern(text: string, patterns: RegExp[]): boolean {
+  return patterns.some((pattern) => pattern.test(text))
+}
+
+function profileHasResumeEvidence(profile: CandidateProfile | null): boolean {
+  return profile?.source.kind === 'parsed_resume' || profile?.source.kind === 'raw_resume_fallback'
+}
+
+function profileSkillText(profile: CandidateProfile | null): string {
+  if (!profile?.resume) return ''
+  const experienceText = Array.isArray(profile.resume.experience)
+    ? profile.resume.experience
+        .slice(0, 4)
+        .map((entry) =>
+          [
+            resumeString(entry?.title),
+            resumeString(entry?.company),
+            resumeString(entry?.description),
+          ].join(' ')
+        )
+        .join(' ')
+    : ''
+
+  return normalizePriorityText(
+    [
+      resumeStringArray(profile.resume.skills).join(' '),
+      resumeString(profile.resume.summary),
+      experienceText,
+    ].join(' ')
+  )
+}
+
+function priorityAuditSnapshot(priority: CandidatePriority): Prisma.InputJsonObject {
+  return {
+    budgetRanking: {
+      priorityScore: priority.score,
+      priorityReasons: priority.reasons,
+    },
+    priorityScore: priority.score,
+    priorityReasons: priority.reasons,
+  }
+}
+
+function enrichScoringInputsForAudit(
+  scoringInputs: Prisma.InputJsonValue | null,
+  profile: CandidateProfile | null,
+  priority: CandidatePriority,
+  searchProfile: SafeSearchProfile | null
+): Prisma.InputJsonValue {
+  const existing =
+    scoringInputs && typeof scoringInputs === 'object' && !Array.isArray(scoringInputs)
+      ? (scoringInputs as Prisma.InputJsonObject)
+      : {}
+
+  return {
+    ...profileAuditSnapshot(profile),
+    ...searchProfileAuditSnapshot(searchProfile),
+    ...existing,
+    ...priorityAuditSnapshot(priority),
+  }
+}
+
+function resumeStackPriority(
+  job: SearchJobResult,
+  profile: CandidateProfile | null
+): CandidatePriority {
+  const profileText = profileSkillText(profile)
+  if (!profileText) return { score: 0, reasons: [] }
+
+  const resumeEvidence = profileHasResumeEvidence(profile)
+  const strong = resumeEvidence ? 1 : 0.35
+  const title = normalizePriorityText(job.title)
+  const haystack = `${title} ${normalizePriorityText(job.description)}`.trim()
+  const reasons: string[] = []
+  let score = 0
+
+  const hasFrontendResume = hasAnyPattern(profileText, [
+    /\breact\b/,
+    /\bnext js\b/,
+    /\btypescript\b/,
+    /\bjavascript\b/,
+    /\bfrontend\b/,
+    /\bfront end\b/,
+    /\bcss\b/,
+  ])
+  const hasFrontendJob = hasAnyPattern(haystack, [
+    /\breact\b/,
+    /\bnext js\b/,
+    /\bfrontend\b/,
+    /\bfront end\b/,
+    /\bui\b/,
+    /\buser facing\b/,
+    /\bweb engineering\b/,
+    /\btypescript\b/,
+    /\bjavascript\b/,
+  ])
+
+  if (hasFrontendResume && hasFrontendJob) {
+    const titleBoost = hasAnyPattern(title, [/\bfrontend\b/, /\bfront end\b/, /\breact\b/, /\bweb\b/])
+    score += Math.round((titleBoost ? 42 : 28) * strong)
+    reasons.push(titleBoost ? 'resume_stack:frontend_title' : 'resume_stack:frontend')
+  }
+
+  const hasFullstackResume = hasAnyPattern(profileText, [
+    /\bnext js\b/,
+    /\bnode js\b/,
+    /\brest apis?\b/,
+    /\bprisma\b/,
+    /\bpostgresql\b/,
+    /\bsupabase\b/,
+    /\bfirebase\b/,
+  ])
+  const hasFullstackJob = hasAnyPattern(haystack, [
+    /\bfull stack\b/,
+    /\bfullstack\b/,
+    /\bapi\b/,
+    /\bbackend\b/,
+    /\bnode\b/,
+    /\btypescript\b/,
+    /\bpostgres\b/,
+  ])
+
+  if (hasFullstackResume && hasFullstackJob) {
+    score += Math.round(24 * strong)
+    reasons.push('resume_stack:typescript_fullstack')
+  }
+
+  const hasAiToolingResume = hasAnyPattern(profileText, [
+    /\bllm\b/,
+    /\blocal llms?\b/,
+    /\bcontext retrieval\b/,
+    /\bagentic\b/,
+    /\beval harness/,
+    /\bworkflow automation\b/,
+    /\bdeveloper tooling\b/,
+    /\bai tooling\b/,
+  ])
+  const hasAiToolingJob = hasAnyPattern(haystack, [
+    /\bllm\b/,
+    /\blarge language models?\b/,
+    /\bagentic\b/,
+    /\bai product\b/,
+    /\bdeveloper experience\b/,
+    /\bdeveloper tooling\b/,
+    /\bworkflow automation\b/,
+    /\bapplied ai\b/,
+  ])
+
+  if (hasAiToolingResume && hasAiToolingJob) {
+    score += Math.round(26 * strong)
+    reasons.push('resume_stack:ai_tooling')
+  }
+
+  return { score, reasons }
+}
+
+function mismatchPriority(
+  job: SearchJobResult,
+  botConfig: BotConfig,
+  profile: CandidateProfile | null
+): CandidatePriority {
+  const profileText = profileSkillText(profile)
+  if (!profileText) return { score: 0, reasons: [] }
+
+  const resumeEvidence = profileHasResumeEvidence(profile)
+  const multiplier = resumeEvidence ? 1 : 0.45
+  const title = normalizePriorityText(job.title)
+  const haystack = `${title} ${normalizePriorityText(job.description)}`.trim()
+  const reasons: string[] = []
+  let score = 0
+
+  const lacks = (patterns: RegExp[]) => !hasAnyPattern(profileText, patterns)
+  const addPenalty = (points: number, reason: string) => {
+    score -= Math.round(points * multiplier)
+    reasons.push(reason)
+  }
+
+  if (hasAnyPattern(haystack, [/\boutsystems?\b/]) && lacks([/\boutsystems?\b/])) {
+    addPenalty(58, 'mismatch:outsystems')
+  }
+
+  if (
+    hasAnyPattern(haystack, [/\bjava\b/, /\bspring boot\b/, /\bspring\b/]) &&
+    lacks([/\bjava\b/, /\bspring\b/])
+  ) {
+    addPenalty(36, 'mismatch:java_spring')
+  }
+
+  if (
+    hasAnyPattern(title, [/\bdata scientist\b/, /\bmachine learning engineer\b/, /\bml engineer\b/]) &&
+    lacks([/\bpython\b/, /\bpytorch\b/, /\btensorflow\b/, /\bscikit\b/, /\bmachine learning\b/])
+  ) {
+    addPenalty(44, 'mismatch:classical_ml')
+  } else if (
+    hasAnyPattern(haystack, [/\bpytorch\b/, /\btensorflow\b/, /\bscikit\b/, /\bpandas\b/, /\bnumpy\b/]) &&
+    lacks([/\bpython\b/, /\bpytorch\b/, /\btensorflow\b/, /\bscikit\b/])
+  ) {
+    addPenalty(30, 'mismatch:python_ml_stack')
+  }
+
+  if (hasAnyPattern(haystack, [/\bdatabricks\b/]) && lacks([/\bdatabricks\b/])) {
+    addPenalty(30, 'mismatch:databricks')
+  }
+
+  if (
+    hasAnyPattern(haystack, [/\bkotlin\b/]) &&
+    hasAnyPattern(title, [/\bbackend\b/, /\bserver\b/]) &&
+    lacks([/\bkotlin\b/])
+  ) {
+    addPenalty(28, 'mismatch:kotlin_backend')
+  }
+
+  if (
+    hasAnyPattern(haystack, [/\bsiem\b/, /\breverse engineering\b/, /\bmalware\b/, /\bweb security\b/]) &&
+    lacks([/\bsecurity\b/, /\bsiem\b/, /\breverse engineering\b/])
+  ) {
+    addPenalty(24, 'mismatch:security_specialty')
+  }
+
+  if (
+    hasAnyPattern(haystack, [/\bhardware\b/, /\bembedded\b/, /\bdevice\b/]) &&
+    lacks([/\bhardware\b/, /\bembedded\b/, /\bdevice\b/])
+  ) {
+    addPenalty(24, 'mismatch:hardware_systems')
+  }
+
+  const primaryNonResumeStack =
+    hasAnyPattern(title, [/\bphp\b/, /\b\.net\b/, /\bdotnet\b/, /\bc#\b/, /\bruby\b/, /\bgolang\b/, /\bgo developer\b/]) ||
+    hasAnyPattern(haystack, [/\bphp\b/, /\b\.net\b/, /\bdotnet\b/, /\bc#\b/, /\bruby\b/, /\bgolang\b/])
+  if (
+    primaryNonResumeStack &&
+    lacks([/\bphp\b/, /\b\.net\b/, /\bdotnet\b/, /\bc#\b/, /\bruby\b/, /\bgolang\b/])
+  ) {
+    addPenalty(24, 'mismatch:primary_backend_ecosystem')
+  }
+
+  const preferred = (botConfig.experienceLevel ?? '').toLowerCase()
+  const userTargetsJuniorOrMid = preferred.includes('junior') || preferred.includes('entry') || preferred.includes('mid')
+  if (
+    userTargetsJuniorOrMid &&
+    hasAnyPattern(title, [/\blead\b/, /\bprincipal\b/, /\bstaff\b/, /\btech lead\b/, /\bhead of\b/])
+  ) {
+    addPenalty(26, 'seniority:lead_title')
+  } else if (
+    userTargetsJuniorOrMid &&
+    hasAnyPattern(title, [/\bsenior\b/, /\bsr\b/])
+  ) {
+    addPenalty(14, 'seniority:senior_title')
+  }
+
+  return { score, reasons }
 }
 
 function keywordPriority(job: SearchJobResult, botConfig: BotConfig): CandidatePriority {
@@ -279,8 +625,14 @@ function qualityPriority(job: SearchJobResult): CandidatePriority {
   return { score, reasons }
 }
 
-function prioritizeCandidate(job: SearchJobResult, botConfig: BotConfig): CandidatePriority {
+function prioritizeCandidateWithProfile(
+  job: SearchJobResult,
+  botConfig: BotConfig,
+  profile: CandidateProfile | null
+): CandidatePriority {
   const parts = [
+    resumeStackPriority(job, profile),
+    mismatchPriority(job, botConfig, profile),
     keywordPriority(job, botConfig),
     locationPriority(job, botConfig),
     qualityPriority(job),
@@ -294,12 +646,13 @@ function prioritizeCandidate(job: SearchJobResult, botConfig: BotConfig): Candid
 
 function sortCandidatesForEvaluation(
   candidates: JobWithAudit[],
-  botConfig: BotConfig
+  botConfig: BotConfig,
+  profile: CandidateProfile | null
 ): PrioritizedJobWithAudit[] {
   return candidates
     .map((candidate) => ({
       ...candidate,
-      priority: prioritizeCandidate(candidate.job, botConfig),
+      priority: prioritizeCandidateWithProfile(candidate.job, botConfig, profile),
     }))
     .sort((a, b) => {
       const byPriority = b.priority.score - a.priority.score
@@ -424,9 +777,35 @@ export async function runBotSearch(
       return result
     }
 
-    const searchRequest = buildBotSearchRequest(botConfig)
+    const runProfile = await loadCandidateProfileForEvaluation(
+      userId,
+      botConfig.keywords[0] ?? 'Job Search',
+      botConfig
+    )
+    const safeSearchProfile = buildSafeSearchProfile({
+      config: botConfig,
+      candidateProfile: runProfile,
+    })
 
-    pushLog('info', 'Search request built from /settings/bot', {
+    pushLog('info', 'Candidate profile source prepared for search ranking', {
+      kind: runProfile.source.kind,
+      label: runProfile.source.label,
+      resumeId: runProfile.source.resumeId,
+      resumeLabel: runProfile.source.resumeLabel,
+      applicationIdentitySupplemented: runProfile.source.applicationIdentitySupplemented,
+      settingsDerivedSignalsUsed: runProfile.source.settingsDerivedSignalsUsed,
+    })
+    pushLog('info', 'Safe search profile prepared', {
+      terms: safeSearchProfile.terms,
+      resumeSearchTerms: safeSearchProfile.resumeSearchTerms,
+      settingsKeywords: safeSearchProfile.settingsKeywords,
+      derivedFromResume: safeSearchProfile.derivedFromResume,
+      profileSource: safeSearchProfile.profileSource,
+    })
+
+    const searchRequest = buildBotSearchRequest(botConfig, safeSearchProfile)
+
+    pushLog('info', 'Search request built from /settings/bot and safe profile', {
       keywords: searchRequest.keywords,
       locations: searchRequest.locations,
       remote_only: searchRequest.remote_only,
@@ -435,6 +814,8 @@ export async function runBotSearch(
       exclude_keywords_count: searchRequest.exclude_keywords?.length ?? 0,
       spoken_languages: botConfig.spokenLanguages ?? [],
       min_score: botConfig.minScore,
+      search_profile_source: safeSearchProfile.profileSource,
+      search_profile_derived_from_resume: safeSearchProfile.derivedFromResume,
     })
 
     let searchResponse
@@ -571,7 +952,11 @@ export async function runBotSearch(
             finalized: true,
             stage: BOT_LISTING_STAGE.DEDUP_DISMISSED,
             outcome: BOT_LISTING_OUTCOME.SKIPPED,
-            scoringInputs: skippedScoringNote(BOT_LISTING_STAGE.DEDUP_DISMISSED),
+            scoringInputs: skippedScoringNote(
+              BOT_LISTING_STAGE.DEDUP_DISMISSED,
+              runProfile,
+              safeSearchProfile
+            ),
             decisionReason: 'You removed this listing earlier — it will not be re-imported.',
           })
           continue
@@ -589,7 +974,11 @@ export async function runBotSearch(
           finalized: true,
           stage: BOT_LISTING_STAGE.DEDUP_DISMISSED,
           outcome: BOT_LISTING_OUTCOME.SKIPPED,
-          scoringInputs: skippedScoringNote(BOT_LISTING_STAGE.DEDUP_DISMISSED),
+          scoringInputs: skippedScoringNote(
+            BOT_LISTING_STAGE.DEDUP_DISMISSED,
+            runProfile,
+            safeSearchProfile
+          ),
           decisionReason: 'You removed this listing earlier — it will not be re-imported.',
         })
         continue
@@ -605,7 +994,11 @@ export async function runBotSearch(
           finalized: true,
           stage: BOT_LISTING_STAGE.DEDUP_URL,
           outcome: BOT_LISTING_OUTCOME.SKIPPED,
-          scoringInputs: skippedScoringNote(BOT_LISTING_STAGE.DEDUP_URL),
+          scoringInputs: skippedScoringNote(
+            BOT_LISTING_STAGE.DEDUP_URL,
+            runProfile,
+            safeSearchProfile
+          ),
           decisionReason: 'Same URL already exists in your job tracker.',
         })
         continue
@@ -624,7 +1017,11 @@ export async function runBotSearch(
           finalized: true,
           stage: BOT_LISTING_STAGE.DEDUP_TITLE,
           outcome: BOT_LISTING_OUTCOME.SKIPPED,
-          scoringInputs: skippedScoringNote(BOT_LISTING_STAGE.DEDUP_TITLE),
+          scoringInputs: skippedScoringNote(
+            BOT_LISTING_STAGE.DEDUP_TITLE,
+            runProfile,
+            safeSearchProfile
+          ),
           decisionReason: 'Same company + title already in your tracker (URL may differ).',
         })
         continue
@@ -642,7 +1039,11 @@ export async function runBotSearch(
           finalized: true,
           stage: BOT_LISTING_STAGE.DEDUP_BATCH,
           outcome: BOT_LISTING_OUTCOME.SKIPPED,
-          scoringInputs: skippedScoringNote(BOT_LISTING_STAGE.DEDUP_BATCH),
+          scoringInputs: skippedScoringNote(
+            BOT_LISTING_STAGE.DEDUP_BATCH,
+            runProfile,
+            safeSearchProfile
+          ),
           decisionReason: 'Duplicate company + title within this search result set.',
         })
         continue
@@ -716,6 +1117,7 @@ export async function runBotSearch(
       { job, seq, audit }: JobWithAudit,
       preFilter: Extract<PreFilterResult, { rejected: true }>
     ) => {
+      const priority = prioritizeCandidateWithProfile(job, botConfig, runProfile)
       result.jobsHardFiltered++
       result.jobsSkippedLowScore++
       result.evaluationSkips.push({
@@ -726,12 +1128,14 @@ export async function runBotSearch(
         flags: [preFilter.flag],
         reasoning: preFilter.reason.slice(0, REASONING_STORE_MAX),
         filterKind: 'hard_filter',
+        priorityScore: priority.score,
+        priorityReasons: priority.reasons,
         jobBoard: job.jobBoard ?? null,
         providerPass: job.providerPass ?? null,
       })
       pushLog(
         'info',
-        `Hard filter rejected before AI budget (not saved): ${job.title} @ ${job.company} — ` +
+        `Hard filter rejected before AI scoring (not saved): ${job.title} @ ${job.company} — ` +
           `${preFilter.flag} | ${oneLineExcerpt(preFilter.reason, REASONING_LOG_MAX)}`
       )
       auditBySeq.set(seq, {
@@ -747,15 +1151,16 @@ export async function runBotSearch(
         resumeMatch: null,
         scoringInputs: {
           model: 'pre-filter',
-          note: 'Deterministic hard filter ran before spending an AI evaluation budget slot.',
+          note: 'Deterministic hard filter ran before AI scoring.',
           deterministicFilter: preFilter.flag,
-          maxEvaluations: BOT_SEARCH_AI_EVAL_MAX_PER_RUN,
+          ...profileAuditSnapshot(runProfile),
+          ...searchProfileAuditSnapshot(safeSearchProfile),
+          ...priorityAuditSnapshot(priority),
         },
         decisionReason: preFilter.reason,
       })
     }
 
-    const aiEvalMax = BOT_SEARCH_AI_EVAL_MAX_PER_RUN
     const aiEvalConcurrency = BOT_SEARCH_AI_EVAL_CONCURRENCY
     const aiEligibleJobs: JobWithAudit[] = []
 
@@ -775,19 +1180,18 @@ export async function runBotSearch(
     if (openAi && aiEligibleJobs.length !== jobsWithAudit.length) {
       pushLog(
         'info',
-        `AI budget pre-filter: ${jobsWithAudit.length - aiEligibleJobs.length} hard-filtered, ` +
+        `AI pre-filter: ${jobsWithAudit.length - aiEligibleJobs.length} hard-filtered, ` +
           `${aiEligibleJobs.length} eligible for AI ranking.`
       )
     }
 
     const prioritizedJobs = openAi
-      ? sortCandidatesForEvaluation(aiEligibleJobs, botConfig)
+      ? sortCandidatesForEvaluation(aiEligibleJobs, botConfig, runProfile)
       : aiEligibleJobs.map((candidate) => ({
           ...candidate,
           priority: { score: 0, reasons: [] },
         }))
-    const jobsToProcess = openAi ? prioritizedJobs.slice(0, aiEvalMax) : prioritizedJobs
-    const budgetedJobs = openAi ? prioritizedJobs.slice(aiEvalMax) : []
+    const jobsToProcess = prioritizedJobs
 
     if (openAi && prioritizedJobs.length > 0) {
       const preview = prioritizedJobs.slice(0, Math.min(5, prioritizedJobs.length)).map((item) => ({
@@ -799,77 +1203,21 @@ export async function runBotSearch(
       }))
       pushLog('info', 'AI evaluation priority order prepared', {
         eligible: prioritizedJobs.length,
-        maxEvaluations: aiEvalMax,
+        evaluationsPlanned: prioritizedJobs.length,
         preview,
       })
-    }
-
-    if (openAi && budgetedJobs.length > 0) {
-      const message =
-        `AI evaluation budget reached: evaluating ${jobsToProcess.length}/${prioritizedJobs.length} ` +
-        `new listing(s); ${budgetedJobs.length} left unscored and not saved.`
-      result.errors['evaluation_budget'] = message
-      pushLog('warn', message, {
-        maxEvaluations: aiEvalMax,
-        concurrency: aiEvalConcurrency,
-        skipped: budgetedJobs.length,
-      })
-      for (const { job, seq, audit, priority } of budgetedJobs) {
-        result.jobsSkippedLowScore++
-        const priorityReason = priority.reasons.length
-          ? ` Priority signals: ${priority.reasons.join(', ')}.`
-          : ''
-        result.evaluationSkips.push({
-          title: job.title.slice(0, 200),
-          company: job.company.slice(0, 120),
-          score: 0,
-          minScore: botConfig.minScore,
-          flags: ['eval_budget'],
-          reasoning:
-            `Skipped AI scoring because this run reached the production evaluation budget (${aiEvalMax}) ` +
-            `after deterministic candidate ranking.${priorityReason}`,
-          filterKind: 'eval_budget',
-          jobBoard: job.jobBoard ?? null,
-          providerPass: job.providerPass ?? null,
-        })
-        auditBySeq.set(seq, {
-          ...audit,
-          finalized: true,
-          stage: BOT_LISTING_STAGE.EVAL_BUDGET,
-          outcome: BOT_LISTING_OUTCOME.REJECTED,
-          evaluated: false,
-          score: null,
-          shouldApply: false,
-          flags: ['eval_budget'],
-          reasoning:
-            `Skipped AI scoring because this run reached the production evaluation budget (${aiEvalMax}) ` +
-            `after deterministic candidate ranking.${priorityReason}`,
-          resumeMatch: null,
-          scoringInputs: {
-            note: 'AI evaluator was not run because the per-run evaluation budget was exhausted.',
-            maxEvaluations: aiEvalMax,
-            concurrency: aiEvalConcurrency,
-            priorityScore: priority.score,
-            priorityReasons: priority.reasons,
-          },
-          decisionReason:
-            'AI evaluation budget was exhausted after deterministic candidate ranking — listing not saved.',
-        })
-        pushLog(
-          'info',
-          `Budget skipped (not saved): ${job.title} @ ${job.company} — priority ${priority.score}`
-        )
-      }
     }
 
     const processJob = async ({
       job,
       seq,
       audit,
+      priority,
     }: {
       job: SearchJobResult
       seq: number
       audit: MutableListing
+      priority: CandidatePriority
     }) => {
       try {
         let score = 0
@@ -890,7 +1238,12 @@ export async function runBotSearch(
             flags = evaluation.flags
             resumeMatch = evaluation.resumeMatch ?? null
             hardFiltered = isPreFilterScoringInput(si)
-            scoringInputs = si as unknown as Prisma.InputJsonValue
+            scoringInputs = enrichScoringInputsForAudit(
+              si as unknown as Prisma.InputJsonValue,
+              runProfile,
+              priority,
+              safeSearchProfile
+            )
             evaluated = !hardFiltered
             if (hardFiltered) {
               result.jobsHardFiltered++
@@ -920,6 +1273,9 @@ export async function runBotSearch(
               scoringInputs: {
                 note: 'Evaluator threw before completing.',
                 error: errMsg.slice(0, 2000),
+                ...profileAuditSnapshot(runProfile),
+                ...searchProfileAuditSnapshot(safeSearchProfile),
+                ...priorityAuditSnapshot(priority),
               },
               decisionReason: 'AI evaluation failed — listing not saved.',
               errorMessage: errMsg.slice(0, 4000),
@@ -939,6 +1295,8 @@ export async function runBotSearch(
               flags: [preFilter.flag],
               reasoning: preFilter.reason.slice(0, REASONING_STORE_MAX),
               filterKind: 'hard_filter',
+              priorityScore: priority.score,
+              priorityReasons: priority.reasons,
               jobBoard: job.jobBoard ?? null,
               providerPass: job.providerPass ?? null,
             })
@@ -961,12 +1319,15 @@ export async function runBotSearch(
                 note: 'OPENAI_API_KEY was not set — deterministic pre-filter ran before save.',
                 gateway: 'none',
                 deterministicFilter: preFilter.flag,
+                ...profileAuditSnapshot(runProfile),
+                ...searchProfileAuditSnapshot(safeSearchProfile),
+                ...priorityAuditSnapshot(priority),
               },
               decisionReason: preFilter.reason,
             })
             return
           }
-          scoringInputs = noOpenAiSnapshot()
+          scoringInputs = noOpenAiSnapshot(runProfile, priority, safeSearchProfile)
         }
 
         if ((evaluated || hardFiltered) && !shouldApply) {
@@ -982,6 +1343,8 @@ export async function runBotSearch(
             reasoning: reasoning.slice(0, REASONING_STORE_MAX),
             resumeMatch: resumeMatch ?? undefined,
             filterKind,
+            priorityScore: priority.score,
+            priorityReasons: priority.reasons,
             jobBoard: job.jobBoard ?? null,
             providerPass: job.providerPass ?? null,
           })
@@ -1111,7 +1474,7 @@ export async function runBotSearch(
     if (openAi) {
       pushLog(
         'info',
-        `Running AI evaluation with concurrency=${Math.min(aiEvalConcurrency, jobsToProcess.length || 1)} max=${aiEvalMax}`
+        `Running AI evaluation with concurrency=${Math.min(aiEvalConcurrency, jobsToProcess.length || 1)} for ${jobsToProcess.length} listing(s)`
       )
       await runLimited(jobsToProcess, aiEvalConcurrency, processJob)
     } else {

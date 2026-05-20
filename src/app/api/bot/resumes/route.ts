@@ -4,11 +4,29 @@ import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { cacheTagsFor } from '@/lib/cache-tags'
 import { createClient } from '@supabase/supabase-js'
-import { parseResumePdf } from '@/lib/bot/resume/parser'
+import { parseResumePdf, ResumeParseError } from '@/lib/bot/resume/parser'
+import type { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 120
+
+const botResumeResponseSelect = {
+  id: true,
+  label: true,
+  matchKeywords: true,
+  isDefault: true,
+  fileName: true,
+  fileUrl: true,
+  structuredData: true,
+  createdAt: true,
+} satisfies Prisma.BotResumeSelect
+
+function redactResumeRawText<T extends object>(resume: T) {
+  const safeResume = { ...resume } as T & { rawText?: unknown }
+  delete safeResume.rawText
+  return safeResume
+}
 
 class ResumeUploadError extends Error {
   constructor(
@@ -93,18 +111,11 @@ export async function GET() {
   const resumes = await prisma.botResume.findMany({
     where: { userId: user.id },
     select: {
-      id: true,
-      label: true,
-      matchKeywords: true,
-      isDefault: true,
-      fileName: true,
-      fileUrl: true,
-      structuredData: true,
-      createdAt: true,
+      ...botResumeResponseSelect,
     },
     orderBy: { createdAt: 'asc' },
   })
-  return NextResponse.json(resumes)
+  return NextResponse.json(resumes.map(redactResumeRawText))
 }
 
 // POST /api/bot/resumes — upload a new resume
@@ -164,6 +175,9 @@ export async function POST(req: NextRequest) {
         structured = result.structured
         rawText = result.rawText
       } catch (parseErr) {
+        if (parseErr instanceof ResumeParseError && parseErr.rawText?.trim()) {
+          rawText = parseErr.rawText
+        }
         console.warn('Resume parsing failed (non-fatal):', parseErr instanceof Error ? parseErr.message : parseErr)
       }
     }
@@ -185,15 +199,16 @@ export async function POST(req: NextRequest) {
           fileUrl,
           fileName: file.name,
           rawText,
-          structuredData: structured ? (structured as unknown as import('@prisma/client').Prisma.InputJsonValue) : undefined,
+          structuredData: structured ? (structured as unknown as Prisma.InputJsonValue) : undefined,
         },
+        select: botResumeResponseSelect,
       })
     })
 
     const botTag = cacheTagsFor(user.id).bot
     after(() => revalidateTag(botTag, { expire: 0 }))
 
-    return NextResponse.json(resume)
+    return NextResponse.json(redactResumeRawText(resume))
   } catch (error) {
     if (uploadedPath && supabase) {
       const { error: removeError } = await supabase.storage.from('resume').remove([uploadedPath])

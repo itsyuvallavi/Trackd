@@ -1,8 +1,13 @@
 import { unstable_cache } from 'next/cache'
 import { JobStatus } from '@prisma/client'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getPublicJobTableColumnNames } from '@/lib/prisma-job-columns'
 import { cacheTagsFor } from '@/lib/cache-tags'
+import {
+  profileSourceLabel,
+  type CandidateProfileSourceKind,
+} from '@/lib/bot/profile-source-labels'
 
 /**
  * Hot-path queries cached with `unstable_cache` (the Next 16 path for caching
@@ -14,6 +19,154 @@ import { cacheTagsFor } from '@/lib/cache-tags'
  */
 
 const ONE_MINUTE = 60
+
+const PROFILE_SOURCE_KINDS = [
+  'parsed_resume',
+  'raw_resume_fallback',
+  'application_identity_fallback',
+  'settings_fallback',
+  'none',
+] as const satisfies readonly CandidateProfileSourceKind[]
+
+export type BotRunProfileSourceSummary = {
+  kind: CandidateProfileSourceKind
+  label: string
+  resumeLabel: string | null
+  listings: number
+  applicationIdentitySupplemented: boolean
+  settingsDerivedSignalsUsed: boolean
+  limitations: string[]
+}
+
+type ProfileSourceMetadata = Omit<BotRunProfileSourceSummary, 'listings'>
+
+function recordFromJson(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function stringArrayFromJson(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string')
+}
+
+function isProfileSourceKind(value: unknown): value is CandidateProfileSourceKind {
+  return typeof value === 'string' && PROFILE_SOURCE_KINDS.includes(value as CandidateProfileSourceKind)
+}
+
+function legacyProfileSourceKind(
+  value: unknown,
+  resumeUsed: Record<string, unknown> | null
+): CandidateProfileSourceKind | null {
+  if (isProfileSourceKind(value)) return value
+  if (typeof value !== 'string') return null
+
+  switch (value) {
+    case 'matched_by_keywords':
+    case 'matched_default':
+    case 'uploaded_resume':
+      return resumeUsed?.resumeId || resumeUsed?.label ? 'parsed_resume' : null
+    case 'raw_text':
+    case 'raw_resume':
+      return 'raw_resume_fallback'
+    case 'identity_fallback':
+    case 'application_identity':
+      return 'application_identity_fallback'
+    case 'settings':
+    case 'settings_only':
+      return 'settings_fallback'
+    case 'none':
+      return 'none'
+    default:
+      return null
+  }
+}
+
+export function profileSourceFromScoringInputs(
+  scoringInputs: Prisma.JsonValue | null
+): ProfileSourceMetadata | null {
+  const root = recordFromJson(scoringInputs)
+  if (!root) return null
+
+  const profileSource = recordFromJson(root.profileSource)
+  const resumeUsed = recordFromJson(root.resumeUsed)
+  const rawKind = profileSource?.kind ?? resumeUsed?.sourceKind ?? resumeUsed?.selection
+  const kindValue = legacyProfileSourceKind(rawKind, resumeUsed)
+
+  if (!kindValue) return null
+
+  const label =
+    typeof profileSource?.label === 'string'
+      ? profileSource.label
+      : typeof resumeUsed?.sourceLabel === 'string'
+        ? resumeUsed.sourceLabel
+        : profileSourceLabel(kindValue)
+
+  const legacyLimitations =
+    profileSource || isProfileSourceKind(rawKind)
+      ? []
+      : ['Legacy run metadata did not include full profile-source diagnostics.']
+
+  const resumeLabel =
+    typeof profileSource?.resumeLabel === 'string'
+      ? profileSource.resumeLabel
+      : typeof resumeUsed?.label === 'string'
+        ? resumeUsed.label
+        : null
+
+  return {
+    kind: kindValue,
+    label,
+    resumeLabel,
+    applicationIdentitySupplemented:
+      profileSource?.applicationIdentitySupplemented === true ||
+      resumeUsed?.applicationIdentitySupplemented === true,
+    settingsDerivedSignalsUsed:
+      profileSource?.settingsDerivedSignalsUsed === true ||
+      resumeUsed?.settingsDerivedSignalsUsed === true,
+    limitations: [
+      ...stringArrayFromJson(profileSource?.limitations ?? resumeUsed?.limitations),
+      ...legacyLimitations,
+    ],
+  }
+}
+
+export function summarizeProfileSources(
+  rows: { scoringInputs: Prisma.JsonValue | null }[]
+): BotRunProfileSourceSummary[] {
+  const bySource = new Map<string, BotRunProfileSourceSummary>()
+
+  for (const row of rows) {
+    const source = profileSourceFromScoringInputs(row.scoringInputs)
+    if (!source) continue
+
+    const key = [
+      source.kind,
+      source.label,
+      source.resumeLabel ?? '',
+      String(source.applicationIdentitySupplemented),
+      String(source.settingsDerivedSignalsUsed),
+    ].join(':')
+    const existing = bySource.get(key)
+    if (existing) {
+      existing.listings += 1
+      for (const limitation of source.limitations) {
+        if (!existing.limitations.includes(limitation)) {
+          existing.limitations.push(limitation)
+        }
+      }
+      continue
+    }
+
+    bySource.set(key, {
+      ...source,
+      listings: 1,
+      limitations: [...source.limitations],
+    })
+  }
+
+  return [...bySource.values()].sort((a, b) => b.listings - a.listings)
+}
 
 /**
  * Cached query for email integration.
@@ -501,8 +654,8 @@ export const getBotResumesList = (userId: string) =>
 
 export const getBotRunsList = (userId: string) =>
   unstable_cache(
-    async () =>
-      prisma.botRun.findMany({
+    async () => {
+      const runs = await prisma.botRun.findMany({
         where: { userId },
         orderBy: { startedAt: 'desc' },
         take: 25,
@@ -517,8 +670,20 @@ export const getBotRunsList = (userId: string) =>
           completedAt: true,
           duration: true,
           errors: true,
+          botRunListings: {
+            orderBy: { sequence: 'asc' },
+            select: {
+              scoringInputs: true,
+            },
+          },
         },
-      }),
+      })
+
+      return runs.map(({ botRunListings, ...run }) => ({
+        ...run,
+        profileSources: summarizeProfileSources(botRunListings),
+      }))
+    },
     ['getBotRuns', userId],
     {
       tags: [cacheTagsFor(userId).bot],

@@ -24,10 +24,11 @@ export const BOT_SEARCH_PROVIDER_PASSES_MAX = 10
  */
 export const BOT_SEARCH_RAPIDAPI_CONCURRENCY = 1
 export const BOT_SEARCH_RAPIDAPI_MIN_INTERVAL_MS = 1_100
+export const BOT_SEARCH_RAPIDAPI_MAX_ATTEMPTS = 3
+export const BOT_SEARCH_RAPIDAPI_RETRY_BACKOFF_MS = 5_000
 
 /**
  * AI scoring is the slowest part of a run. Keep it bounded so the production
- * "Run now" action completes instead of leaving BotRun rows stuck RUNNING.
+ * "Run now" action makes steady progress without overloading the model provider.
  */
 export const BOT_SEARCH_AI_EVAL_CONCURRENCY = 3
-export const BOT_SEARCH_AI_EVAL_MAX_PER_RUN = 12

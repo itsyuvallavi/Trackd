@@ -5,8 +5,6 @@
  */
 
 import { getAIClient } from '@/lib/ai/client'
-import { prisma } from '@/lib/prisma'
-import { pickResumeForJob } from './resume/parser'
 import type { LanguageMismatchClampMeta } from './language-mismatch-clamp'
 import {
   applyLanguageMismatchClamp,
@@ -19,10 +17,19 @@ import { applyGeoMismatchClamp } from './geo-mismatch-clamp'
 import type { SeniorityClampMeta } from './seniority-clamp'
 import { applySeniorityClamp } from './seniority-clamp'
 import { buildSmartJdExcerpt, type JdFacts } from './jd-excerpt'
-import type { ApplicationProfile, BotConfig } from '@prisma/client'
+import type { BotConfig } from '@prisma/client'
 import type { SearchJobResult, JobEvaluation } from './types'
 import type { ResumeStructuredData } from './resume/types'
 import { preFilterJob } from './pre-filter'
+import {
+  loadCandidateProfileForEvaluation,
+  resumeString,
+  resumeStringArray,
+  type CandidateProfileSourceMetadata,
+  type CandidateProfile,
+} from './candidate-profile'
+import type { CandidateProfileSourceKind } from './profile-source-labels'
+import { profileSourceLabel } from './profile-source-labels'
 
 const EVALUATOR_MODEL = 'gpt-5-mini'
 
@@ -57,12 +64,19 @@ export type ScoringInputsSnapshot = {
   resumeUsed: {
     resumeId: string | null
     label: string | null
-    selection: ResumeSelection
+    selection: CandidateProfileSourceKind
+    sourceKind: CandidateProfileSourceKind
+    sourceLabel: string
     skillsSentToPrompt: string[]
     summaryIncluded: boolean
     experienceRolesInPrompt: number
     educationRowsInPrompt: number
+    applicationIdentitySupplemented: boolean
+    settingsDerivedSignalsUsed: boolean
+    settingsSignals: string[]
+    limitations: string[]
   }
+  profileSource: CandidateProfileSourceMetadata
   /** Mirrors the JOB LISTING block in the evaluator prompt (description truncated same as prompt). */
   jobBlockSentToModel: {
     title: string
@@ -91,96 +105,11 @@ export type EvaluateJobResult = {
   scoringInputs: ScoringInputsSnapshot
 }
 
-type ResumeSelection = 'matched_by_keywords' | 'identity_fallback' | 'none'
-
-function resumeString(value: unknown, fallback = ''): string {
-  return typeof value === 'string' ? value : fallback
-}
-
-function resumeStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
-}
-
-const KNOWN_SKILL_PATTERNS: Array<[string, RegExp]> = [
-  ['React', /\breact(?:\.js|js)?\b/i],
-  ['Next.js', /\bnext(?:\.js|js)\b/i],
-  ['TypeScript', /\btypescript\b|\bts\b/i],
-  ['JavaScript', /\bjavascript\b|\bjs\b/i],
-  ['Node.js', /\bnode(?:\.js|js)\b/i],
-  ['HTML', /\bhtml5?\b/i],
-  ['CSS', /\bcss3?\b/i],
-  ['Tailwind CSS', /\btailwind\b/i],
-  ['Python', /\bpython\b/i],
-  ['SQL', /\bsql\b/i],
-  ['PostgreSQL', /\bpostgres(?:ql)?\b/i],
-  ['Supabase', /\bsupabase\b/i],
-  ['Firebase', /\bfirebase\b/i],
-  ['Prisma', /\bprisma\b/i],
-  ['GraphQL', /\bgraphql\b/i],
-  ['REST APIs', /\brest(?:ful)?\s+apis?\b|\bapi integrations?\b/i],
-  ['Flutter', /\bflutter\b/i],
-  ['React Native', /\breact native\b/i],
-  ['AWS', /\baws\b|\bamazon web services\b/i],
-  ['Docker', /\bdocker\b/i],
-]
-
-function deriveKnownSkillsFromText(rawText: string | null | undefined): string[] {
-  if (!rawText) return []
-  return KNOWN_SKILL_PATTERNS
-    .filter(([, pattern]) => pattern.test(rawText))
-    .map(([skill]) => skill)
-}
-
-function enrichResumeWithRawText(
-  resume: ResumeStructuredData,
-  rawText: string | null | undefined
-): ResumeStructuredData {
-  const rawSkills = deriveKnownSkillsFromText(rawText)
-  if (rawSkills.length === 0) return resume
-
-  const skills = Array.from(new Set([...resumeStringArray(resume.skills), ...rawSkills]))
-  const rawSignalLine = `Additional parsed resume text signals: ${rawSkills.join(', ')}.`
-  const summary = resume.summary
-    ? resume.summary.includes(rawSignalLine)
-      ? resume.summary
-      : `${resume.summary} ${rawSignalLine}`
-    : rawSignalLine
-
-  return {
-    ...resume,
-    summary,
-    skills,
-  }
-}
-
-function resumeFromRawText(rawText: string | null | undefined, label: string): ResumeStructuredData | null {
-  if (!rawText?.trim()) return null
-  const skills = deriveKnownSkillsFromText(rawText)
-  return {
-    name: 'Candidate',
-    email: '',
-    summary: rawText.trim().slice(0, 1200),
-    skills,
-    languages: [],
-    experience: [
-      {
-        company: label || 'Uploaded resume',
-        title: 'Resume text',
-        startDate: '',
-        endDate: 'Present',
-        description: rawText.trim().slice(0, 1200),
-        achievements: [],
-      },
-    ],
-    education: [],
-    certifications: [],
-  }
-}
-
 function buildEvalPrompt(
   job: SearchJobResult,
   config: BotConfig,
-  resume: ResumeStructuredData | null
+  resume: ResumeStructuredData | null,
+  profileSource: CandidateProfileSourceMetadata
 ): string {
   const userLocations = config.locations.filter(Boolean)
 
@@ -230,9 +159,28 @@ function buildEvalPrompt(
     .filter(Boolean)
     .join('\n')
 
+  const profileSourceNotes = [
+    `Profile source: ${profileSource.label}`,
+    profileSource.resumeId
+      ? `Resume used: ${profileSource.resumeLabel || 'Uploaded resume'} (${profileSource.resumeId})`
+      : null,
+    profileSource.applicationIdentitySupplemented
+      ? 'Application Identity supplements contact, location, and work authorization fields only.'
+      : null,
+    profileSource.settingsDerivedSignalsUsed
+      ? 'Settings-derived role/stack signals are weak fallback hints because no usable Job Search resume content exists; do not treat them as verified resume evidence.'
+      : null,
+    profileSource.limitations.length > 0
+      ? `Limitations: ${profileSource.limitations.join(' ')}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join('\n')
+
   const resumeSection = resume
     ? `
 CANDIDATE RESUME:
+${profileSourceNotes}
 Name: ${resumeString(resume.name, 'Not listed')}
 Skills: ${resumeStringArray(resume.skills).slice(0, 30).join(', ')}
 ${resumeString(resume.summary) ? `Summary: ${resumeString(resume.summary)}` : ''}
@@ -258,7 +206,7 @@ ${(Array.isArray(resume.education) ? resume.education : [])
   })
   .join('\n')}
 `
-    : '\nNo resume uploaded — evaluate based on preferences only.\n'
+    : `\nNo resume uploaded — evaluate based on preferences only.\n${profileSourceNotes}\n`
 
   const jobInfo = [
     `Title: ${job.title}`,
@@ -311,7 +259,7 @@ function buildScoringInputsSnapshot(
   job: SearchJobResult,
   config: BotConfig,
   resume: ResumeStructuredData | null,
-  resumeMeta: { id: string | null; label: string | null; selection: ResumeSelection }
+  profileSource: CandidateProfileSourceMetadata
 ): ScoringInputsSnapshot {
   const jd = buildSmartJdExcerpt(job.description)
   const desc = jd.excerpt
@@ -329,16 +277,23 @@ function buildScoringInputsSnapshot(
       spokenLanguages: [...(config.spokenLanguages ?? [])],
     },
     resumeUsed: {
-      resumeId: resumeMeta.id,
-      label: resumeMeta.label,
-      selection: resumeMeta.selection,
+      resumeId: profileSource.resumeId,
+      label: profileSource.resumeLabel,
+      selection: profileSource.kind,
+      sourceKind: profileSource.kind,
+      sourceLabel: profileSource.label,
       skillsSentToPrompt: resume ? resumeStringArray(resume.skills).slice(0, 30) : [],
       summaryIncluded: !!resume?.summary,
       experienceRolesInPrompt: resume
         ? Math.min(4, Array.isArray(resume.experience) ? resume.experience.length : 0)
         : 0,
       educationRowsInPrompt: resume && Array.isArray(resume.education) ? resume.education.length : 0,
+      applicationIdentitySupplemented: profileSource.applicationIdentitySupplemented,
+      settingsDerivedSignalsUsed: profileSource.settingsDerivedSignalsUsed,
+      settingsSignals: profileSource.settingsSignals,
+      limitations: profileSource.limitations,
     },
+    profileSource,
     jobBlockSentToModel: {
       title: job.title,
       company: job.company,
@@ -354,185 +309,6 @@ function buildScoringInputsSnapshot(
     },
     jdFacts: jd.facts,
   }
-}
-
-type LoadedResume = {
-  resume: ResumeStructuredData | null
-  resumeId: string | null
-  label: string | null
-  selection: ResumeSelection
-}
-
-function hasApplicationProfileData(profile: ApplicationProfile): boolean {
-  return Boolean(
-    profile.applicationFullName ||
-      profile.applicationEmail ||
-      profile.phone ||
-      profile.city ||
-      profile.state ||
-      profile.country ||
-      profile.linkedinUrl ||
-      profile.githubUrl ||
-      profile.portfolioUrl ||
-      profile.workAuthorization ||
-      profile.salaryExpectation ||
-      profile.noticePeriod ||
-      profile.yearsExperience
-  )
-}
-
-function derivePreferenceSkills(config: BotConfig): string[] {
-  const text = `${config.keywords.join(' ')} ${config.experienceLevel ?? ''}`.toLowerCase()
-  const skills = new Set<string>()
-
-  const addIf = (pattern: RegExp, values: string[]) => {
-    if (!pattern.test(text)) return
-    for (const value of values) skills.add(value)
-  }
-
-  addIf(/\breact\b/, ['React', 'Frontend Engineering'])
-  addIf(/\bnext(?:\.js|js)?\b/, ['Next.js', 'React'])
-  addIf(/\bfront(?:end|-end)\b/, ['Frontend Engineering'])
-  addIf(/\bfull\s*stack\b|\bfullstack\b/, ['Full-stack Development'])
-  addIf(/\bnode(?:\.js|js)?\b/, ['Node.js', 'Backend Engineering'])
-  addIf(/\bback(?:end|-end)\b/, ['Backend Engineering'])
-  addIf(/\btypescript\b|\bts\b/, ['TypeScript'])
-  addIf(/\bjavascript\b|\bjs\b/, ['JavaScript'])
-  addIf(/\bpython\b/, ['Python'])
-  addIf(/\bai\b|\bartificial intelligence\b|\bgenai\b|\bgenerative ai\b/, ['AI Engineering'])
-  addIf(/\bmachine learning\b|\bml\b/, ['Machine Learning'])
-  addIf(/\bdata\b/, ['Data'])
-
-  return [...skills]
-}
-
-function buildIdentityFallbackResume(
-  profile: ApplicationProfile,
-  config: BotConfig
-): ResumeStructuredData | null {
-  if (!hasApplicationProfileData(profile)) {
-    return null
-  }
-
-  const location = [profile.city, profile.state, profile.country]
-    .map((part) => part?.trim())
-    .filter((part): part is string => Boolean(part))
-    .join(', ')
-
-  const preferenceSkills = derivePreferenceSkills(config)
-
-  const summaryParts = [
-    'No parsed resume is available; this profile is built from application identity fields and search preferences.',
-    profile.yearsExperience ? `Reported experience: ${profile.yearsExperience} years` : null,
-    config.experienceLevel ? `Preferred seniority: ${config.experienceLevel}` : null,
-    config.keywords.length > 0 ? `Target roles: ${config.keywords.join(', ')}` : null,
-    preferenceSkills.length > 0
-      ? `Preference-derived role/stack signals: ${preferenceSkills.join(', ')}`
-      : null,
-    profile.workAuthorization ? `Work authorization: ${profile.workAuthorization}` : null,
-    profile.requiresSponsorship ? 'Requires visa sponsorship' : 'Does not require visa sponsorship',
-    profile.salaryExpectation ? `Salary expectation: ${profile.salaryExpectation}` : null,
-    profile.noticePeriod ? `Notice period: ${profile.noticePeriod}` : null,
-  ].filter(Boolean)
-
-  const experienceDescription = [
-    profile.yearsExperience ? `Candidate reported ${profile.yearsExperience} years of experience.` : null,
-    config.keywords.length > 0 ? `Target roles from settings: ${config.keywords.join(', ')}.` : null,
-    preferenceSkills.length > 0
-      ? `Role/stack signals derived from settings: ${preferenceSkills.join(', ')}.`
-      : null,
-    config.experienceLevel ? `Preferred experience level: ${config.experienceLevel}.` : null,
-  ]
-    .filter(Boolean)
-    .join(' ')
-
-  return {
-    name: profile.applicationFullName || 'Candidate',
-    email: profile.applicationEmail || '',
-    phone: profile.phone || undefined,
-    location: location || undefined,
-    linkedin: profile.linkedinUrl || undefined,
-    github: profile.githubUrl || undefined,
-    portfolio: profile.portfolioUrl || undefined,
-    summary: summaryParts.join(' '),
-    skills: preferenceSkills,
-    languages: config.spokenLanguages ?? [],
-    experience: experienceDescription
-      ? [
-          {
-            company: 'Application identity',
-            title: config.experienceLevel ? `${config.experienceLevel} candidate profile` : 'Candidate profile',
-            startDate: '',
-            endDate: 'Present',
-            description: experienceDescription,
-            achievements: [],
-          },
-        ]
-      : [],
-    education: [],
-    certifications: [],
-  }
-}
-
-async function loadResumeForEvaluation(
-  userId: string,
-  jobTitle: string,
-  config: BotConfig
-): Promise<LoadedResume> {
-  try {
-    const resumes = await prisma.botResume.findMany({
-      where: { userId },
-      select: {
-        id: true,
-        label: true,
-        matchKeywords: true,
-        isDefault: true,
-        structuredData: true,
-        rawText: true,
-      },
-    })
-
-    if (resumes.length > 0) {
-      const bestId = pickResumeForJob(resumes, jobTitle)
-      const matched = resumes.find((r) => r.id === bestId)
-      if (matched?.structuredData) {
-        const structured = matched.structuredData as unknown as ResumeStructuredData
-        return {
-          resume: enrichResumeWithRawText(structured, matched.rawText),
-          resumeId: matched.id,
-          label: matched.label,
-          selection: 'matched_by_keywords',
-        }
-      }
-      if (matched?.rawText) {
-        const rawResume = resumeFromRawText(matched.rawText, matched.label)
-        if (rawResume) {
-          return {
-            resume: rawResume,
-            resumeId: matched.id,
-            label: matched.label,
-            selection: 'matched_by_keywords',
-          }
-        }
-      }
-    }
-
-    const profile = await prisma.applicationProfile.findUnique({ where: { userId } })
-    if (profile) {
-      const fallbackResume = buildIdentityFallbackResume(profile, config)
-      if (fallbackResume) {
-        return {
-          resume: fallbackResume,
-          resumeId: null,
-          label: 'Application identity',
-          selection: 'identity_fallback',
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('[evaluator] Could not load resumes:', err instanceof Error ? err.message : err)
-  }
-  return { resume: null, resumeId: null, label: null, selection: 'none' }
 }
 
 function parseEvaluatorJson(raw: string): Partial<JobEvaluation> & { resumeMatch?: string } {
@@ -579,52 +355,86 @@ async function requestEvaluatorJson(
   }
 }
 
-export async function evaluateJob(job: SearchJobResult, config: BotConfig): Promise<EvaluateJobResult> {
-  // ── Deterministic pre-filter (runs before the LLM) ──────────────────────
-  // Hard yes/no rules that are 100% reliable. The LLM is unreliable for
-  // geography and seniority checks — code is not.
-  const preFilter = preFilterJob(job, config)
-  if (preFilter.rejected) {
-    const evaluation: JobEvaluation = {
-      score: preFilter.score,
-      reasoning: preFilter.reason,
-      shouldApply: false,
-      flags: [preFilter.flag],
-    }
-    // Build minimal scoringInputs for audit trail (no resume load needed)
-    const minimalInputs: ScoringInputsSnapshot = {
-      model: 'pre-filter',
-      minScoreThreshold: config.minScore,
-      userPreferences: {
-        keywords: [...config.keywords],
-        locations: [...config.locations],
-        remoteOnly: config.remoteOnly,
-        experienceLevel: config.experienceLevel ?? null,
-        salaryMin: config.salaryMin ?? null,
-        excludeCompanies: [...config.excludeCompanies],
-        excludeKeywords: [...config.excludeKeywords],
-        spokenLanguages: [...(config.spokenLanguages ?? [])],
-      },
-      resumeUsed: { resumeId: null, label: null, selection: 'none', skillsSentToPrompt: [], summaryIncluded: false, experienceRolesInPrompt: 0, educationRowsInPrompt: 0 },
-      jobBlockSentToModel: {
-        title: job.title,
-        company: job.company,
-        location: job.location || 'Not specified',
-        remote: job.is_remote ? 'Yes' : job.is_remote === false ? 'No' : 'Not specified',
-        salaryLine: 'Not listed',
-        jobType: job.job_type || 'Not specified',
-        descriptionCharCount: (job.description || '').length,
-        descriptionPreview: '',
-      },
-    }
-    return { evaluation, scoringInputs: minimalInputs }
+function emptyProfileSource(kind: CandidateProfileSourceKind = 'none'): CandidateProfileSourceMetadata {
+  return {
+    kind,
+    label: profileSourceLabel(kind),
+    resumeId: null,
+    resumeLabel: null,
+    parsedResumeUsed: false,
+    rawResumeTextUsed: false,
+    applicationIdentitySupplemented: false,
+    settingsDerivedSignalsUsed: false,
+    settingsSignals: [],
+    limitations: [],
   }
+}
 
+function buildPreFilterEvaluationResult(
+  job: SearchJobResult,
+  config: BotConfig,
+  preFilter: Extract<ReturnType<typeof preFilterJob>, { rejected: true }>
+): EvaluateJobResult {
+  const evaluation: JobEvaluation = {
+    score: preFilter.score,
+    reasoning: preFilter.reason,
+    shouldApply: false,
+    flags: [preFilter.flag],
+  }
+  // Build minimal scoringInputs for audit trail (no resume load needed)
+  const profileSource = emptyProfileSource()
+  const minimalInputs: ScoringInputsSnapshot = {
+    model: 'pre-filter',
+    minScoreThreshold: config.minScore,
+    userPreferences: {
+      keywords: [...config.keywords],
+      locations: [...config.locations],
+      remoteOnly: config.remoteOnly,
+      experienceLevel: config.experienceLevel ?? null,
+      salaryMin: config.salaryMin ?? null,
+      excludeCompanies: [...config.excludeCompanies],
+      excludeKeywords: [...config.excludeKeywords],
+      spokenLanguages: [...(config.spokenLanguages ?? [])],
+    },
+    resumeUsed: {
+      resumeId: null,
+      label: null,
+      selection: 'none',
+      sourceKind: 'none',
+      sourceLabel: profileSource.label,
+      skillsSentToPrompt: [],
+      summaryIncluded: false,
+      experienceRolesInPrompt: 0,
+      educationRowsInPrompt: 0,
+      applicationIdentitySupplemented: false,
+      settingsDerivedSignalsUsed: false,
+      settingsSignals: [],
+      limitations: [],
+    },
+    profileSource,
+    jobBlockSentToModel: {
+      title: job.title,
+      company: job.company,
+      location: job.location || 'Not specified',
+      remote: job.is_remote ? 'Yes' : job.is_remote === false ? 'No' : 'Not specified',
+      salaryLine: 'Not listed',
+      jobType: job.job_type || 'Not specified',
+      descriptionCharCount: (job.description || '').length,
+      descriptionPreview: '',
+    },
+  }
+  return { evaluation, scoringInputs: minimalInputs }
+}
+
+async function evaluateJobWithResolvedProfile(
+  job: SearchJobResult,
+  config: BotConfig,
+  candidateProfile: CandidateProfile
+): Promise<EvaluateJobResult> {
   const ai = getAIClient()
-  const { resume, resumeId, label, selection } = await loadResumeForEvaluation(config.userId, job.title, config)
-  const resumeMeta = { id: resumeId, label, selection }
-  const prompt = buildEvalPrompt(job, config, resume)
-  const scoringInputs = buildScoringInputsSnapshot(job, config, resume, resumeMeta)
+  const { resume, source } = candidateProfile
+  const prompt = buildEvalPrompt(job, config, resume, source)
+  const scoringInputs = buildScoringInputsSnapshot(job, config, resume, source)
   const parsed = await requestEvaluatorJson(ai, prompt)
 
   const score =
@@ -687,4 +497,30 @@ export async function evaluateJob(job: SearchJobResult, config: BotConfig): Prom
     evaluation,
     scoringInputs: scoringInputsFinal,
   }
+}
+
+export async function evaluateJobWithCandidateProfile(
+  job: SearchJobResult,
+  config: BotConfig,
+  candidateProfile: CandidateProfile
+): Promise<EvaluateJobResult> {
+  const preFilter = preFilterJob(job, config)
+  if (preFilter.rejected) {
+    return buildPreFilterEvaluationResult(job, config, preFilter)
+  }
+
+  return evaluateJobWithResolvedProfile(job, config, candidateProfile)
+}
+
+export async function evaluateJob(job: SearchJobResult, config: BotConfig): Promise<EvaluateJobResult> {
+  // ── Deterministic pre-filter (runs before the LLM) ──────────────────────
+  // Hard yes/no rules that are 100% reliable. The LLM is unreliable for
+  // geography and seniority checks — code is not.
+  const preFilter = preFilterJob(job, config)
+  if (preFilter.rejected) {
+    return buildPreFilterEvaluationResult(job, config, preFilter)
+  }
+
+  const candidateProfile = await loadCandidateProfileForEvaluation(config.userId, job.title, config)
+  return evaluateJobWithResolvedProfile(job, config, candidateProfile)
 }

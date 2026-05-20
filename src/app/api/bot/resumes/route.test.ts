@@ -10,10 +10,20 @@ const mocks = vi.hoisted(() => ({
   upload: vi.fn(),
   getPublicUrl: vi.fn(),
   remove: vi.fn(),
+  findMany: vi.fn(),
   transaction: vi.fn(),
   updateMany: vi.fn(),
   create: vi.fn(),
   parseResumePdf: vi.fn(),
+  ResumeParseError: class ResumeParseError extends Error {
+    constructor(
+      message: string,
+      readonly rawText: string | null = null,
+    ) {
+      super(message)
+      this.name = 'ResumeParseError'
+    }
+  },
 }))
 
 vi.mock('next/server', async (importOriginal) => {
@@ -34,6 +44,9 @@ vi.mock('@/lib/auth', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    botResume: {
+      findMany: mocks.findMany,
+    },
     $transaction: mocks.transaction,
   },
 }))
@@ -44,9 +57,10 @@ vi.mock('@supabase/supabase-js', () => ({
 
 vi.mock('@/lib/bot/resume/parser', () => ({
   parseResumePdf: mocks.parseResumePdf,
+  ResumeParseError: mocks.ResumeParseError,
 }))
 
-import { POST } from './route'
+import { GET, POST } from './route'
 
 function requestWithResume(input: {
   fileName?: string
@@ -97,19 +111,17 @@ describe('POST /api/bot/resumes', () => {
       data: { publicUrl: 'https://trackd.supabase.co/storage/v1/object/public/resume/bot-resumes/user_1/file.pdf' },
     })
     mocks.remove.mockResolvedValue({ error: null })
+    mocks.findMany.mockResolvedValue([])
     mocks.updateMany.mockResolvedValue({ count: 1 })
     mocks.create.mockResolvedValue({
       id: 'resume_1',
-      userId: 'user_1',
       label: 'Software Engineer',
       matchKeywords: ['engineer', 'frontend'],
       isDefault: true,
       fileUrl: 'https://trackd.supabase.co/storage/v1/object/public/resume/bot-resumes/user_1/file.pdf',
       fileName: 'My Resume.pdf',
-      rawText: null,
       structuredData: null,
       createdAt: new Date('2026-05-16T00:00:00.000Z'),
-      updatedAt: new Date('2026-05-16T00:00:00.000Z'),
     })
     mocks.transaction.mockImplementation(async (callback) =>
       callback({
@@ -179,7 +191,112 @@ describe('POST /api/bot/resumes', () => {
         fileName: 'My Resume (Final).pdf',
         isDefault: true,
       }),
+      select: expect.not.objectContaining({ rawText: true }),
     })
+  })
+
+  it('persists parsed structured data and raw text for the authenticated user without returning raw text', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-openai-key')
+    mocks.requireAuth.mockResolvedValue({ id: 'user_2' })
+    mocks.getPublicUrl.mockReturnValue({
+      data: { publicUrl: 'https://trackd.supabase.co/storage/v1/object/public/resume/bot-resumes/user_2/file.pdf' },
+    })
+
+    const structuredData = {
+      name: 'Ada Candidate',
+      email: 'ada@example.test',
+      skills: ['React', 'TypeScript'],
+      experience: [],
+      education: [],
+      summary: 'Frontend engineer',
+    }
+    const rawText = 'Sensitive raw resume text with phone and address'
+
+    mocks.parseResumePdf.mockResolvedValue({ structured: structuredData, rawText })
+    mocks.create.mockImplementation(async ({ data }) => ({
+      id: 'resume_2',
+      label: data.label,
+      matchKeywords: data.matchKeywords,
+      isDefault: data.isDefault,
+      fileUrl: data.fileUrl,
+      fileName: data.fileName,
+      structuredData: data.structuredData,
+      createdAt: new Date('2026-05-17T00:00:00.000Z'),
+      rawText: data.rawText,
+    }))
+
+    const response = await POST(requestWithResume({
+      fileName: 'Ada Resume.pdf',
+      label: 'Frontend',
+      matchKeywords: 'React, TypeScript',
+      isDefault: false,
+    }))
+    const body = await response.json()
+    const createArgs = mocks.create.mock.calls[0]?.[0]
+
+    expect(response.status).toBe(200)
+    expect(mocks.parseResumePdf).toHaveBeenCalledWith(expect.any(Buffer), 'Ada Resume.pdf')
+    expect(mocks.upload).toHaveBeenCalledWith(
+      expect.stringMatching(/^bot-resumes\/user_2\/\d+-Ada_Resume.pdf$/),
+      expect.any(Buffer),
+      { contentType: 'application/pdf', upsert: false },
+    )
+    expect(createArgs.data).toEqual(expect.objectContaining({
+      userId: 'user_2',
+      label: 'Frontend',
+      matchKeywords: ['React', 'TypeScript'],
+      isDefault: false,
+      rawText,
+      structuredData,
+    }))
+    expect(createArgs.select).not.toHaveProperty('rawText')
+    expect(body).toMatchObject({
+      id: 'resume_2',
+      label: 'Frontend',
+      structuredData,
+    })
+    expect(body).not.toHaveProperty('rawText')
+    expect(JSON.stringify(body)).not.toContain(rawText)
+    expect(mocks.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('persists raw fallback text when structured parsing fails after text extraction', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-openai-key')
+    const fallbackText = 'Extracted resume text mentions React, TypeScript, and customer workflows.'
+
+    mocks.parseResumePdf.mockRejectedValue(
+      new mocks.ResumeParseError('Could not parse resume JSON', fallbackText),
+    )
+    mocks.create.mockImplementation(async ({ data }) => ({
+      id: 'resume_raw_fallback',
+      label: data.label,
+      matchKeywords: data.matchKeywords,
+      isDefault: data.isDefault,
+      fileUrl: data.fileUrl,
+      fileName: data.fileName,
+      structuredData: data.structuredData ?? null,
+      createdAt: new Date('2026-05-17T00:00:00.000Z'),
+      rawText: data.rawText,
+    }))
+
+    const response = await POST(requestWithResume({ label: 'Raw fallback' }))
+    const body = await response.json()
+    const createArgs = mocks.create.mock.calls[0]?.[0]
+
+    expect(response.status).toBe(200)
+    expect(createArgs.data).toEqual(expect.objectContaining({
+      userId: 'user_1',
+      label: 'Raw fallback',
+      rawText: fallbackText,
+      structuredData: undefined,
+    }))
+    expect(body).toMatchObject({
+      id: 'resume_raw_fallback',
+      label: 'Raw fallback',
+      structuredData: null,
+    })
+    expect(body).not.toHaveProperty('rawText')
+    expect(JSON.stringify(body)).not.toContain(fallbackText)
   })
 
   it('removes the uploaded file when the database write fails', async () => {
@@ -194,5 +311,49 @@ describe('POST /api/bot/resumes', () => {
     expect(mocks.remove).toHaveBeenCalledWith([
       expect.stringMatching(/^bot-resumes\/user_1\/\d+-My_Resume.pdf$/),
     ])
+  })
+})
+
+describe('GET /api/bot/resumes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.requireAuth.mockResolvedValue({ id: 'user_get' })
+  })
+
+  it('queries only the authenticated user and returns resumes without raw text', async () => {
+    const rawText = 'Sensitive GET raw resume text'
+    mocks.findMany.mockResolvedValue([
+      {
+        id: 'resume_get_1',
+        label: 'Frontend',
+        matchKeywords: ['React'],
+        isDefault: true,
+        fileName: 'frontend.pdf',
+        fileUrl: 'https://trackd.test/resume.pdf',
+        structuredData: { name: 'Ada Candidate' },
+        createdAt: new Date('2026-05-18T00:00:00.000Z'),
+        rawText,
+      },
+    ])
+
+    const response = await GET()
+    const body = await response.json()
+    const findManyArgs = mocks.findMany.mock.calls[0]?.[0]
+
+    expect(response.status).toBe(200)
+    expect(findManyArgs).toEqual({
+      where: { userId: 'user_get' },
+      select: expect.not.objectContaining({ rawText: true }),
+      orderBy: { createdAt: 'asc' },
+    })
+    expect(findManyArgs.select).not.toHaveProperty('rawText')
+    expect(body).toHaveLength(1)
+    expect(body[0]).toMatchObject({
+      id: 'resume_get_1',
+      label: 'Frontend',
+      structuredData: { name: 'Ada Candidate' },
+    })
+    expect(body[0]).not.toHaveProperty('rawText')
+    expect(JSON.stringify(body)).not.toContain(rawText)
   })
 })

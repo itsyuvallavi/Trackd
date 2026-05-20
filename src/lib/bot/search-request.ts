@@ -1,6 +1,7 @@
 import type { BotConfig } from '@prisma/client'
 import { BOT_SEARCH_RESULTS_WANTED } from './search-constants'
 import type { SearchRequest } from './types'
+import type { SafeSearchProfile } from './search-profile'
 
 type BotSearchRequestConfig = Pick<
   BotConfig,
@@ -12,9 +13,14 @@ type BotSearchRequestConfig = Pick<
   | 'experienceLevel'
 >
 
-export function buildBotSearchRequest(botConfig: BotSearchRequestConfig): SearchRequest {
+export function buildBotSearchRequest(
+  botConfig: BotSearchRequestConfig,
+  safeSearchProfile?: Pick<SafeSearchProfile, 'terms'> | null
+): SearchRequest {
+  const safeTerms = safeSearchProfile?.terms.map((term) => term.trim()).filter(Boolean) ?? []
+
   return {
-    keywords: botConfig.keywords,
+    keywords: safeTerms.length > 0 ? safeTerms : botConfig.keywords,
     locations: botConfig.locations.length > 0 ? botConfig.locations : ['Remote'],
     remote_only: botConfig.remoteOnly,
     exclude_companies: botConfig.excludeCompanies,

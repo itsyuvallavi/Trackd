@@ -64,6 +64,8 @@ export interface SearchMeta {
     jobs_search_api?: string[]
     reason?: string
   }
+  /** Recoverable provider retries by provider/location/term pass key. */
+  provider_retries?: Record<string, number>
   query_strategy?: string
   /** Counts by `job.source` after all platforms merged, before exclude filters and dedup. */
   by_source_raw: Record<string, number>
@@ -110,6 +112,8 @@ export interface EvaluationSkipAudit {
   reasoning: string
   resumeMatch?: string
   filterKind?: 'hard_filter' | 'ai_score' | 'eval_budget'
+  priorityScore?: number
+  priorityReasons?: string[]
   jobBoard?: string | null
   providerPass?: SearchProviderPassMeta | null
 }

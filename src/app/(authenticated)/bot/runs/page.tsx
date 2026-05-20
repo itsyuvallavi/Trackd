@@ -20,7 +20,7 @@ export default async function BotRunsPage() {
       <header className="mb-5">
         <h2 className="text-xl font-semibold tracking-tight">Recent runs</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Latest searches with pipeline counts and AI skip reasoning.
+          Latest searches with pipeline counts, scoring profile source, and AI skip reasoning.
         </p>
       </header>
       <BotRunsPanel runs={serializeForClient(recentRunsSafe)} />

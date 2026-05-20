@@ -25,6 +25,8 @@
     "test:bot:dry": "bun run scripts/test-bot-search.ts --dry-run",
     "test:bot:snap": "bun run scripts/test-bot-search.ts --dry-run --save-snapshot",
     "test:bot:replay": "bun run scripts/test-bot-search.ts --dry-run --from-snapshot",
+    "test:bot:eval": "tsx scripts/run-bot-eval-suite.ts",
+    "test:bot:e2e": "tsx scripts/run-bot-e2e-dogfood.ts",
     "test:routes": "tsx scripts/smoke-routes.ts",
     "check:google-auth": "tsx scripts/check-google-auth-config.ts",
     "bot:us-report": "bun run scripts/bot-jobs-us-report.ts",

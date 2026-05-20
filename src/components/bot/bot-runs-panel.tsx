@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import type { BotRun, BotRunStatus } from '@prisma/client'
 import { cn } from '@/lib/utils'
+import type { BotRunProfileSourceSummary } from '@/lib/cached-queries'
 
 type BotRunRow = Pick<
   BotRun,
@@ -16,7 +18,9 @@ type BotRunRow = Pick<
   | 'completedAt'
   | 'duration'
   | 'errors'
->
+> & {
+  profileSources?: BotRunProfileSourceSummary[]
+}
 
 interface BotRunsPanelProps {
   runs: BotRunRow[]
@@ -36,7 +40,9 @@ type EvaluationSkipRow = {
   minScore: number
   flags: string[]
   reasoning: string
-  filterKind: 'hard_filter' | 'ai_score'
+  filterKind: 'hard_filter' | 'ai_score' | 'eval_budget'
+  priorityScore: number | null
+  priorityReasons: string[]
   jobBoard: string | null
   providerPass: {
     providerQuery?: string
@@ -68,6 +74,7 @@ function evaluationSkipsFromRun(
       ? o.flags.filter((f): f is string => typeof f === 'string')
       : []
     const rawKind = typeof o.filterKind === 'string' ? o.filterKind : null
+    const isBudgetSkip = rawKind === 'eval_budget' || flags.includes('eval_budget')
     const inferredHardFilter =
       rawKind === 'hard_filter' ||
       (!rawKind &&
@@ -84,7 +91,11 @@ function evaluationSkipsFromRun(
       minScore: o.minScore,
       flags,
       reasoning,
-      filterKind: inferredHardFilter ? 'hard_filter' : 'ai_score',
+      filterKind: isBudgetSkip ? 'eval_budget' : inferredHardFilter ? 'hard_filter' : 'ai_score',
+      priorityScore: typeof o.priorityScore === 'number' ? o.priorityScore : null,
+      priorityReasons: Array.isArray(o.priorityReasons)
+        ? o.priorityReasons.filter((f): f is string => typeof f === 'string')
+        : [],
       jobBoard: typeof o.jobBoard === 'string' ? o.jobBoard : null,
       providerPass,
     })
@@ -111,6 +122,76 @@ function evaluationFailuresFromRun(
     })
   }
   return out
+}
+
+function profileSourceBadgeClass(source: BotRunProfileSourceSummary): string {
+  switch (source.kind) {
+    case 'parsed_resume':
+      return 'border-success/25 bg-success-bg text-success-text'
+    case 'none':
+      return 'border-error/25 bg-error-bg/50 text-error-text'
+    case 'raw_resume_fallback':
+    case 'application_identity_fallback':
+    case 'settings_fallback':
+      return 'border-warning/25 bg-warning-bg text-warning-text'
+  }
+}
+
+function isLimitedProfileSource(source: BotRunProfileSourceSummary): boolean {
+  return source.kind !== 'parsed_resume'
+}
+
+function profileSourceDetail(source: BotRunProfileSourceSummary): string | null {
+  if (source.limitations.length > 0) return source.limitations[0]
+  if (source.applicationIdentitySupplemented) return 'Application Identity supplemented scoring context.'
+  if (source.settingsDerivedSignalsUsed) return 'Settings-derived signals were used as fallback context.'
+  return null
+}
+
+function ProfileSourceSummary({
+  sources,
+}: {
+  sources: BotRunProfileSourceSummary[]
+}) {
+  if (sources.length === 0) return null
+
+  const limited = sources.some(isLimitedProfileSource)
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+      <span className="font-medium text-foreground/80">Scoring profile</span>
+      {sources.map((source) => {
+        const detail = profileSourceDetail(source)
+        return (
+          <span
+            key={`${source.kind}-${source.label}-${source.resumeLabel ?? 'none'}`}
+            className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5"
+          >
+            <span
+              className={cn(
+                'inline-flex items-center rounded-full border px-2 py-0.5 font-medium',
+                profileSourceBadgeClass(source)
+              )}
+              title={detail ?? undefined}
+            >
+              {source.label}
+              {source.resumeLabel ? ` · ${source.resumeLabel}` : ''}
+              {source.listings > 1 ? ` · ${source.listings} listings` : ''}
+            </span>
+            {detail && <span>{detail}</span>}
+          </span>
+        )
+      })}
+      {limited && (
+        <Link
+          href="/bot/resumes"
+          className="font-medium underline underline-offset-2 hover:text-foreground"
+        >
+          Review resumes
+        </Link>
+      )}
+    </div>
+  )
 }
 
 function StatusBadge({ status }: { status: BotRunStatus }) {
@@ -164,8 +245,10 @@ export function BotRunsPanel({ runs }: BotRunsPanelProps) {
           const pipeline = pipelineSummaryFromRun(run.errors)
           const evalSkips = evaluationSkipsFromRun(run.errors)
           const hardFilterSkips = evalSkips.filter((s) => s.filterKind === 'hard_filter')
-          const aiScoreSkips = evalSkips.filter((s) => s.filterKind !== 'hard_filter')
+          const budgetSkips = evalSkips.filter((s) => s.filterKind === 'eval_budget')
+          const aiScoreSkips = evalSkips.filter((s) => s.filterKind === 'ai_score')
           const evalFailures = evaluationFailuresFromRun(run.errors)
+          const profileSources = run.profileSources ?? []
           return (
             <div key={run.id} className="px-5 py-3 space-y-1.5">
               <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -184,6 +267,7 @@ export function BotRunsPanel({ runs }: BotRunsPanelProps) {
                   </span>
                 )}
               </div>
+              <ProfileSourceSummary sources={profileSources} />
               {pipeline && (
                 <p
                   className="text-[10px] font-mono text-muted-foreground leading-snug break-all"
@@ -211,6 +295,46 @@ export function BotRunsPanel({ runs }: BotRunsPanelProps) {
                           Filtered before scoring · Score {s.score}/{s.minScore}
                           {s.flags.length > 0 ? ` · ${s.flags.join(', ')}` : ''}
                         </p>
+                        {(s.jobBoard || s.providerPass?.providerQuery) && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {s.jobBoard ? `Board ${s.jobBoard}` : 'Provider pass'}
+                            {s.providerPass?.providerQuery ? ` · "${s.providerPass.providerQuery}"` : ''}
+                            {s.providerPass?.location ? ` · ${s.providerPass.location}` : ''}
+                          </p>
+                        )}
+                        <p className="text-[11px] leading-snug text-foreground/90 mt-1">
+                          {s.reasoning}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+              {budgetSkips.length > 0 && (
+                <details className="text-xs group">
+                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
+                    Budget skipped {budgetSkips.length} after deterministic ranking — show
+                    signals
+                  </summary>
+                  <ul className="mt-2 space-y-3 border-l-2 border-border pl-3 max-h-64 overflow-y-auto">
+                    {budgetSkips.map((s, i) => (
+                      <li key={`${run.id}-budget-skip-${i}`}>
+                        <p className="font-medium text-foreground leading-tight">
+                          {s.title}{' '}
+                          <span className="text-muted-foreground font-normal">
+                            @ {s.company}
+                          </span>
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
+                          Not AI scored
+                          {s.priorityScore != null ? ` · Rank ${s.priorityScore}` : ''}
+                          {s.flags.length > 0 ? ` · ${s.flags.join(', ')}` : ''}
+                        </p>
+                        {s.priorityReasons.length > 0 && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Signals: {s.priorityReasons.join(', ')}
+                          </p>
+                        )}
                         {(s.jobBoard || s.providerPass?.providerQuery) && (
                           <p className="text-[11px] text-muted-foreground mt-0.5">
                             {s.jobBoard ? `Board ${s.jobBoard}` : 'Provider pass'}

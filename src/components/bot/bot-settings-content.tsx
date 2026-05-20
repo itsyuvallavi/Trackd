@@ -47,6 +47,7 @@ interface BotSettingsContentProps {
   telegramConfigured: boolean
   searchServiceConfigured: boolean
   searchBackends: BotSearchBackends
+  safeResumeSearchTerms?: string[]
   searchUiCaps?: BotSearchUiCaps | null
 }
 
@@ -55,6 +56,7 @@ export function BotSettingsContent({
   telegramConfigured,
   searchServiceConfigured,
   searchBackends,
+  safeResumeSearchTerms = [],
   searchUiCaps,
 }: BotSettingsContentProps) {
   const caps = searchUiCaps ?? defaultSearchUiCaps()
@@ -156,6 +158,7 @@ export function BotSettingsContent({
       salaryMinUsd: salaryParsed,
       minScore,
       backends: searchBackends,
+      safeResumeSearchTerms,
       caps,
     })
   }, [
@@ -168,6 +171,7 @@ export function BotSettingsContent({
     salaryMin,
     minScore,
     searchBackends,
+    safeResumeSearchTerms,
     caps,
   ])
 
@@ -487,6 +491,13 @@ export function BotSettingsContent({
                   {searchPreview.providerSearchTerms.join(' · ') || searchPreview.keywordQuery}
                 </span>
               </KVRow>
+              {safeResumeSearchTerms.length > 0 && (
+                <KVRow label="Resume search terms">
+                  <span className="text-xs">
+                    {safeResumeSearchTerms.slice(0, caps.keywordOrMax).join(' · ')}
+                  </span>
+                </KVRow>
+              )}
               {searchPreview.locationRuns.length > 0 && (
                 <KVRow label={`Location passes (per keyword, up to ${caps.locationPassesMax})`}>
                   <span className="text-xs">

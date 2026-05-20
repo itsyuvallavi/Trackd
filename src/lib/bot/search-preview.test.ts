@@ -52,6 +52,50 @@ describe('buildBotSearchPreview', () => {
     expect(preview.jobsSearchPhrase).toBe('remote')
   })
 
+  it('refines broad developer keywords into provider terms with stronger stack intent', () => {
+    const preview = buildBotSearchPreview({
+      ...baseInput(),
+      keywords: ['Fullstack Developer', 'React Developer', 'Frontend Developer', 'AI Engineer'],
+      locations: ['Remote'],
+      remoteOnly: false,
+      experienceLevelRaw: '',
+    })
+
+    expect(preview.keywordQuery).toBe(
+      'Full Stack Engineer OR React TypeScript Developer OR Frontend Engineer OR LLM Engineer'
+    )
+    expect(preview.providerSearchTerms).toEqual([
+      'Full Stack Engineer remote',
+      'React TypeScript Developer remote',
+      'Frontend Engineer remote',
+      'LLM Engineer remote',
+    ])
+  })
+
+  it('previews resume-derived safe search terms instead of raw saved keywords', () => {
+    const preview = buildBotSearchPreview({
+      ...baseInput(),
+      keywords: ['React Developer'],
+      safeResumeSearchTerms: [
+        'React TypeScript Developer',
+        'Next.js Frontend Engineer',
+        'LLM Engineer',
+      ],
+      locations: ['Remote Europe'],
+      remoteOnly: true,
+      experienceLevelRaw: '',
+    })
+
+    expect(preview.keywordQuery).toBe(
+      'React TypeScript Developer OR Next.js Frontend Engineer'
+    )
+    expect(preview.providerSearchTerms).toEqual([
+      'React TypeScript Developer remote Europe',
+      'Next.js Frontend Engineer remote Europe',
+    ])
+    expect(preview.jobsSearchPhrase).not.toContain('React Developer')
+  })
+
   it('exposes capped provider passes with balanced keyword and location coverage', () => {
     const preview = buildBotSearchPreview({
       ...baseInput(),

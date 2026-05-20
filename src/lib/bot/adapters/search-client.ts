@@ -18,8 +18,10 @@ import type {
   SearchProviderPassMeta,
 } from '../types'
 import {
+  BOT_SEARCH_RAPIDAPI_MAX_ATTEMPTS,
   BOT_SEARCH_RAPIDAPI_MIN_INTERVAL_MS,
   BOT_SEARCH_RAPIDAPI_CONCURRENCY,
+  BOT_SEARCH_RAPIDAPI_RETRY_BACKOFF_MS,
   BOT_SEARCH_RESULTS_WANTED,
 } from '../search-constants'
 import { buildBotSearchPassPlan, type BotSearchProviderPass } from '../search-plan'
@@ -65,6 +67,10 @@ function rapidApiTerminalFailure(error: string): boolean {
   if (/no longer providing|professionalnetworkdata/i.test(error)) return true
   if (/\b403\b/.test(error) && /not subscribed|forbidden/i.test(error)) return true
   return false
+}
+
+function rapidApiRecoverableFailure(error: string): boolean {
+  return /\b429\b|rate limit|too many requests|timeout|timed out|aborted|etimedout|econnreset/i.test(error)
 }
 
 async function runLimited<T>(
@@ -116,8 +122,11 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
   let skipJobsSearchApi = false
   let executedPasses = 0
   let lastJobsSearchApiStartedAt = 0
+  const providerRetries: Record<string, number> = {}
   const rapidApiPassSpacingMs =
     process.env.NODE_ENV === 'test' ? 0 : BOT_SEARCH_RAPIDAPI_MIN_INTERVAL_MS
+  const rapidApiRetryBackoffMs =
+    process.env.NODE_ENV === 'test' ? 0 : BOT_SEARCH_RAPIDAPI_RETRY_BACKOFF_MS
 
   const normalizedLevel = normalizeExperienceLevel(req.experience_level)
   const jobsSearchExperienceHint = jobsSearchApiSearchHint(normalizedLevel)
@@ -170,35 +179,59 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
 
         const locTag = `loc:${pass.locationIndex + 1}`
         const termTag = `term:${pass.termIndex + 1}`
+        const failureKey = `jobs_search_api_${locTag}_${termTag}`
         const passMeta = providerPasses.find(
           (p) => p.termIndex === pass.termIndex && p.locationIndex === pass.locationIndex
         )
         executedPasses++
 
-        if (rapidApiPassSpacingMs > 0 && lastJobsSearchApiStartedAt > 0) {
-          const elapsed = Date.now() - lastJobsSearchApiStartedAt
-          const waitMs = Math.max(0, rapidApiPassSpacingMs - elapsed)
-          if (waitMs > 0) await sleep(waitMs)
-        }
-        lastJobsSearchApiStartedAt = Date.now()
+        let attempt = 0
+        let jobs: SearchJobResult[] = []
+        let error: string | undefined
 
-        const { jobs, error } = await searchJobsSearchApiExcel(
-          {
-            searchTerm: passMeta?.providerQuery ?? pass.searchTerm,
-            location: pass.location,
-            resultsWanted: perCombo,
-            isRemote: passMeta?.isRemote ?? !!req.remote_only,
-            experienceHint: jobsSearchExperienceHint,
-            countryIndeed: passMeta?.countryIndeed ?? null,
-            linkedinFetchDescription,
-            siteNames: jobsSearchSiteSelection.siteNames,
-            providerPass: passMeta,
-          },
-          jobsSearchApiKey
-        )
+        for (;;) {
+          attempt++
+
+          if (rapidApiPassSpacingMs > 0 && lastJobsSearchApiStartedAt > 0) {
+            const elapsed = Date.now() - lastJobsSearchApiStartedAt
+            const waitMs = Math.max(0, rapidApiPassSpacingMs - elapsed)
+            if (waitMs > 0) await sleep(waitMs)
+          }
+          lastJobsSearchApiStartedAt = Date.now()
+
+          const response = await searchJobsSearchApiExcel(
+            {
+              searchTerm: passMeta?.providerQuery ?? pass.searchTerm,
+              location: pass.location,
+              resultsWanted: perCombo,
+              isRemote: passMeta?.isRemote ?? !!req.remote_only,
+              experienceHint: jobsSearchExperienceHint,
+              countryIndeed: passMeta?.countryIndeed ?? null,
+              linkedinFetchDescription,
+              siteNames: jobsSearchSiteSelection.siteNames,
+              providerPass: passMeta,
+            },
+            jobsSearchApiKey
+          )
+          jobs = response.jobs
+          error = response.error
+
+          const shouldRetry =
+            !!error &&
+            jobs.length === 0 &&
+            !rapidApiTerminalFailure(error) &&
+            rapidApiRecoverableFailure(error) &&
+            attempt < BOT_SEARCH_RAPIDAPI_MAX_ATTEMPTS
+
+          if (!shouldRetry) break
+
+          providerRetries[failureKey] = (providerRetries[failureKey] ?? 0) + 1
+          const retryWaitMs = rapidApiRetryBackoffMs * attempt
+          if (retryWaitMs > 0) await sleep(retryWaitMs)
+        }
 
         if (error && jobs.length === 0) {
-          platformsFailed[`jobs_search_api_${locTag}_${termTag}`] = error
+          platformsFailed[failureKey] = error
           if (rapidApiTerminalFailure(error)) skipJobsSearchApi = true
         } else {
           jobsByPassIndex.set(passMeta?.passIndex ?? 0, jobs)
@@ -269,6 +302,7 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
           )
         ).join(','),
       },
+      provider_retries: providerRetries,
       query_strategy:
         'keyword_location_query_v3: provider search_term includes remote/location qualifier; is_remote and country_indeed are pass-aware',
       by_source_raw: countBySource(allJobs),

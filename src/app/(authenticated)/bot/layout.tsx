@@ -4,6 +4,7 @@ import { getBotConfigByUserId, getBotLastRunForStrip } from '@/lib/cached-querie
 import { BotStatusStrip } from '@/components/bot/bot-status-strip'
 import { BotTabs } from '@/components/bot/bot-tabs'
 import { botSearchHasQueryableBackend } from '@/lib/bot/bot-search-sources'
+import { resolveResumeReadinessSource } from '@/lib/bot/profile-source-labels'
 import { prisma } from '@/lib/prisma'
 import type { BotSearchFrequency } from '@prisma/client'
 
@@ -34,17 +35,25 @@ export default async function BotLayout({
     getBotLastRunForStrip(user.id),
     prisma.botResume.findMany({
       where: { userId: user.id },
-      select: { structuredData: true },
+      select: { structuredData: true, rawText: true },
     }),
     prisma.applicationProfile.findUnique({
       where: { userId: user.id },
       select: {
         applicationFullName: true,
         applicationEmail: true,
+        phone: true,
         city: true,
+        state: true,
         country: true,
+        linkedinUrl: true,
+        githubUrl: true,
+        portfolioUrl: true,
         workAuthorization: true,
+        salaryExpectation: true,
+        noticePeriod: true,
         yearsExperience: true,
+        requiresSponsorship: true,
       },
     }),
   ])
@@ -53,15 +62,30 @@ export default async function BotLayout({
   const hasKeywords = (botConfig?.keywords?.length ?? 0) > 0
   const canRun = searchServiceConfigured && hasKeywords
   const parsedResumeCount = botResumes.filter((r) => r.structuredData != null).length
+  const rawTextCount = botResumes.filter((r) => r.rawText?.trim()).length
   const hasIdentityFallback = Boolean(
     appProfile &&
       (appProfile.applicationFullName?.trim() ||
         appProfile.applicationEmail?.trim() ||
+        appProfile.phone?.trim() ||
         appProfile.city?.trim() ||
+        appProfile.state?.trim() ||
         appProfile.country?.trim() ||
+        appProfile.linkedinUrl?.trim() ||
+        appProfile.githubUrl?.trim() ||
+        appProfile.portfolioUrl?.trim() ||
         appProfile.workAuthorization?.trim() ||
-        appProfile.yearsExperience != null)
+        appProfile.salaryExpectation != null ||
+        appProfile.noticePeriod?.trim() ||
+        appProfile.yearsExperience != null ||
+        appProfile.requiresSponsorship)
   )
+  const resumeReadinessSource = resolveResumeReadinessSource({
+    totalCount: botResumes.length,
+    parsedCount: parsedResumeCount,
+    rawTextCount,
+    hasIdentityFallback,
+  })
   const runDisabledReason = !searchServiceConfigured
     ? 'No search backend configured.'
     : !hasKeywords
@@ -100,8 +124,7 @@ export default async function BotLayout({
                 runDisabledReason={runDisabledReason}
                 resumeReadiness={{
                   totalCount: botResumes.length,
-                  parsedCount: parsedResumeCount,
-                  hasIdentityFallback,
+                  source: resumeReadinessSource,
                 }}
               />
             </div>

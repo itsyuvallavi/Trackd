@@ -3,6 +3,10 @@ import {
   BOT_SEARCH_LOCATION_PASSES_MAX,
   BOT_SEARCH_PROVIDER_PASSES_MAX,
 } from './search-constants'
+import {
+  normalizeSearchTermKey,
+  refineSearchKeywordForProvider,
+} from './search-profile'
 
 export type BotSearchProviderPass = {
   searchTerm: string
@@ -26,6 +30,19 @@ function trimmed(values: string[], max: number): string[] {
     .map((v) => v.trim())
     .filter(Boolean)
     .slice(0, Math.max(0, max))
+}
+
+function refinedProviderTerms(values: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const value of values) {
+    const refined = refineSearchKeywordForProvider(value)
+    const key = normalizeSearchTermKey(refined)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    out.push(refined)
+  }
+  return out
 }
 
 function nestedPasses(searchTerms: string[], locations: string[]): BotSearchProviderPass[] {
@@ -92,7 +109,7 @@ export function buildBotSearchPassPlan(input: {
   const locationMax = input.locationMax ?? BOT_SEARCH_LOCATION_PASSES_MAX
   const maxPasses = Math.max(1, input.providerPassesMax ?? BOT_SEARCH_PROVIDER_PASSES_MAX)
 
-  const keywordSlice = trimmed(input.keywords, keywordMax)
+  const keywordSlice = refinedProviderTerms(trimmed(input.keywords, keywordMax))
   const searchTerms = keywordSlice.length > 0 ? keywordSlice : input.remoteOnly ? ['remote'] : ['']
 
   const rawLocs = trimmed(input.locations, locationMax)

@@ -273,6 +273,32 @@ describe('runSearch settings plumbing', () => {
     )
   })
 
+  it('retries recoverable Jobs Search API pass failures before recording an issue', async () => {
+    searchJobsSearchApiExcelMock
+      .mockResolvedValueOnce({
+        jobs: [],
+        error: 'Jobs Search API HTTP 429: You have exceeded the rate limit per second',
+      })
+      .mockResolvedValueOnce({
+        jobs: [result({ url: 'https://example.com/recovered', source: 'jobs_search_api' })],
+      })
+
+    const { runSearch } = await import('./search-client')
+    const response = await runSearch({
+      keywords: ['Frontend Engineer'],
+      locations: ['Remote'],
+      remote_only: true,
+      results_wanted: 10,
+    })
+
+    expect(searchJobsSearchApiExcelMock).toHaveBeenCalledTimes(2)
+    expect(response.jobs.map((job) => job.url)).toEqual(['https://example.com/recovered'])
+    expect(response.meta.platforms_failed).toEqual({})
+    expect(response.meta.provider_retries).toEqual({
+      'jobs_search_api_loc:1_term:1': 1,
+    })
+  })
+
   it('honors the source allowlist', async () => {
     process.env.BOT_SEARCH_SOURCES = 'jobs_search_api'
     searchJobsSearchApiExcelMock.mockResolvedValue({

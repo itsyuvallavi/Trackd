@@ -10,6 +10,7 @@ import {
   normalizeExperienceLevel,
 } from '@/lib/bot/experience-level'
 import { buildProviderSearchQuery } from '@/lib/bot/search-quality'
+import { buildSafeSearchTerms } from '@/lib/bot/search-profile'
 
 export type BotSearchBackends = {
   /** RapidAPI Jobs Search API — POST getjobs_excel (multi-board). */
@@ -87,19 +88,26 @@ export function buildBotSearchPreview(input: {
   salaryMinUsd: number | null
   minScore: number
   backends: BotSearchBackends
+  /** Server-derived safe role/stack terms from the user's Job Search resume. */
+  safeResumeSearchTerms?: string[]
   /** Prefer passing from RSC; omitted values use `defaultSearchUiCaps()` so older clients don’t crash. */
   caps?: BotSearchUiCaps | null
 }): BotSearchPreviewModel {
   const { keywordOrMax, locationPassesMax, providerPassesMax, resultsTarget } =
     input.caps ?? defaultSearchUiCaps()
   const kw = input.keywords.map((k) => k.trim()).filter(Boolean)
-  const usedKw = kw.slice(0, keywordOrMax)
+  const safeTerms = buildSafeSearchTerms({
+    settingsKeywords: kw,
+    resumeSearchTerms: input.safeResumeSearchTerms ?? [],
+    maxTerms: keywordOrMax,
+  })
+  const usedKw = safeTerms.length > 0 ? safeTerms : kw.slice(0, keywordOrMax)
   const keywordQuery = usedKw.join(' OR ')
   const extraKeywordsDropped = Math.max(0, kw.length - keywordOrMax)
 
   const rawLocs = input.locations.map((l) => l.trim()).filter(Boolean)
   const searchPlan = buildBotSearchPassPlan({
-    keywords: input.keywords,
+    keywords: usedKw,
     locations: input.locations,
     remoteOnly: input.remoteOnly,
     keywordMax: keywordOrMax,

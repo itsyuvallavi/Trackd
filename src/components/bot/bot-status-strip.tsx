@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { CheckCircle2, Loader2, Play, X, AlertCircle } from 'lucide-react'
 import { triggerBotSearch } from '@/app/(authenticated)/settings/bot-actions'
+import type { ResumeReadinessSource } from '@/lib/bot/profile-source-labels'
 import {
   BOT_RUN_COMPLETE_EVENT,
   NOTIFICATIONS_REFRESH_EVENT,
@@ -25,8 +26,7 @@ interface BotStatusStripProps {
   runDisabledReason?: string
   resumeReadiness: {
     totalCount: number
-    parsedCount: number
-    hasIdentityFallback: boolean
+    source: ResumeReadinessSource
   }
 }
 
@@ -41,6 +41,32 @@ function relativeTime(iso: string): string {
   const days = Math.round(hrs / 24)
   if (days < 7) return `${days}d ago`
   return new Date(iso).toLocaleDateString()
+}
+
+function sourceBadgeClass(source: ResumeReadinessSource): string {
+  switch (source.tone) {
+    case 'ready':
+      return 'border-success/25 bg-success-bg text-success-text'
+    case 'missing':
+      return 'border-error/25 bg-error-bg/50 text-error-text'
+    case 'limited':
+      return 'border-warning/25 bg-warning-bg text-warning-text'
+  }
+}
+
+function sourceWarningText(source: ResumeReadinessSource): string {
+  switch (source.kind) {
+    case 'raw_resume_fallback':
+      return 'Scoring is using extracted resume text because parsed fields are unavailable.'
+    case 'application_identity_fallback':
+      return 'Run now will score with Application Identity and search preferences until a usable Job Search resume is available.'
+    case 'settings_fallback':
+      return 'Run now will score with search preferences only until a usable Job Search resume is available.'
+    case 'none':
+      return 'Run now needs a resume or profile details before scoring can use candidate context.'
+    case 'parsed_resume':
+      return source.description
+  }
 }
 
 export function BotStatusStrip({
@@ -136,12 +162,10 @@ export function BotStatusStrip({
     })
   }
 
-  const hasParsedResume = resumeReadiness.parsedCount > 0
+  const profileSource = resumeReadiness.source
+  const showSourceWarning = profileSource.tone !== 'ready'
   const resumeActionLabel =
     resumeReadiness.totalCount > 0 ? 'Review resumes' : 'Add resume'
-  const fallbackMessage = resumeReadiness.hasIdentityFallback
-    ? 'Scoring will fall back to Identity and search preferences.'
-    : 'Scoring will fall back to search preferences until Identity is filled.'
 
   return (
     <div className="flex flex-col gap-2 text-sm">
@@ -163,6 +187,16 @@ export function BotStatusStrip({
           </span>
           <span className="text-muted-foreground">·</span>
           <span className="text-muted-foreground">{frequencyLabel}</span>
+        </span>
+
+        <span
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium',
+            sourceBadgeClass(profileSource)
+          )}
+          title={profileSource.description}
+        >
+          Scoring: {profileSource.label}
         </span>
 
         {lastRun && (
@@ -210,24 +244,39 @@ export function BotStatusStrip({
         </div>
       </div>
 
-      {!hasParsedResume && (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-warning/25 bg-warning-bg/60 px-3 py-2 text-xs text-warning-text">
+      {showSourceWarning && (
+        <div
+          className={cn(
+            'flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border px-3 py-2 text-xs',
+            profileSource.tone === 'missing'
+              ? 'border-error/25 bg-error-bg/50 text-error-text'
+              : 'border-warning/25 bg-warning-bg/60 text-warning-text'
+          )}
+        >
           <AlertCircle className="size-3.5 shrink-0" />
-          <span className="font-medium">No parsed resume.</span>
-          <span>{fallbackMessage}</span>
+          <span className="font-medium">
+            {profileSource.requiresResumeWarning
+              ? 'No usable Job Search resume.'
+              : 'Scoring limited.'}
+          </span>
+          <span>{sourceWarningText(profileSource)}</span>
           <Link
             href="/bot/resumes"
             className="font-medium underline underline-offset-2 hover:text-foreground"
           >
             {resumeActionLabel}
           </Link>
-          <span aria-hidden className="text-warning-text/50">·</span>
-          <Link
-            href="/bot/identity"
-            className="font-medium underline underline-offset-2 hover:text-foreground"
-          >
-            Identity
-          </Link>
+          {profileSource.kind === 'application_identity_fallback' && (
+            <>
+              <span aria-hidden className="opacity-50">·</span>
+              <Link
+                href="/bot/identity"
+                className="font-medium underline underline-offset-2 hover:text-foreground"
+              >
+                Identity
+              </Link>
+            </>
+          )}
         </div>
       )}
 

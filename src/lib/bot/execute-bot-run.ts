@@ -28,7 +28,6 @@ async function createBotRunNotification(input: {
   jobsApproved: number
   hardFiltered: number
   skippedLowScore: number
-  evaluationBudgetSkipped: number
   evaluationFailed: number
   saveFailed: number
   fatalError?: string
@@ -60,18 +59,12 @@ async function createBotRunNotification(input: {
     lines.push(`${input.jobsApproved} strong match${input.jobsApproved === 1 ? '' : 'es'} approved.`)
   }
   if (input.skippedLowScore > 0) {
-    const aiLowScore = Math.max(
-      0,
-      input.skippedLowScore - input.hardFiltered - input.evaluationBudgetSkipped,
-    )
+    const aiLowScore = Math.max(0, input.skippedLowScore - input.hardFiltered)
     if (input.hardFiltered > 0) {
       lines.push(`${input.hardFiltered} filtered before AI scoring by location or seniority rules.`)
     }
     if (aiLowScore > 0) {
       lines.push(`${aiLowScore} below your AI match threshold.`)
-    }
-    if (input.evaluationBudgetSkipped > 0) {
-      lines.push(`${input.evaluationBudgetSkipped} left unscored because the run reached its evaluation budget.`)
     }
   }
   if (input.evaluationFailed > 0) {
@@ -100,7 +93,6 @@ async function createBotRunNotification(input: {
         jobsApproved: input.jobsApproved,
         hardFiltered: input.hardFiltered,
         skippedLowScore: input.skippedLowScore,
-        evaluationBudgetSkipped: input.evaluationBudgetSkipped,
         evaluationFailed: input.evaluationFailed,
         saveFailed: input.saveFailed,
         fatalError: input.fatalError ?? null,
@@ -186,13 +178,7 @@ export async function executeBotRunForConfig(
   try {
     const orchestratorResult = await runBotSearch(config, config.userId, { botRunId: botRun.id })
     const duration = Date.now() - startedAt.getTime()
-    const evaluationBudgetSkipped = orchestratorResult.evaluationSkips.filter(
-      (skip) => skip.filterKind === 'eval_budget',
-    ).length
-    const scoredOrHardFilteredSkipped = Math.max(
-      0,
-      orchestratorResult.jobsSkippedLowScore - evaluationBudgetSkipped,
-    )
+    const scoredOrHardFilteredSkipped = orchestratorResult.jobsSkippedLowScore
     const allEvaluationsFailed =
       orchestratorResult.jobsEvaluationFailed > 0 &&
       orchestratorResult.jobsNew === 0 &&
@@ -215,9 +201,7 @@ export async function executeBotRunForConfig(
     if (orchestratorResult.jobsSkippedLowScore > 0) {
       const aiLowScore = Math.max(
         0,
-        orchestratorResult.jobsSkippedLowScore -
-          orchestratorResult.jobsHardFiltered -
-          evaluationBudgetSkipped,
+        orchestratorResult.jobsSkippedLowScore - orchestratorResult.jobsHardFiltered,
       )
       mergedErrors.skippedBelowMinScore = `${orchestratorResult.jobsSkippedLowScore} listing(s) not saved (${orchestratorResult.jobsHardFiltered} hard-filtered, ${aiLowScore} below AI minimum)`
     }
@@ -278,7 +262,6 @@ export async function executeBotRunForConfig(
         jobsApproved: orchestratorResult.jobsApproved,
         hardFiltered: orchestratorResult.jobsHardFiltered,
         skippedLowScore: orchestratorResult.jobsSkippedLowScore,
-        evaluationBudgetSkipped,
         evaluationFailed: orchestratorResult.jobsEvaluationFailed,
         saveFailed: orchestratorResult.jobsSaveFailed,
         fatalError: orchestratorResult.fatalError,
@@ -376,7 +359,6 @@ export async function executeBotRunForConfig(
         jobsApproved: 0,
         hardFiltered: 0,
         skippedLowScore: 0,
-        evaluationBudgetSkipped: 0,
         evaluationFailed: 0,
         saveFailed: 0,
         fatalError: msg,

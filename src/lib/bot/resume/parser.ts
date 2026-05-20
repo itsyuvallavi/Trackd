@@ -11,6 +11,16 @@
 import { getAIClient } from '@/lib/ai/client'
 import type { ResumeStructuredData } from './types'
 
+export class ResumeParseError extends Error {
+  constructor(
+    message: string,
+    readonly rawText: string | null = null
+  ) {
+    super(message)
+    this.name = 'ResumeParseError'
+  }
+}
+
 const EXTRACTION_PROMPT = `You are a resume parser. Extract all information from this resume and return it as a single JSON object.
 
 Return exactly this structure (use null for missing fields, empty arrays if none):
@@ -134,7 +144,7 @@ export async function parseResumePdf(
     if (!jsonMatch) throw new Error('No JSON in response')
     structured = JSON.parse(jsonMatch[0]) as ResumeStructuredData
   } catch {
-    throw new Error(`Could not parse resume JSON: ${rawText.slice(0, 200)}`)
+    throw new ResumeParseError(`Could not parse resume JSON: ${rawText.slice(0, 200)}`, rawText)
   }
 
   return { structured, rawText }

@@ -180,7 +180,77 @@ describe('evaluateJob minScore behavior', () => {
     expect(result.scoringInputs.resumeUsed).toMatchObject({
       resumeId: 'resume_frontend',
       label: 'Frontend',
-      selection: 'matched_by_keywords',
+      selection: 'parsed_resume',
+      sourceKind: 'parsed_resume',
+      sourceLabel: 'Parsed resume',
+      skillsSentToPrompt: ['React', 'TypeScript'],
+    })
+    expect(result.scoringInputs.profileSource).toMatchObject({
+      kind: 'parsed_resume',
+      resumeId: 'resume_frontend',
+      resumeLabel: 'Frontend',
+    })
+  })
+
+  it('can evaluate against an injected candidate profile without loading DB resumes', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 86,
+                reasoning: 'The listing asks for "React TypeScript" product work.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'React and TypeScript experience',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Frontend React Developer',
+        description:
+          'Build product interfaces with React TypeScript, accessibility, API integrations, and testing.',
+      }),
+      cfg({ minScore: 75 }),
+      {
+        resume: {
+          name: 'Synthetic Candidate',
+          email: 'synthetic@example.invalid',
+          summary: 'Frontend engineer focused on React product interfaces.',
+          skills: ['React', 'TypeScript'],
+          languages: [],
+          experience: [],
+          education: [],
+          certifications: [],
+        },
+        source: {
+          kind: 'parsed_resume',
+          label: 'Parsed resume',
+          resumeId: 'eval_resume_frontend',
+          resumeLabel: 'Frontend React',
+          parsedResumeUsed: true,
+          rawResumeTextUsed: false,
+          applicationIdentitySupplemented: false,
+          settingsDerivedSignalsUsed: false,
+          settingsSignals: [],
+          limitations: [],
+        },
+      }
+    )
+
+    expect(findManyMock).not.toHaveBeenCalled()
+    expect(applicationProfileFindUniqueMock).not.toHaveBeenCalled()
+    expect(result.evaluation.shouldApply).toBe(true)
+    expect(result.scoringInputs.resumeUsed).toMatchObject({
+      resumeId: 'eval_resume_frontend',
+      sourceKind: 'parsed_resume',
       skillsSentToPrompt: ['React', 'TypeScript'],
     })
   })
@@ -239,18 +309,23 @@ describe('evaluateJob minScore behavior', () => {
     expect(result.evaluation.shouldApply).toBe(true)
     expect(result.scoringInputs.resumeUsed).toMatchObject({
       resumeId: null,
-      label: 'Application identity',
-      selection: 'identity_fallback',
+      label: null,
+      selection: 'application_identity_fallback',
+      sourceKind: 'application_identity_fallback',
+      sourceLabel: 'Application Identity fallback',
       skillsSentToPrompt: ['Frontend Engineering'],
       summaryIncluded: true,
       experienceRolesInPrompt: 1,
+      applicationIdentitySupplemented: true,
+      settingsDerivedSignalsUsed: true,
     })
 
     const prompt = chatCompletionMock.mock.calls[0]?.[0]?.[1]?.content as string
-    expect(prompt).toContain('No parsed resume is available')
+    expect(prompt).toContain('No usable Job Search resume content is available')
     expect(prompt).toContain('Yuval Lavi')
     expect(prompt).toContain('Reported experience: 4 years')
-    expect(prompt).toContain('Preference-derived role/stack signals: Frontend Engineering')
+    expect(prompt).toContain('Settings-derived role/stack signals (not resume evidence): Frontend Engineering')
+    expect(prompt).toContain('Profile source: Application Identity fallback')
   })
 
   it('uses preference-derived React/frontend signals when no parsed resume is attached', async () => {
@@ -315,8 +390,9 @@ describe('evaluateJob minScore behavior', () => {
     })
     expect(result.evaluation.flags).not.toContain('stack_mismatch')
     expect(result.scoringInputs.resumeUsed).toMatchObject({
-      label: 'Application identity',
-      selection: 'identity_fallback',
+      label: null,
+      selection: 'application_identity_fallback',
+      sourceLabel: 'Application Identity fallback',
       skillsSentToPrompt: ['React', 'Frontend Engineering'],
     })
   })
