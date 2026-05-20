@@ -213,6 +213,53 @@ describe('executeBotRunForConfig Telegram routing', () => {
     )
   })
 
+  it('persists provider duplicate diagnostics in run errors', async () => {
+    mocks.runBotSearch.mockResolvedValue(
+      orchestratorResult({
+        platformsMeta: {
+          platforms_succeeded: ['jobs_search_api'],
+          platforms_failed: {},
+          fallback_used: false,
+          total_raw: 5,
+          total_deduped: 3,
+          duplicate_stats: {
+            after_excludes: 5,
+            returned: 3,
+            removed_total: 2,
+            removed_by_url: 1,
+            removed_by_company_title: 1,
+            sample_groups: [],
+          },
+          by_source_raw: { jobs_search_api: 5 },
+          by_source_deduped: { jobs_search_api: 3 },
+        },
+      }),
+    )
+
+    const { executeBotRunForConfig } = await import('./execute-bot-run')
+    await executeBotRunForConfig(config(), 'manual')
+
+    expect(mocks.botRunUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'run_1' },
+        data: expect.objectContaining({
+          searchMeta: expect.objectContaining({
+            duplicate_stats: expect.objectContaining({
+              removed_total: 2,
+              removed_by_url: 1,
+              removed_by_company_title: 1,
+            }),
+          }),
+          errors: expect.objectContaining({
+            pipeline: expect.stringContaining('provider_dupes=2'),
+            providerDuplicates:
+              '2 duplicate provider row(s) removed before DB/audit work (1 by URL, 1 by company/title)',
+          }),
+        }),
+      }),
+    )
+  })
+
   it('marks all-evaluator-failed runs failed and creates an error notification', async () => {
     mocks.runBotSearch.mockResolvedValue(
       orchestratorResult({

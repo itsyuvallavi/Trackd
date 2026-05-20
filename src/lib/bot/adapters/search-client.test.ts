@@ -20,6 +20,8 @@ function result(partial: Partial<SearchJobResult>): SearchJobResult {
     description: partial.description ?? 'A TypeScript and React role.',
     source: partial.source ?? 'jobs_search_api',
     is_remote: partial.is_remote ?? true,
+    jobBoard: partial.jobBoard ?? null,
+    providerPass: partial.providerPass ?? null,
   }
 }
 
@@ -296,6 +298,70 @@ describe('runSearch settings plumbing', () => {
     expect(response.meta.platforms_failed).toEqual({})
     expect(response.meta.provider_retries).toEqual({
       'jobs_search_api_loc:1_term:1': 1,
+    })
+  })
+
+  it('removes duplicate provider rows by URL and company/title before returning candidates', async () => {
+    searchJobsSearchApiExcelMock.mockResolvedValue({
+      jobs: [
+        result({
+          title: 'Frontend Engineer',
+          company: 'Acme',
+          url: 'https://example.com/frontend/',
+          jobBoard: 'linkedin',
+        }),
+        result({
+          title: 'Frontend Engineer',
+          company: 'Acme',
+          url: 'https://example.com/frontend',
+          jobBoard: 'linkedin',
+        }),
+        result({
+          title: 'Senior Frontend Engineer',
+          company: 'Acme',
+          url: 'https://example.com/acme-senior-1',
+          jobBoard: 'linkedin',
+        }),
+        result({
+          title: 'Senior Frontend Engineer',
+          company: 'Acme',
+          url: 'https://jobgether.example/acme-senior-copy',
+          jobBoard: 'jobgether',
+        }),
+        result({
+          title: 'Backend Engineer',
+          company: 'Acme',
+          url: 'https://example.com/backend',
+          jobBoard: 'linkedin',
+        }),
+      ],
+    })
+
+    const { runSearch } = await import('./search-client')
+    const response = await runSearch({
+      keywords: ['Frontend Engineer'],
+      locations: ['Remote'],
+      remote_only: true,
+      results_wanted: 10,
+    })
+
+    expect(response.jobs.map((job) => `${job.company}:${job.title}:${job.url}`)).toEqual([
+      'Acme:Frontend Engineer:https://example.com/frontend/',
+      'Acme:Senior Frontend Engineer:https://example.com/acme-senior-1',
+      'Acme:Backend Engineer:https://example.com/backend',
+    ])
+    expect(response.meta.total_raw).toBe(5)
+    expect(response.meta.total_deduped).toBe(3)
+    expect(response.meta.duplicate_stats).toMatchObject({
+      after_excludes: 5,
+      returned: 3,
+      removed_total: 2,
+      removed_by_url: 1,
+      removed_by_company_title: 1,
+    })
+    expect(response.meta.duplicate_stats?.sample_groups).toHaveLength(2)
+    expect(response.meta.by_job_board_deduped).toEqual({
+      linkedin: 3,
     })
   })
 

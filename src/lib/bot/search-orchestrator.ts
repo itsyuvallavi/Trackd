@@ -840,6 +840,17 @@ export async function runBotSearch(
       'info',
       `Raw rows by source (before exclude filters): ${JSON.stringify(searchResponse.meta.by_source_raw)}`
     )
+    if (searchResponse.meta.duplicate_stats?.removed_total) {
+      pushLog('info', 'Provider duplicates removed before DB/audit work', {
+        removed_total: searchResponse.meta.duplicate_stats.removed_total,
+        removed_by_url: searchResponse.meta.duplicate_stats.removed_by_url,
+        removed_by_company_title:
+          searchResponse.meta.duplicate_stats.removed_by_company_title,
+        after_excludes: searchResponse.meta.duplicate_stats.after_excludes,
+        returned: searchResponse.meta.duplicate_stats.returned,
+        sample_groups: searchResponse.meta.duplicate_stats.sample_groups.slice(0, 5),
+      })
+    }
 
     if (searchResponse.meta.platforms_failed && Object.keys(searchResponse.meta.platforms_failed).length > 0) {
       pushLog('warn', 'Platform issues', searchResponse.meta.platforms_failed)

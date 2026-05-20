@@ -33,6 +33,13 @@ function pipelineSummaryFromRun(errors: BotRun['errors']): string | null {
   return typeof p === 'string' ? p : null
 }
 
+function providerDuplicatesFromRun(errors: BotRun['errors']): string | null {
+  if (!errors || typeof errors !== 'object' || Array.isArray(errors))
+    return null
+  const p = (errors as Record<string, unknown>).providerDuplicates
+  return typeof p === 'string' ? p : null
+}
+
 type EvaluationSkipRow = {
   title: string
   company: string
@@ -243,6 +250,7 @@ export function BotRunsPanel({ runs }: BotRunsPanelProps) {
       <div className="divide-y divide-border/60">
         {runs.map((run) => {
           const pipeline = pipelineSummaryFromRun(run.errors)
+          const providerDuplicates = providerDuplicatesFromRun(run.errors)
           const evalSkips = evaluationSkipsFromRun(run.errors)
           const hardFilterSkips = evalSkips.filter((s) => s.filterKind === 'hard_filter')
           const budgetSkips = evalSkips.filter((s) => s.filterKind === 'eval_budget')
@@ -271,9 +279,14 @@ export function BotRunsPanel({ runs }: BotRunsPanelProps) {
               {pipeline && (
                 <p
                   className="text-[10px] font-mono text-muted-foreground leading-snug break-all"
-                  title="Dedup vs your DB, AI threshold skips, and saves"
+                  title="Provider duplicates, dedup vs your DB, AI threshold skips, and saves"
                 >
                   {pipeline}
+                </p>
+              )}
+              {providerDuplicates && (
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  {providerDuplicates}
                 </p>
               )}
               {hardFilterSkips.length > 0 && (

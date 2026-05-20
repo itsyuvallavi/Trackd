@@ -45,6 +45,33 @@ export interface SearchMeta {
   fallback_used: boolean
   total_raw: number
   total_deduped: number
+  duplicate_stats?: {
+    after_excludes: number
+    returned: number
+    removed_total: number
+    removed_by_url: number
+    removed_by_company_title: number
+    sample_groups: Array<{
+      kind: 'url' | 'company_title'
+      key: string
+      kept: {
+        title: string
+        company: string
+        url?: string | null
+        providerQuery?: string | null
+        location?: string | null
+        jobBoard?: string | null
+      }
+      duplicate: {
+        title: string
+        company: string
+        url?: string | null
+        providerQuery?: string | null
+        location?: string | null
+        jobBoard?: string | null
+      }
+    }>
+  }
   /** Provider pass planning/execution details for keyword x location fanout. */
   search_passes?: {
     planned: number

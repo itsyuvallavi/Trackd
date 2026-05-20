@@ -44,6 +44,8 @@ import {
   resolveJobsSearchSiteNames,
 } from '../search-quality'
 
+type DuplicateSample = NonNullable<SearchResponse['meta']['duplicate_stats']>['sample_groups'][number]
+
 function countBySource(jobs: SearchJobResult[]): Record<string, number> {
   const acc: Record<string, number> = {}
   for (const j of jobs) {
@@ -60,6 +62,101 @@ function countByJobBoard(jobs: SearchJobResult[]): Record<string, number> {
     acc[k] = (acc[k] ?? 0) + 1
   }
   return acc
+}
+
+function normalizeProviderUrl(value: string | null | undefined): string {
+  return (value ?? '').trim().replace(/\/+$/, '').toLowerCase()
+}
+
+function normalizeProviderText(value: string | null | undefined): string {
+  return (value ?? '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function companyTitleKey(job: SearchJobResult): string {
+  const company = normalizeProviderText(job.company)
+  const title = normalizeProviderText(job.title)
+  return company && title ? `${company}::${title}` : ''
+}
+
+function sampleJob(job: SearchJobResult): DuplicateSample['kept'] {
+  return {
+    title: job.title.slice(0, 200),
+    company: job.company.slice(0, 160),
+    url: job.url?.slice(0, 500) ?? null,
+    providerQuery: job.providerPass?.providerQuery ?? null,
+    location: job.providerPass?.location ?? job.location ?? null,
+    jobBoard: job.jobBoard ?? job.source ?? null,
+  }
+}
+
+function dedupeProviderJobs(jobs: SearchJobResult[]): {
+  jobs: SearchJobResult[]
+  stats: NonNullable<SearchResponse['meta']['duplicate_stats']>
+} {
+  const seenUrls = new Map<string, SearchJobResult>()
+  const seenCompanyTitles = new Map<string, SearchJobResult>()
+  const uniqueJobs: SearchJobResult[] = []
+  const sampleGroups: DuplicateSample[] = []
+  let removedByUrl = 0
+  let removedByCompanyTitle = 0
+
+  const addSample = (
+    kind: DuplicateSample['kind'],
+    key: string,
+    kept: SearchJobResult,
+    duplicate: SearchJobResult
+  ) => {
+    if (sampleGroups.length >= 12) return
+    sampleGroups.push({
+      kind,
+      key: key.slice(0, 180),
+      kept: sampleJob(kept),
+      duplicate: sampleJob(duplicate),
+    })
+  }
+
+  for (const job of jobs) {
+    const urlKey = normalizeProviderUrl(job.url)
+    if (urlKey) {
+      const existing = seenUrls.get(urlKey)
+      if (existing) {
+        removedByUrl++
+        addSample('url', urlKey, existing, job)
+        continue
+      }
+    }
+
+    const titleKey = companyTitleKey(job)
+    if (titleKey) {
+      const existing = seenCompanyTitles.get(titleKey)
+      if (existing) {
+        removedByCompanyTitle++
+        addSample('company_title', titleKey, existing, job)
+        continue
+      }
+    }
+
+    uniqueJobs.push(job)
+    if (urlKey) seenUrls.set(urlKey, job)
+    if (titleKey) seenCompanyTitles.set(titleKey, job)
+  }
+
+  return {
+    jobs: uniqueJobs,
+    stats: {
+      after_excludes: jobs.length,
+      returned: uniqueJobs.length,
+      removed_total: removedByUrl + removedByCompanyTitle,
+      removed_by_url: removedByUrl,
+      removed_by_company_title: removedByCompanyTitle,
+      sample_groups: sampleGroups,
+    },
+  }
 }
 
 /** If true, further location passes for this provider are skipped (same outcome expected). */
@@ -259,23 +356,19 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
     return true
   })
 
-  const seen = new Set<string>()
-  const deduped: SearchJobResult[] = []
-  for (const job of filtered) {
-    const key = job.url?.trim().replace(/\/$/, '') ?? ''
-    if (key && seen.has(key)) continue
-    if (key) seen.add(key)
-    deduped.push(job)
-  }
+  const { jobs: deduped, stats: duplicateStats } = dedupeProviderJobs(filtered)
+  const returnedJobs = deduped.slice(0, req.results_wanted ?? BOT_SEARCH_RESULTS_WANTED)
+  duplicateStats.returned = returnedJobs.length
 
   return {
-    jobs: deduped.slice(0, req.results_wanted ?? BOT_SEARCH_RESULTS_WANTED),
+    jobs: returnedJobs,
     meta: {
       platforms_succeeded: platformsSucceeded,
       platforms_failed: platformsFailed,
       fallback_used: false,
       total_raw: allJobs.length,
       total_deduped: deduped.length,
+      duplicate_stats: duplicateStats,
       search_passes: {
         planned: searchPlan.totalPossiblePasses,
         selected: selectedPasses,

@@ -127,6 +127,7 @@ type DogfoodReport = {
     botRunListings: number
     savedJobs: number
     providerFailures: number
+    providerDuplicates: number
   }
   personas: PersonaE2EReport[]
 }
@@ -587,6 +588,14 @@ function providerFailureCount(persona: PersonaE2EReport): number {
   return isObject(failed) ? Object.keys(failed).length : 0
 }
 
+function providerDuplicateCount(persona: PersonaE2EReport): number {
+  const meta = persona.persistedRun?.searchMeta
+  if (!isObject(meta)) return 0
+  const stats = meta.duplicate_stats
+  if (!isObject(stats)) return 0
+  return typeof stats.removed_total === 'number' ? stats.removed_total : 0
+}
+
 function buildTotals(personas: PersonaE2EReport[]): DogfoodReport['totals'] {
   return {
     personas: personas.length,
@@ -617,6 +626,10 @@ function buildTotals(personas: PersonaE2EReport[]): DogfoodReport['totals'] {
     botRunListings: personas.reduce((total, persona) => total + persona.listings.length, 0),
     savedJobs: personas.reduce((total, persona) => total + persona.savedJobs.length, 0),
     providerFailures: personas.reduce((total, persona) => total + providerFailureCount(persona), 0),
+    providerDuplicates: personas.reduce(
+      (total, persona) => total + providerDuplicateCount(persona),
+      0
+    ),
   }
 }
 
@@ -699,6 +712,7 @@ async function main() {
       `${report.totals.jobsNew} saved, ${report.totals.jobsApproved} approved)`
   )
   console.log(`Provider failures: ${report.totals.providerFailures}`)
+  console.log(`Provider duplicates removed before audit: ${report.totals.providerDuplicates}`)
   console.log(`Report: ${options.reportPath}`)
 
   if (report.totals.failed > 0) {

@@ -185,8 +185,11 @@ export async function executeBotRunForConfig(
       scoredOrHardFilteredSkipped === 0
 
     const mergedErrors: Record<string, unknown> = { ...orchestratorResult.errors }
+    const providerDuplicatesRemoved =
+      orchestratorResult.platformsMeta?.duplicate_stats?.removed_total ?? 0
     mergedErrors.pipeline =
       `found=${orchestratorResult.jobsFound} ` +
+      `provider_dupes=${providerDuplicatesRemoved} ` +
       `dedup_url=${orchestratorResult.skippedExistingByUrl} ` +
       `dedup_title=${orchestratorResult.skippedExistingByTitle} ` +
       `dedup_batch=${orchestratorResult.skippedBatchDuplicate} ` +
@@ -198,6 +201,12 @@ export async function executeBotRunForConfig(
       `save_failed=${orchestratorResult.jobsSaveFailed} ` +
       `evaluated=${orchestratorResult.jobsEvaluated} ` +
       `approved=${orchestratorResult.jobsApproved}`
+    if (providerDuplicatesRemoved > 0) {
+      mergedErrors.providerDuplicates =
+        `${providerDuplicatesRemoved} duplicate provider row(s) removed before DB/audit work ` +
+        `(${orchestratorResult.platformsMeta?.duplicate_stats?.removed_by_url ?? 0} by URL, ` +
+        `${orchestratorResult.platformsMeta?.duplicate_stats?.removed_by_company_title ?? 0} by company/title)`
+    }
     if (orchestratorResult.jobsSkippedLowScore > 0) {
       const aiLowScore = Math.max(
         0,
