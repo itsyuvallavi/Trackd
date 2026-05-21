@@ -435,7 +435,7 @@ describe('evaluateJob minScore behavior', () => {
     })
   })
 
-  it('requires a higher score margin before auto-approving underqualified matches', async () => {
+  it('requires a smaller score margin before auto-approving title-only seniority stretches', async () => {
     findManyMock.mockResolvedValue([
       {
         id: 'resume_frontend',
@@ -510,7 +510,134 @@ describe('evaluateJob minScore behavior', () => {
       beforeScore: 77,
       afterScore: 74,
       threshold: 75,
+      margin: 5,
+      requiredScore: 80,
+      severity: 'title_only_seniority_stretch',
+    })
+  })
+
+  it('auto-approves strong title-only seniority stretches above the smaller margin', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 86,
+                reasoning:
+                  'The listing asks for "React" and "TypeScript" experience on product interfaces.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'React and TypeScript experience',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Senior Software Engineer - Full Stack',
+        description:
+          'Remote full-stack product role building React and TypeScript workflows with API integrations.',
+      }),
+      cfg({
+        minScore: 75,
+        keywords: ['React Developer', 'Fullstack Developer'],
+        experienceLevel: 'mid_level',
+      }),
+      candidateProfile({
+        summary: 'Frontend engineer focused on React product interfaces.',
+        skills: ['React', 'TypeScript', 'Next.js'],
+        experience: [
+          {
+            company: 'Acme',
+            title: 'Frontend Engineer',
+            startDate: '2022',
+            endDate: 'Present',
+            description: 'Built React and TypeScript product workflows.',
+            achievements: [],
+          },
+        ],
+      })
+    )
+
+    expect(result.evaluation.score).toBe(81)
+    expect(result.evaluation.shouldApply).toBe(true)
+    expect(result.evaluation.flags).toContain('underqualified')
+    expect(result.scoringInputs.seniorityClamp).toMatchObject({
+      direction: 'underqualified',
+      beforeScore: 86,
+      afterScore: 81,
+    })
+    expect(result.scoringInputs.underqualifiedApprovalClamp).toBeUndefined()
+  })
+
+  it('keeps the strict approval margin for explicit high-years stretch matches', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 98,
+                reasoning:
+                  'The listing asks for "8+ years" plus React and TypeScript product interface ownership.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'React and TypeScript experience',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Senior Software Engineer - Full Stack',
+        description:
+          'Remote full-stack product role requiring 8+ years of experience building React and TypeScript workflows with API integrations.',
+      }),
+      cfg({
+        minScore: 75,
+        keywords: ['React Developer', 'Fullstack Developer'],
+        experienceLevel: 'mid_level',
+      }),
+      candidateProfile({
+        summary: 'Frontend engineer focused on React product interfaces.',
+        skills: ['React', 'TypeScript', 'Next.js'],
+        experience: [
+          {
+            company: 'Acme',
+            title: 'Frontend Engineer',
+            startDate: '2022',
+            endDate: 'Present',
+            description: 'Built React and TypeScript product workflows.',
+            achievements: [],
+          },
+        ],
+      })
+    )
+
+    expect(result.evaluation.score).toBe(74)
+    expect(result.evaluation.shouldApply).toBe(false)
+    expect(result.evaluation.flags).toContain('underqualified')
+    expect(result.scoringInputs.seniorityClamp).toMatchObject({
+      direction: 'underqualified',
+      beforeScore: 98,
+      afterScore: 85,
+    })
+    expect(result.scoringInputs.underqualifiedApprovalClamp).toMatchObject({
+      beforeScore: 85,
+      afterScore: 74,
+      threshold: 75,
+      margin: 15,
       requiredScore: 90,
+      severity: 'high_seniority_stretch',
     })
   })
 

@@ -32,7 +32,8 @@ import type { CandidateProfileSourceKind } from './profile-source-labels'
 import { profileSourceLabel } from './profile-source-labels'
 
 const EVALUATOR_MODEL = 'gpt-5-mini'
-const UNDERQUALIFIED_APPROVAL_MARGIN = 15
+const ORDINARY_UNDERQUALIFIED_APPROVAL_MARGIN = 5
+const STRICT_UNDERQUALIFIED_APPROVAL_MARGIN = 15
 
 const EVALUATOR_SYSTEM_PROMPT = `You score job listings for a specific candidate. Be strict, but do not turn user preferences into absolute rules unless the job clearly conflicts with them. The user manually reviews every job you save.
 
@@ -103,7 +104,9 @@ export type ScoringInputsSnapshot = {
     beforeScore: number
     afterScore: number
     threshold: number
+    margin: number
     requiredScore: number
+    severity: 'title_only_seniority_stretch' | 'high_seniority_stretch'
     reasons: string[]
   }
   /** Structured facts extracted from the FULL JD (audit + UI). */
@@ -382,7 +385,8 @@ function emptyProfileSource(kind: CandidateProfileSourceKind = 'none'): Candidat
 
 function applyUnderqualifiedApprovalClamp(
   evaluation: JobEvaluation,
-  minScore: number
+  minScore: number,
+  seniorityClamp?: SeniorityClampMeta
 ): {
   evaluation: JobEvaluation
   clampMeta?: NonNullable<ScoringInputsSnapshot['underqualifiedApprovalClamp']>
@@ -392,7 +396,22 @@ function applyUnderqualifiedApprovalClamp(
     return { evaluation }
   }
 
-  const requiredScore = Math.min(95, threshold + UNDERQUALIFIED_APPROVAL_MARGIN)
+  const highSeniorityStretch =
+    !seniorityClamp ||
+    seniorityClamp.direction !== 'underqualified' ||
+    seniorityClamp.reasons.some((reason) => reason.startsWith('JD requires ')) ||
+    seniorityClamp.reasons.some((reason) =>
+      /\b(?:staff|principal|architect|director|head\s+of|chief|vp|vice\s+president)\b/i.test(
+        reason
+      )
+    )
+  const margin = highSeniorityStretch
+    ? STRICT_UNDERQUALIFIED_APPROVAL_MARGIN
+    : ORDINARY_UNDERQUALIFIED_APPROVAL_MARGIN
+  const severity = highSeniorityStretch
+    ? 'high_seniority_stretch'
+    : 'title_only_seniority_stretch'
+  const requiredScore = Math.min(95, threshold + margin)
   if (evaluation.score >= requiredScore) {
     return { evaluation }
   }
@@ -400,7 +419,9 @@ function applyUnderqualifiedApprovalClamp(
   const beforeScore = evaluation.score
   const afterScore = Math.max(0, Math.min(beforeScore, threshold - 1))
   const reasons = [
-    `underqualified listings require score >= ${requiredScore} for auto-approval`,
+    severity === 'high_seniority_stretch'
+      ? `high-seniority underqualified listings require score >= ${requiredScore} for auto-approval`
+      : `title-only underqualified listings require score >= ${requiredScore} for auto-approval`,
   ]
   const note = ` [Underqualified approval adjustment: ${reasons.join('; ')}.]`
   const reasoning =
@@ -421,7 +442,9 @@ function applyUnderqualifiedApprovalClamp(
       beforeScore,
       afterScore,
       threshold,
+      margin,
       requiredScore,
+      severity,
       reasons,
     },
   }
@@ -535,7 +558,11 @@ async function evaluateJobWithResolvedProfile(
     scoringInputsFinal = { ...scoringInputsFinal, seniorityClamp: seniorityClamp.clampMeta }
   }
 
-  const underqualifiedApprovalClamp = applyUnderqualifiedApprovalClamp(evaluation, threshold)
+  const underqualifiedApprovalClamp = applyUnderqualifiedApprovalClamp(
+    evaluation,
+    threshold,
+    seniorityClamp.clampMeta
+  )
   evaluation = underqualifiedApprovalClamp.evaluation
   if (underqualifiedApprovalClamp.clampMeta) {
     scoringInputsFinal = {
