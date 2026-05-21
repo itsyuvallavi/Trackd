@@ -231,7 +231,11 @@ function requirementContext(text: string): boolean {
   return (
     /\b(?:mandatory|required|must\s+(?:speak|have|be\s+fluent)|must\s+be\s+fluent|fluent\s+in|native\s+(?:speaker\s+)?(?:of|in)?|professional\s+proficiency|business\s+level|bilingual\s+in)\b/i.test(
       text
-    ) || /\b(?:both\s+)?(?:written\s+and\s+)?verbal\s*\([^)]*\bmandatory\b/i.test(text)
+    ) ||
+    /\b(?:english|anglais|hebrew|עברית|french|français|francais|german|deutsch|spanish|español|espanol|italian|italiano|portuguese|português|portugues|dutch|nederlands|polish|swedish|svenska|danish|dansk|norwegian|norsk|finnish|suomi|czech|čeština|cestina|romanian|română|romana|greek|ελληνικά|russian|русск|ukrainian|україн|turkish|türkçe|turkce|arabic|العربية|mandarin|cantonese|chinese|中文|japanese|日本語|korean|한국어|hindi)[-\s]+(?:speaker|speaking)\b/i.test(
+      text
+    ) ||
+    /\b(?:both\s+)?(?:written\s+and\s+)?verbal\s*\([^)]*\bmandatory\b/i.test(text)
   )
 }
 
@@ -239,7 +243,6 @@ function requirementContext(text: string): boolean {
  * Languages detected in `text` that are stated in a requirement context (same line / nearby).
  */
 function requiredLanguagesInChunk(chunk: string, allowed: Set<string>): string[] {
-  const lower = chunk.toLowerCase()
   if (!requirementContext(chunk) && !/\bmandatory\b/i.test(chunk)) return []
 
   const found: string[] = []
@@ -286,11 +289,16 @@ export function applyLanguageMismatchClamp(
   minScore: number,
   allowedLanguageCodes: Set<string> | null
 ): { evaluation: JobEvaluation; clampMeta?: LanguageMismatchClampMeta } {
-  if (!allowedLanguageCodes || !job.description?.trim()) {
+  if (!allowedLanguageCodes) {
     return { evaluation }
   }
 
-  const gaps = findMandatoryLanguageGaps(job.description, allowedLanguageCodes)
+  const listingText = [job.title, job.description].filter(Boolean).join('\n')
+  if (!listingText.trim()) {
+    return { evaluation }
+  }
+
+  const gaps = findMandatoryLanguageGaps(listingText, allowedLanguageCodes)
   if (gaps.length === 0) {
     return { evaluation }
   }

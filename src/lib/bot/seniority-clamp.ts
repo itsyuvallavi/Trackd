@@ -32,6 +32,7 @@ const VERY_SENIOR_TITLE_PENALTY = 14
 const JUNIOR_TITLE_PENALTY = 6
 const YEARS_GAP_PENALTY = 4
 const VERY_SENIOR_CAP = 68
+const SENIORITY_SCAN_MAX_CHARS = 12000
 
 type NormalizedLevel =
   | 'internship'
@@ -103,8 +104,49 @@ function titleSuggestsJunior(title: string): boolean {
   )
 }
 
+function descriptionSuggestsSeniorRole(description: string): {
+  senior: boolean
+  verySenior: boolean
+  phrase: string | null
+} {
+  const scanned = description.slice(0, SENIORITY_SCAN_MAX_CHARS)
+  const sentences = scanned.split(/(?<=[.!?])\s+|\n+/)
+  for (const raw of sentences) {
+    const sentence = raw.trim()
+    if (!sentence) continue
+    if (
+      !/\b(?:we(?:['’]?re|\s+are)\s+(?:looking|hiring|seeking)\s+for|seeking|hiring|role\s*:|position\s*:|title\s*:)\b/i.test(
+        sentence
+      )
+    ) {
+      continue
+    }
+    if (!/\b(?:engineer|developer|scientist|manager|designer|architect|lead|product)\b/i.test(sentence)) {
+      continue
+    }
+
+    const verySenior = titleSuggestsVerySenior(sentence)
+    const leadAsTitle =
+      /\b(?:applied\s+ai|technical|engineering|product|team|software|data|design|frontend|front[-\s]?end|backend|back[-\s]?end|full[-\s]?stack|ml|machine\s+learning|ai)\s+lead\b/i.test(
+        sentence
+      ) ||
+      /\blead\s+(?:engineer|developer|scientist|manager|designer|architect|product)\b/i.test(sentence)
+    const senior = verySenior || /\b(?:senior|sr\.?)\b/i.test(sentence) || leadAsTitle
+    if (!senior) continue
+
+    return {
+      senior: true,
+      verySenior,
+      phrase: sentence.slice(0, 180),
+    }
+  }
+
+  return { senior: false, verySenior: false, phrase: null }
+}
+
 function buildUnderqualifiedReasons(
   title: string,
+  description: string,
   facts: JdFacts,
   ceilingYears: number,
   level: NormalizedLevel
@@ -118,13 +160,18 @@ function buildUnderqualifiedReasons(
 
   const seniorTitleIsStretch =
     level === 'internship' || level === 'entry_level' || level === 'mid_level'
-      ? titleSuggestsSenior(title)
+      ? titleSuggestsSenior(title) || descriptionSuggestsSeniorRole(description).senior
       : level === 'senior_level'
-        ? titleSuggestsVerySenior(title)
+        ? titleSuggestsVerySenior(title) || descriptionSuggestsSeniorRole(description).verySenior
         : false
 
   if (seniorTitleIsStretch) {
-    reasons.push(`JD title "${title}" suggests a more senior role`)
+    const descriptionRole = descriptionSuggestsSeniorRole(description)
+    reasons.push(
+      descriptionRole.phrase
+        ? `JD describes the role as more senior: "${descriptionRole.phrase}"`
+        : `JD title "${title}" suggests a more senior role`
+    )
   }
   return reasons
 }
@@ -181,7 +228,14 @@ export function applySeniorityClamp(
   const ceiling = yearsCeilingForLevel(level)
   const floor = yearsFloorForLevel(level)
 
-  const underReasons = buildUnderqualifiedReasons(job.title, facts, ceiling, level)
+  const descriptionSeniorRole = descriptionSuggestsSeniorRole(job.description ?? '')
+  const underReasons = buildUnderqualifiedReasons(
+    job.title,
+    job.description ?? '',
+    facts,
+    ceiling,
+    level
+  )
   const overReasons = buildOverqualifiedReasons(job.title, facts, floor)
 
   let direction: SeniorityClampMeta['direction'] | null = null
@@ -210,8 +264,8 @@ export function applySeniorityClamp(
 
   if (direction === 'underqualified') {
     const yearsGap = Math.max(0, facts.maxYearsRequired - ceiling)
-    const verySenior = titleSuggestsVerySenior(job.title)
-    if (titleSuggestsSenior(job.title)) {
+    const verySenior = titleSuggestsVerySenior(job.title) || descriptionSeniorRole.verySenior
+    if (titleSuggestsSenior(job.title) || descriptionSeniorRole.senior) {
       afterScore -= verySenior ? VERY_SENIOR_TITLE_PENALTY : SENIOR_TITLE_PENALTY
     }
     if (yearsGap > 0) {

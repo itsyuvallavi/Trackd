@@ -1088,6 +1088,248 @@ describe('evaluateJob minScore behavior', () => {
     })
   })
 
+  it('caps title-only French speaker roles when the candidate does not list French', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 76,
+                reasoning:
+                  'The title says "Mid FullStack Developer (French Speaker)" and the stack overlaps with React and TypeScript.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'React, TypeScript, Next.js, and Node.js product work',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Mid FullStack Developer (French Speaker)',
+        description: '',
+      }),
+      cfg({
+        minScore: 75,
+        keywords: ['Fullstack Developer'],
+        spokenLanguages: ['English', 'Hebrew'],
+      }),
+      candidateProfile({
+        summary: 'Full-stack engineer focused on React, Next.js, TypeScript, and Node.js.',
+        skills: ['React', 'Next.js', 'TypeScript', 'Node.js'],
+        languages: ['English', 'Hebrew'],
+      })
+    )
+
+    expect(result.evaluation.score).toBe(28)
+    expect(result.evaluation.shouldApply).toBe(false)
+    expect(result.evaluation.flags).toContain('missing_required_language')
+    expect(result.scoringInputs.languageMismatchClamp).toMatchObject({
+      beforeScore: 76,
+      afterScore: 28,
+    })
+  })
+
+  it('caps title-only Java full-stack roles when the resume lacks Java evidence', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 76,
+                reasoning:
+                  'The title says "Full-Stack Engineer (Java & React)" and the candidate has React experience.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'React and TypeScript experience, but no Java',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Full-Stack Engineer (Java & React)',
+        description: '',
+      }),
+      cfg({ minScore: 75, keywords: ['Fullstack Developer'] }),
+      candidateProfile({
+        summary: 'Full-stack engineer focused on React, Next.js, TypeScript, and Node.js.',
+        skills: ['React', 'Next.js', 'TypeScript', 'Node.js'],
+      })
+    )
+
+    expect(result.evaluation.score).toBe(34)
+    expect(result.evaluation.shouldApply).toBe(false)
+    expect(result.evaluation.flags).toContain('stack_mismatch')
+    expect(result.scoringInputs.stackMismatchClamp).toMatchObject({
+      beforeScore: 76,
+      afterScore: 34,
+    })
+  })
+
+  it('caps AWS serverless backend roles when the resume lacks AWS serverless evidence', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 68,
+                reasoning:
+                  'The JD calls for an "AWS-based product" and "serverless backend development" with event-driven workflows.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'TypeScript, REST APIs, Prisma, PostgreSQL, Supabase, and AI tooling',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Fullstack Developer',
+        description:
+          'Build and evolve an AWS-based product. The role centers on serverless backend development, designing APIs, data models, and event-driven workflows for a cloud media platform.',
+      }),
+      cfg({ minScore: 60, keywords: ['Fullstack Developer'] }),
+      candidateProfile({
+        summary:
+          'Full-stack product engineer building AI-powered tooling with React, Next.js, TypeScript, Prisma, PostgreSQL, and Supabase.',
+        skills: ['React', 'Next.js', 'TypeScript', 'Prisma', 'PostgreSQL', 'Supabase', 'REST APIs'],
+      })
+    )
+
+    expect(result.evaluation.score).toBe(58)
+    expect(result.evaluation.shouldApply).toBe(false)
+    expect(result.evaluation.flags).toContain('stack_mismatch')
+    expect(result.scoringInputs.stackMismatchClamp).toMatchObject({
+      beforeScore: 68,
+      afterScore: 58,
+    })
+  })
+
+  it('caps ML data-science implementation roles for AI-tooling resumes without ML evidence', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 68,
+                reasoning:
+                  'The JD asks the candidate to "design, develop, and implement Machine Learning models" and LLM solutions.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'Local LLMs, Context Retrieval, Agentic Workflows, Eval Harnesses, and backend APIs',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Data Scientist / AI engineer',
+        description:
+          'Design, develop, and implement Machine Learning models and AI solutions for public-sector services. Work on data-driven decision support, multilingual data processing, LLM systems, and model evaluation.',
+      }),
+      cfg({ minScore: 60, keywords: ['Applied AI Engineer', 'Fullstack AI Engineer'] }),
+      candidateProfile({
+        summary:
+          'Full-stack product engineer building AI-powered tooling with local LLMs, context retrieval, agentic workflows, eval harnesses, and TypeScript APIs.',
+        skills: [
+          'React',
+          'Next.js',
+          'TypeScript',
+          'Local LLMs',
+          'Context Retrieval',
+          'Agentic Workflows',
+          'Eval Harnesses',
+          'REST APIs',
+        ],
+      })
+    )
+
+    expect(result.evaluation.score).toBe(58)
+    expect(result.evaluation.shouldApply).toBe(false)
+    expect(result.evaluation.flags).toContain('stack_mismatch')
+    expect(result.scoringInputs.stackMismatchClamp).toMatchObject({
+      beforeScore: 68,
+      afterScore: 58,
+    })
+  })
+
+  it('uses the underqualified margin when the JD text reveals a lead role', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 68,
+                reasoning:
+                  'The JD says "Applied AI Lead" and asks for ownership of the product roadmap.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'Local LLMs, Context Retrieval, Agentic Workflows, and product tooling',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Applied AI Engineer',
+        description:
+          "We're looking for an Applied AI Lead who knows how to take responsibility over the roadmap of their product, including day-to-day operations, project execution, and risk management.",
+      }),
+      cfg({
+        minScore: 60,
+        keywords: ['Applied AI Engineer', 'Fullstack AI Engineer'],
+        experienceLevel: 'mid_level',
+      }),
+      candidateProfile({
+        summary:
+          'Full-stack product engineer building AI-powered tooling with local LLMs, context retrieval, agentic workflows, and TypeScript APIs.',
+        skills: ['React', 'Next.js', 'TypeScript', 'Local LLMs', 'Context Retrieval', 'Agentic Workflows'],
+      })
+    )
+
+    expect(result.evaluation.score).toBe(59)
+    expect(result.evaluation.shouldApply).toBe(false)
+    expect(result.evaluation.flags).toContain('underqualified')
+    expect(result.scoringInputs.seniorityClamp).toMatchObject({
+      direction: 'underqualified',
+      beforeScore: 68,
+      afterScore: 63,
+    })
+    expect(result.scoringInputs.underqualifiedApprovalClamp).toMatchObject({
+      beforeScore: 63,
+      afterScore: 59,
+      threshold: 60,
+      margin: 5,
+      requiredScore: 65,
+    })
+  })
+
   it('retries once when the evaluator returns malformed JSON', async () => {
     chatCompletionMock
       .mockResolvedValueOnce({

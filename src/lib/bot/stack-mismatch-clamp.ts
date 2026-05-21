@@ -20,6 +20,8 @@ const JD_CLAMP_MAX_CHARS = 12000
 /** When the JD demands this ecosystem but the resume doesn't show it — cap score here. */
 const JAVA_ECOSYSTEM_CAP = 34
 const ANGULAR_CAP = 38
+const CLOUD_SERVERLESS_CAP = 58
+const ML_DATA_SCIENCE_CAP = 58
 const DATA_SCIENCE_TO_GRADUATE_AI_SOFTWARE_CAP = 58
 
 export function buildResumeSkillsBlob(resume: ResumeStructuredData): string {
@@ -79,6 +81,79 @@ function resumeEvidenceAngular(blob: string): boolean {
   return /\bangular\b/i.test(blob)
 }
 
+function titleRequiresJavaEcosystem(title: string): boolean {
+  const lower = title.toLowerCase()
+  return (
+    /\b(?:java|kotlin|spring)\b/.test(lower) &&
+    /\b(?:full[-\s]?stack|backend|software|developer|engineer|programmer)\b/.test(lower)
+  )
+}
+
+function jdRequiresAwsServerless(jdRaw: string): boolean {
+  const jd = jdRaw.slice(0, JD_CLAMP_MAX_CHARS).toLowerCase()
+  const mentionsAws = /\baws\b|amazon\s+web\s+services/.test(jd)
+  const mentionsServerless =
+    /\bserverless\b/.test(jd) ||
+    /\b(?:lambda|eventbridge|dynamodb|sqs|sns|api\s+gateway|cloudformation|cloudwatch|aws\s+cdk)\b/.test(
+      jd
+    )
+
+  if (!mentionsAws || !mentionsServerless) return false
+
+  return (
+    /\b(?:role\s+centers?\s+on|requires?|must\s+have|experience\s+(?:with|in)|design(?:ing)?|build(?:ing)?|develop(?:ing)?|maintain(?:ing)?)\b[^.\n]{0,180}\b(?:aws|serverless|lambda|eventbridge|dynamodb|sqs|sns|api\s+gateway)\b/.test(
+      jd
+    ) ||
+    /\b(?:aws|serverless|lambda|eventbridge|dynamodb|sqs|sns|api\s+gateway)\b[^.\n]{0,180}\b(?:development|backend|architecture|workflows?|platform|product)\b/.test(
+      jd
+    )
+  )
+}
+
+function resumeEvidenceAwsServerless(blob: string): boolean {
+  return /\b(?:aws|amazon\s+web\s+services|serverless|lambda|eventbridge|dynamodb|sqs|sns|api\s+gateway|cloudformation|cloudwatch|aws\s+cdk)\b/i.test(
+    blob
+  )
+}
+
+function titleLooksMlDataScienceImplementation(title: string): boolean {
+  const lower = title.toLowerCase()
+  return /\b(?:data scientist|data science|machine learning engineer|ml engineer|ai engineer|applied ai(?:\s+(?:engineer|lead))?)\b/.test(
+    lower
+  )
+}
+
+function jdRequiresMlDataScienceImplementation(jdRaw: string): boolean {
+  const jd = jdRaw.slice(0, JD_CLAMP_MAX_CHARS).toLowerCase()
+  const mlWork =
+    /\b(?:machine learning|ml\b|modelos?\s+de\s+machine\s+learning|data science|data scientist|statistical|predictive|feature engineering|pytorch|tensorflow|scikit[-\s]?learn|pandas|numpy)\b/.test(
+      jd
+    )
+  if (!mlWork) return false
+
+  return (
+    /\b(?:design|desenhar|develop|desenvolver|implement|implementar|build|train|training|treinar|deploy|productioni[sz]e)\b[^.\n]{0,180}\b(?:machine learning|ml\b|modelos?\s+de\s+machine\s+learning|models?|modelos?|data science|feature engineering|pytorch|tensorflow|scikit[-\s]?learn|pandas|numpy)\b/.test(
+      jd
+    ) ||
+    /\b(?:machine learning|ml\b|modelos?\s+de\s+machine\s+learning|models?|modelos?|data science|feature engineering|pytorch|tensorflow|scikit[-\s]?learn|pandas|numpy)\b[^.\n]{0,180}\b(?:design|desenhar|develop|desenvolver|implement|implementar|build|train|training|treinar|deploy|productioni[sz]e)\b/.test(
+      jd
+    ) ||
+    /\b(?:data scientist|machine learning engineer|ml engineer)\b/.test(jd)
+  )
+}
+
+function resumeEvidenceMlDataScience(blob: string): boolean {
+  const lower = blob.toLowerCase()
+  return (
+    /\b(?:python|data scientist|data science|machine learning|ml engineer|ml pipelines?|model training|feature engineering|predictive models?|statistical model)\b/.test(
+      lower
+    ) ||
+    /\b(?:pandas|numpy|scikit[-\s]?learn|pytorch|tensorflow|xgboost|lightgbm|hugging\s*face|transformers)\b/.test(
+      lower
+    )
+  )
+}
+
 function resumeLooksDataScienceFirst(blob: string): boolean {
   const lower = blob.toLowerCase()
   return (
@@ -122,17 +197,20 @@ export function applyStackMismatchClamp(
   evaluation: JobEvaluation,
   minScore: number
 ): { evaluation: JobEvaluation; clampMeta?: StackMismatchClampMeta } {
-  if (!resume || !job.description?.trim()) {
+  if (!resume) {
     return { evaluation }
   }
 
-  const jd = job.description
+  const jd = [job.title, job.description].filter(Boolean).join('\n')
+  if (!jd.trim()) {
+    return { evaluation }
+  }
   const blob = buildResumeSkillsBlob(resume)
 
   let maxAllowed = 100
   const reasons: string[] = []
 
-  if (jdRequiresStrongJava(jd) && !resumeEvidenceJavaStack(blob)) {
+  if ((titleRequiresJavaEcosystem(job.title) || jdRequiresStrongJava(jd)) && !resumeEvidenceJavaStack(blob)) {
     maxAllowed = Math.min(maxAllowed, JAVA_ECOSYSTEM_CAP)
     reasons.push('listing expects Java/Spring-style experience; your resume does not show Java ecosystem skills')
   }
@@ -140,6 +218,22 @@ export function applyStackMismatchClamp(
   if (jdMandatoryAngular(jd, job.title) && !resumeEvidenceAngular(blob)) {
     maxAllowed = Math.min(maxAllowed, ANGULAR_CAP)
     reasons.push('listing requires Angular; your resume does not mention Angular')
+  }
+
+  if (jdRequiresAwsServerless(jd) && !resumeEvidenceAwsServerless(blob)) {
+    maxAllowed = Math.min(maxAllowed, CLOUD_SERVERLESS_CAP)
+    reasons.push('listing centers on AWS/serverless backend work; your resume does not show AWS/serverless experience')
+  }
+
+  if (
+    titleLooksMlDataScienceImplementation(job.title) &&
+    jdRequiresMlDataScienceImplementation(jd) &&
+    !resumeEvidenceMlDataScience(blob)
+  ) {
+    maxAllowed = Math.min(maxAllowed, ML_DATA_SCIENCE_CAP)
+    reasons.push(
+      'listing centers on ML/data-science implementation; your resume shows AI tooling but not ML/data-science production experience'
+    )
   }
 
   if (
