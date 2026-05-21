@@ -106,7 +106,8 @@ function titleSuggestsJunior(title: string): boolean {
 function buildUnderqualifiedReasons(
   title: string,
   facts: JdFacts,
-  ceilingYears: number
+  ceilingYears: number,
+  level: NormalizedLevel
 ): string[] {
   const reasons: string[] = []
   if (facts.maxYearsRequired > ceilingYears) {
@@ -114,7 +115,15 @@ function buildUnderqualifiedReasons(
       `JD requires ${facts.maxYearsRequired}+ years of experience; your level targets ≤ ${ceilingYears} years`
     )
   }
-  if (titleSuggestsSenior(title)) {
+
+  const seniorTitleIsStretch =
+    level === 'internship' || level === 'entry_level' || level === 'mid_level'
+      ? titleSuggestsSenior(title)
+      : level === 'senior_level'
+        ? titleSuggestsVerySenior(title)
+        : false
+
+  if (seniorTitleIsStretch) {
     reasons.push(`JD title "${title}" suggests a more senior role`)
   }
   return reasons
@@ -144,7 +153,7 @@ function normalizeSeniorityFlags(
 ): string[] {
   const cleaned = flags.filter((flag) => {
     if (flag === 'overqualified') return direction === 'overqualified'
-    if (flag === 'underqualified') return direction !== 'overqualified'
+    if (flag === 'underqualified') return direction === 'underqualified'
     return true
   })
 
@@ -172,7 +181,7 @@ export function applySeniorityClamp(
   const ceiling = yearsCeilingForLevel(level)
   const floor = yearsFloorForLevel(level)
 
-  const underReasons = buildUnderqualifiedReasons(job.title, facts, ceiling)
+  const underReasons = buildUnderqualifiedReasons(job.title, facts, ceiling, level)
   const overReasons = buildOverqualifiedReasons(job.title, facts, floor)
 
   let direction: SeniorityClampMeta['direction'] | null = null

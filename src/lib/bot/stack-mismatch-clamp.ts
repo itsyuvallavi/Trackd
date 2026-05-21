@@ -20,6 +20,7 @@ const JD_CLAMP_MAX_CHARS = 12000
 /** When the JD demands this ecosystem but the resume doesn't show it — cap score here. */
 const JAVA_ECOSYSTEM_CAP = 34
 const ANGULAR_CAP = 38
+const DATA_SCIENCE_TO_GRADUATE_AI_SOFTWARE_CAP = 58
 
 export function buildResumeSkillsBlob(resume: ResumeStructuredData): string {
   const parts: string[] = []
@@ -78,6 +79,43 @@ function resumeEvidenceAngular(blob: string): boolean {
   return /\bangular\b/i.test(blob)
 }
 
+function resumeLooksDataScienceFirst(blob: string): boolean {
+  const lower = blob.toLowerCase()
+  return (
+    /\bdata scientist\b|\bdata science\b|\bmachine learning\b|\bml pipelines?\b/.test(lower) ||
+    /\b(?:scikit[-\s]?learn|pandas|numpy|statistics|statistical|predictive models?)\b/.test(lower)
+  )
+}
+
+function titleLooksGraduateAiSoftware(title: string): boolean {
+  const lower = title.toLowerCase()
+  return (
+    /\b(?:graduate|junior|entry[-\s]?level|trainee)\b/.test(lower) &&
+    /\b(?:ai|artificial intelligence)\b/.test(lower) &&
+    /\bsoftware\s+(?:engineer|developer)\b/.test(lower)
+  )
+}
+
+function jdHasExplicitDataScienceWork(jdRaw: string): boolean {
+  const jd = jdRaw.slice(0, JD_CLAMP_MAX_CHARS).toLowerCase()
+  const pythonWithDataContext =
+    /\bpython\b[^.\n]{0,140}\b(?:machine learning|ml\b|model(?:ing|s)?|data science|analytics|feature engineering|pipeline|pandas|numpy|scikit[-\s]?learn|pytorch|tensorflow)\b/.test(
+      jd
+    ) ||
+    /\b(?:machine learning|ml\b|model(?:ing|s)?|data science|analytics|feature engineering|pipeline|pandas|numpy|scikit[-\s]?learn|pytorch|tensorflow)\b[^.\n]{0,140}\bpython\b/.test(
+      jd
+    )
+
+  return (
+    /\bdata scientist\b|\bdata science\b|\bmachine learning engineer\b|\bml engineer\b/.test(jd) ||
+    pythonWithDataContext ||
+    /\b(?:pandas|numpy|scikit[-\s]?learn|pytorch|tensorflow)\b/.test(jd) ||
+    /\b(?:model training|predictive model|statistical model|feature engineering|ml pipeline|data pipeline)\b/.test(
+      jd
+    )
+  )
+}
+
 export function applyStackMismatchClamp(
   job: SearchJobResult,
   resume: ResumeStructuredData | null,
@@ -102,6 +140,17 @@ export function applyStackMismatchClamp(
   if (jdMandatoryAngular(jd, job.title) && !resumeEvidenceAngular(blob)) {
     maxAllowed = Math.min(maxAllowed, ANGULAR_CAP)
     reasons.push('listing requires Angular; your resume does not mention Angular')
+  }
+
+  if (
+    resumeLooksDataScienceFirst(blob) &&
+    titleLooksGraduateAiSoftware(job.title) &&
+    !jdHasExplicitDataScienceWork(jd)
+  ) {
+    maxAllowed = Math.min(maxAllowed, DATA_SCIENCE_TO_GRADUATE_AI_SOFTWARE_CAP)
+    reasons.push(
+      'listing is a graduate AI software-engineering role but does not show explicit data-science, Python, or ML-engineering responsibilities'
+    )
   }
 
   if (maxAllowed >= evaluation.score) {

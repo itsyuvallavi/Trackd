@@ -580,7 +580,13 @@ export const BOT_EVAL_PERSONA_FIXTURES: BotEvalPersonaFixture[] = [
       },
       rawText: 'SRE with Kubernetes, Terraform, AWS, Prometheus, CI/CD, observability, and incident response experience.',
     }),
-    expectedSafeTerms: ['Site Reliability Engineer', 'SRE', 'Platform Engineer', 'DevOps Engineer'],
+    expectedSafeTerms: [
+      'Site Reliability Engineer',
+      'SRE',
+      'Platform Engineer',
+      'Cloud Infrastructure Engineer',
+      'DevOps Engineer',
+    ],
     jobs: [
       job({
         id: 'sre-good',
@@ -1079,6 +1085,16 @@ const EXTRA_EVAL_JOBS_BY_PERSONA: Record<string, BotEvalGoldJob[]> = {
       description: 'Operate Kubernetes clusters, Terraform modules, CI/CD, and incident response rotations.',
     },
     {
+      id: 'ml-bad-graduate-ai-software',
+      gold: 'bad',
+      title: 'Graduate AI Software Engineer',
+      company: 'Launch Lab',
+      location: 'Remote Europe',
+      isRemote: true,
+      description:
+        'Join a graduate software engineering program building AI-powered web product experiences with JavaScript, APIs, and product collaboration.',
+    },
+    {
       id: 'ml-bad-sales-ops',
       gold: 'bad',
       title: 'Sales Operations Analyst',
@@ -1381,12 +1397,12 @@ const EXTRA_EVAL_JOBS_BY_PERSONA: Record<string, BotEvalGoldJob[]> = {
     },
     {
       id: 'sre-partial-cloud-engineer',
-      gold: 'partial',
+      gold: 'good',
       title: 'Cloud Infrastructure Engineer',
       company: 'Compute Dock',
       location: 'Remote Europe',
       isRemote: true,
-      description: 'Manage AWS infrastructure and CI/CD; Kubernetes and incident response are secondary.',
+      description: 'Manage AWS infrastructure, Terraform modules, Kubernetes operations, CI/CD, and reliability runbooks.',
     },
     {
       id: 'sre-partial-build-release',

@@ -435,7 +435,7 @@ describe('evaluateJob minScore behavior', () => {
     })
   })
 
-  it('treats seniority as a soft preference instead of blocking strong matches', async () => {
+  it('requires a higher score margin before auto-approving underqualified matches', async () => {
     findManyMock.mockResolvedValue([
       {
         id: 'resume_frontend',
@@ -501,10 +501,152 @@ describe('evaluateJob minScore behavior', () => {
       }),
     )
 
-    expect(result.evaluation.score).toBe(77)
-    expect(result.evaluation.shouldApply).toBe(true)
+    expect(result.evaluation.score).toBe(74)
+    expect(result.evaluation.shouldApply).toBe(false)
     expect(result.evaluation.flags).toContain('underqualified')
     expect(result.evaluation.reasoning).toContain('Seniority preference adjustment')
+    expect(result.evaluation.reasoning).toContain('Underqualified approval adjustment')
+    expect(result.scoringInputs.underqualifiedApprovalClamp).toMatchObject({
+      beforeScore: 77,
+      afterScore: 74,
+      threshold: 75,
+      requiredScore: 90,
+    })
+  })
+
+  it('still auto-approves exceptional underqualified stretch matches', async () => {
+    findManyMock.mockResolvedValue([
+      {
+        id: 'resume_frontend',
+        label: 'Frontend',
+        matchKeywords: ['frontend', 'react', 'full stack'],
+        isDefault: true,
+        structuredData: {
+          name: 'Candidate',
+          email: 'candidate@example.com',
+          phone: null,
+          location: null,
+          linkedin: null,
+          github: null,
+          portfolio: null,
+          summary: 'Frontend engineer focused on React product interfaces.',
+          skills: ['React', 'TypeScript', 'Next.js'],
+          languages: [],
+          experience: [
+            {
+              company: 'Acme',
+              title: 'Frontend Engineer',
+              startDate: '2022',
+              endDate: 'Present',
+              description: 'Built React and TypeScript product workflows.',
+              achievements: [],
+            },
+          ],
+          education: [],
+          certifications: [],
+        },
+      },
+    ])
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 98,
+                reasoning:
+                  'The listing asks for "React" and "TypeScript" experience on product interfaces.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'React and TypeScript experience',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJob } = await import('./job-evaluator')
+    const result = await evaluateJob(
+      job({
+        title: 'Senior Software Engineer - Full Stack',
+        description:
+          'Remote full-stack product role building React and TypeScript workflows with API integrations.',
+      }),
+      cfg({
+        minScore: 75,
+        keywords: ['React Developer', 'Fullstack Developer'],
+        experienceLevel: 'mid_level',
+      }),
+    )
+
+    expect(result.evaluation.score).toBe(93)
+    expect(result.evaluation.shouldApply).toBe(true)
+    expect(result.evaluation.flags).toContain('underqualified')
+    expect(result.scoringInputs.seniorityClamp).toMatchObject({
+      direction: 'underqualified',
+      beforeScore: 98,
+      afterScore: 93,
+    })
+    expect(result.scoringInputs.underqualifiedApprovalClamp).toBeUndefined()
+  })
+
+  it('does not treat senior-level users as underqualified for senior titles', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 88,
+                reasoning:
+                  'The listing asks for SRE, Kubernetes, Terraform, AWS, CI/CD, and incident response experience.',
+                shouldApply: true,
+                flags: ['good_match', 'underqualified'],
+                resumeMatch: 'SRE, Kubernetes, Terraform, AWS, CI/CD, and incident response experience',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Senior Site Reliability Engineer (SRE)',
+        description:
+          'Run Kubernetes platforms on AWS using Terraform, Prometheus, CI/CD, and incident response practices.',
+      }),
+      cfg({
+        minScore: 70,
+        keywords: ['Site Reliability Engineer', 'DevOps Engineer', 'Platform Engineer'],
+        experienceLevel: 'senior_level',
+      }),
+      candidateProfile({
+        summary:
+          'SRE and platform engineer with Kubernetes, Terraform, AWS, observability, and incident response experience.',
+        skills: ['Kubernetes', 'Terraform', 'AWS', 'Prometheus', 'Incident response', 'CI/CD'],
+        experience: [
+          {
+            company: 'Synthetic Reliability Systems',
+            title: 'Site Reliability Engineer',
+            startDate: '2019',
+            endDate: 'Present',
+            description:
+              'Operated Kubernetes platforms, Terraform modules, observability, and production incident processes.',
+            achievements: [],
+          },
+        ],
+      })
+    )
+
+    expect(result.evaluation.score).toBe(88)
+    expect(result.evaluation.shouldApply).toBe(true)
+    expect(result.evaluation.flags).toContain('good_match')
+    expect(result.evaluation.flags).not.toContain('underqualified')
+    expect(result.scoringInputs.seniorityClamp).toBeUndefined()
+    expect(result.scoringInputs.underqualifiedApprovalClamp).toBeUndefined()
   })
 
   it('does not mark entry-level candidates overqualified for graduate roles', async () => {
@@ -646,6 +788,176 @@ describe('evaluateJob minScore behavior', () => {
       direction: 'overqualified',
       beforeScore: 82,
       afterScore: 76,
+    })
+  })
+
+  it('caps data-science candidates on generic graduate AI software roles', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 78,
+                reasoning:
+                  'The title says "Graduate AI Software Engineer" and the company builds AI product features.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'Python, data science, and machine learning experience',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Graduate AI Software Engineer',
+        description:
+          'Join a graduate software engineering program building AI-powered web product experiences with JavaScript, APIs, and product collaboration. Training and mentorship provided.',
+      }),
+      cfg({
+        minScore: 70,
+        keywords: ['Machine Learning Engineer', 'Data Scientist', 'Python ML Engineer'],
+        experienceLevel: 'mid_level',
+      }),
+      candidateProfile({
+        summary: 'Data scientist with Python, scikit-learn, SQL, experimentation, and production ML experience.',
+        skills: ['Python', 'SQL', 'scikit-learn', 'Pandas', 'A/B testing', 'ML pipelines'],
+        experience: [
+          {
+            company: 'Synthetic Analytics Group',
+            title: 'Data Scientist',
+            startDate: '2022',
+            endDate: 'Present',
+            description: 'Built predictive models, feature pipelines, and experiment analysis for product teams.',
+            achievements: [],
+          },
+        ],
+      })
+    )
+
+    expect(result.evaluation.score).toBe(58)
+    expect(result.evaluation.shouldApply).toBe(false)
+    expect(result.evaluation.flags).toContain('stack_mismatch')
+    expect(result.evaluation.reasoning).toContain('graduate AI software-engineering role')
+    expect(result.scoringInputs.stackMismatchClamp).toMatchObject({
+      beforeScore: 78,
+      afterScore: 58,
+    })
+  })
+
+  it('does not cap graduate AI software roles when the JD includes explicit ML engineering work', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 78,
+                reasoning:
+                  'The role includes Python, feature engineering, ML pipelines, and model evaluation work.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'Python, data science, and ML pipeline experience',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Graduate AI Software Engineer',
+        description:
+          'Build Python ML pipelines, feature engineering workflows, model evaluation jobs, and scikit-learn prototypes with mentor support.',
+      }),
+      cfg({
+        minScore: 70,
+        keywords: ['Machine Learning Engineer', 'Data Scientist', 'Python ML Engineer'],
+        experienceLevel: 'mid_level',
+      }),
+      candidateProfile({
+        summary: 'Data scientist with Python, scikit-learn, SQL, experimentation, and production ML experience.',
+        skills: ['Python', 'SQL', 'scikit-learn', 'Pandas', 'A/B testing', 'ML pipelines'],
+        experience: [
+          {
+            company: 'Synthetic Analytics Group',
+            title: 'Data Scientist',
+            startDate: '2022',
+            endDate: 'Present',
+            description: 'Built predictive models, feature pipelines, and experiment analysis for product teams.',
+            achievements: [],
+          },
+        ],
+      })
+    )
+
+    expect(result.evaluation.score).toBe(78)
+    expect(result.evaluation.shouldApply).toBe(true)
+    expect(result.evaluation.flags).toContain('good_match')
+    expect(result.evaluation.flags).not.toContain('stack_mismatch')
+    expect(result.scoringInputs.stackMismatchClamp).toBeUndefined()
+  })
+
+  it('still caps graduate AI software roles when Python appears only in a generic stack list', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 75,
+                reasoning:
+                  'The title says "Graduate AI Software Engineer" and the JD mentions Python in a broad engineering stack.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'Python, data science, and ML pipeline experience',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Graduate AI Software Engineer',
+        description:
+          'Build software with end-to-end ownership, choosing the right technologies for each challenge. From monoliths to microservices, gRPC to REST, Kubernetes to Docker, Python to Rust, you will apply technologies thoughtfully and ship software used by millions.',
+      }),
+      cfg({
+        minScore: 70,
+        keywords: ['Machine Learning Engineer', 'Data Scientist', 'Python ML Engineer'],
+        experienceLevel: 'mid_level',
+      }),
+      candidateProfile({
+        summary: 'Data scientist with Python, scikit-learn, SQL, experimentation, and production ML experience.',
+        skills: ['Python', 'SQL', 'scikit-learn', 'Pandas', 'A/B testing', 'ML pipelines'],
+        experience: [
+          {
+            company: 'Synthetic Analytics Group',
+            title: 'Data Scientist',
+            startDate: '2022',
+            endDate: 'Present',
+            description: 'Built predictive models, feature pipelines, and experiment analysis for product teams.',
+            achievements: [],
+          },
+        ],
+      })
+    )
+
+    expect(result.evaluation.score).toBe(58)
+    expect(result.evaluation.shouldApply).toBe(false)
+    expect(result.evaluation.flags).toContain('stack_mismatch')
+    expect(result.scoringInputs.stackMismatchClamp).toMatchObject({
+      beforeScore: 75,
+      afterScore: 58,
     })
   })
 

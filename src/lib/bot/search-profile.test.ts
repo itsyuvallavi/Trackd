@@ -300,7 +300,13 @@ describe('search profile', () => {
             },
           ],
         },
-        expected: ['Site Reliability Engineer', 'SRE', 'Platform Engineer', 'DevOps Engineer'],
+        expected: [
+          'Site Reliability Engineer',
+          'SRE',
+          'Platform Engineer',
+          'Cloud Infrastructure Engineer',
+          'DevOps Engineer',
+        ],
       },
       {
         keywords: ['Product Designer', 'UX Designer'],
@@ -375,7 +381,8 @@ describe('search profile', () => {
     expect(refineSearchKeywordForProvider('QA')).toBe('QA Automation Engineer')
     expect(refineSearchKeywordForProvider('SDET')).toBe('SDET')
     expect(refineSearchKeywordForProvider('Playwright QA')).toBe('Playwright QA Engineer')
-    expect(refineSearchKeywordForProvider('SRE')).toBe('Site Reliability Engineer')
+    expect(refineSearchKeywordForProvider('SRE')).toBe('SRE')
     expect(refineSearchKeywordForProvider('Platform Engineer')).toBe('Platform Engineer')
+    expect(refineSearchKeywordForProvider('Cloud Infrastructure Engineer')).toBe('Cloud Infrastructure Engineer')
   })
 })

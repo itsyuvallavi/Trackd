@@ -32,6 +32,7 @@ import type { CandidateProfileSourceKind } from './profile-source-labels'
 import { profileSourceLabel } from './profile-source-labels'
 
 const EVALUATOR_MODEL = 'gpt-5-mini'
+const UNDERQUALIFIED_APPROVAL_MARGIN = 15
 
 const EVALUATOR_SYSTEM_PROMPT = `You score job listings for a specific candidate. Be strict, but do not turn user preferences into absolute rules unless the job clearly conflicts with them. The user manually reviews every job you save.
 
@@ -96,6 +97,15 @@ export type ScoringInputsSnapshot = {
   geoMismatchClamp?: GeoMismatchClampMeta
   /** When JD's required seniority conflicts with the user's experienceLevel setting. */
   seniorityClamp?: SeniorityClampMeta
+  /** When an underqualified stretch match is kept below auto-approval unless it clears a higher bar. */
+  underqualifiedApprovalClamp?: {
+    applied: boolean
+    beforeScore: number
+    afterScore: number
+    threshold: number
+    requiredScore: number
+    reasons: string[]
+  }
   /** Structured facts extracted from the FULL JD (audit + UI). */
   jdFacts?: JdFacts
 }
@@ -370,6 +380,53 @@ function emptyProfileSource(kind: CandidateProfileSourceKind = 'none'): Candidat
   }
 }
 
+function applyUnderqualifiedApprovalClamp(
+  evaluation: JobEvaluation,
+  minScore: number
+): {
+  evaluation: JobEvaluation
+  clampMeta?: NonNullable<ScoringInputsSnapshot['underqualifiedApprovalClamp']>
+} {
+  const threshold = Math.max(0, Math.min(100, minScore))
+  if (!evaluation.shouldApply || !evaluation.flags.includes('underqualified')) {
+    return { evaluation }
+  }
+
+  const requiredScore = Math.min(95, threshold + UNDERQUALIFIED_APPROVAL_MARGIN)
+  if (evaluation.score >= requiredScore) {
+    return { evaluation }
+  }
+
+  const beforeScore = evaluation.score
+  const afterScore = Math.max(0, Math.min(beforeScore, threshold - 1))
+  const reasons = [
+    `underqualified listings require score >= ${requiredScore} for auto-approval`,
+  ]
+  const note = ` [Underqualified approval adjustment: ${reasons.join('; ')}.]`
+  const reasoning =
+    evaluation.reasoning && !evaluation.reasoning.includes('Underqualified approval adjustment')
+      ? `${evaluation.reasoning}${note}`
+      : evaluation.reasoning || note.trim()
+
+  return {
+    evaluation: {
+      ...evaluation,
+      score: afterScore,
+      shouldApply: false,
+      flags: Array.from(new Set([...evaluation.flags, 'underqualified'])),
+      reasoning,
+    },
+    clampMeta: {
+      applied: true,
+      beforeScore,
+      afterScore,
+      threshold,
+      requiredScore,
+      reasons,
+    },
+  }
+}
+
 function buildPreFilterEvaluationResult(
   job: SearchJobResult,
   config: BotConfig,
@@ -476,6 +533,15 @@ async function evaluateJobWithResolvedProfile(
   evaluation = seniorityClamp.evaluation
   if (seniorityClamp.clampMeta) {
     scoringInputsFinal = { ...scoringInputsFinal, seniorityClamp: seniorityClamp.clampMeta }
+  }
+
+  const underqualifiedApprovalClamp = applyUnderqualifiedApprovalClamp(evaluation, threshold)
+  evaluation = underqualifiedApprovalClamp.evaluation
+  if (underqualifiedApprovalClamp.clampMeta) {
+    scoringInputsFinal = {
+      ...scoringInputsFinal,
+      underqualifiedApprovalClamp: underqualifiedApprovalClamp.clampMeta,
+    }
   }
 
   const jdLenThin = (job.description ?? '').trim().length

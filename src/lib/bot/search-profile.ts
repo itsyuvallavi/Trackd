@@ -105,14 +105,26 @@ export function refineSearchKeywordForProvider(raw: string): string {
   }
 
   if (/\bsre\b|\bsite reliability\b/.test(text)) {
-    return 'Site Reliability Engineer'
+    return /\bsre\b/.test(text) && !/\bsite reliability\b/.test(text) ? 'SRE' : 'Site Reliability Engineer'
   }
 
   if (/\bplatform engineer\b|\bplatform engineering\b/.test(text)) {
     return 'Platform Engineer'
   }
 
-  if (/\bdevops\b|\binfrastructure engineer\b/.test(text)) {
+  if (/\bcloud infrastructure engineer\b/.test(text)) {
+    return 'Cloud Infrastructure Engineer'
+  }
+
+  if (/\binfrastructure engineer\b/.test(text)) {
+    return 'Infrastructure Engineer'
+  }
+
+  if (/\breliability engineer\b/.test(text)) {
+    return 'Reliability Engineer'
+  }
+
+  if (/\bdevops\b/.test(text)) {
     return 'DevOps Engineer'
   }
 
@@ -238,7 +250,16 @@ function termMatchesIntent(term: string, intents: Set<string>): boolean {
 
   if (
     intents.has('devops') &&
-    hasAny(text, [/\bdevops\b/, /\bsite reliability\b/, /\bsre\b/, /\bplatform\b/, /\binfrastructure\b/])
+    hasAny(text, [
+      /\bdevops\b/,
+      /\bsite reliability\b/,
+      /\bsre\b/,
+      /\bplatform\b/,
+      /\binfrastructure\b/,
+      /\bcloud\b/,
+      /\bkubernetes\b/,
+      /\bterraform\b/,
+    ])
   ) {
     return true
   }
@@ -394,6 +415,13 @@ export function deriveSafeResumeSearchTerms(profile: CandidateProfile | null): s
     /\bdeveloper platform\b/,
     /\bplatform reliability\b/,
   ])
+  const hasCloudInfrastructure = hasAny(text, [
+    /\bcloud infrastructure\b/,
+    /\bcloud native\b/,
+    /\bkubernetes\b/,
+    /\bterraform\b/,
+    /\baws\b/,
+  ])
   const hasUxDesign = hasAny(text, [
     /\bux\b/,
     /\buser experience\b/,
@@ -449,6 +477,7 @@ export function deriveSafeResumeSearchTerms(profile: CandidateProfile | null): s
   if (hasSre) terms.push('Site Reliability Engineer')
   if (hasSre) terms.push('SRE')
   if (hasPlatformEngineering) terms.push('Platform Engineer')
+  if (hasDevOps && hasCloudInfrastructure) terms.push('Cloud Infrastructure Engineer')
   if (hasDevOps) terms.push('DevOps Engineer')
   if (hasProductDesign && hasUxDesign) terms.push('UX Product Designer')
   if (hasUxDesign) terms.push('UI UX Designer')
