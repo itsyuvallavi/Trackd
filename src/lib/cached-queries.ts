@@ -1,6 +1,5 @@
 import { unstable_cache } from 'next/cache'
-import { JobStatus } from '@prisma/client'
-import type { Prisma } from '@prisma/client'
+import { JobStatus, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getPublicJobTableColumnNames } from '@/lib/prisma-job-columns'
 import { cacheTagsFor } from '@/lib/cache-tags'
@@ -166,6 +165,63 @@ export function summarizeProfileSources(
   }
 
   return [...bySource.values()].sort((a, b) => b.listings - a.listings)
+}
+
+type CompactProfileSourceRow = {
+  botRunId: string
+  profileSource: Prisma.JsonValue | null
+  resumeUsed: Prisma.JsonValue | null
+}
+
+function compactProfileSourceScoringInput(row: CompactProfileSourceRow): Prisma.JsonValue {
+  return {
+    profileSource: row.profileSource,
+    resumeUsed: row.resumeUsed,
+  }
+}
+
+async function getCompactProfileSourceRows(botRunIds: string[]): Promise<CompactProfileSourceRow[]> {
+  if (botRunIds.length === 0) return []
+
+  return prisma.$queryRaw<CompactProfileSourceRow[]>`
+    SELECT
+      "botRunId",
+      jsonb_strip_nulls(jsonb_build_object(
+        'kind', "scoringInputs" #> '{profileSource,kind}',
+        'label', "scoringInputs" #> '{profileSource,label}',
+        'resumeLabel', "scoringInputs" #> '{profileSource,resumeLabel}',
+        'applicationIdentitySupplemented', "scoringInputs" #> '{profileSource,applicationIdentitySupplemented}',
+        'settingsDerivedSignalsUsed', "scoringInputs" #> '{profileSource,settingsDerivedSignalsUsed}',
+        'limitations', "scoringInputs" #> '{profileSource,limitations}'
+      )) AS "profileSource",
+      jsonb_strip_nulls(jsonb_build_object(
+        'sourceKind', "scoringInputs" #> '{resumeUsed,sourceKind}',
+        'selection', "scoringInputs" #> '{resumeUsed,selection}',
+        'sourceLabel', "scoringInputs" #> '{resumeUsed,sourceLabel}',
+        'label', "scoringInputs" #> '{resumeUsed,label}',
+        'applicationIdentitySupplemented', "scoringInputs" #> '{resumeUsed,applicationIdentitySupplemented}',
+        'settingsDerivedSignalsUsed', "scoringInputs" #> '{resumeUsed,settingsDerivedSignalsUsed}',
+        'limitations', "scoringInputs" #> '{resumeUsed,limitations}',
+        'resumeId', "scoringInputs" #> '{resumeUsed,resumeId}'
+      )) AS "resumeUsed"
+    FROM "BotRunListing"
+    WHERE "botRunId" IN (${Prisma.join(botRunIds)})
+      AND "scoringInputs" IS NOT NULL
+      AND ("scoringInputs" ? 'profileSource' OR "scoringInputs" ? 'resumeUsed')
+    ORDER BY "botRunId" ASC, "sequence" ASC
+  `
+}
+
+function summarizeProfileSourcesByRun(rows: CompactProfileSourceRow[]) {
+  const rowsByRun = new Map<string, { scoringInputs: Prisma.JsonValue | null }[]>()
+
+  for (const row of rows) {
+    const runRows = rowsByRun.get(row.botRunId) ?? []
+    runRows.push({ scoringInputs: compactProfileSourceScoringInput(row) })
+    rowsByRun.set(row.botRunId, runRows)
+  }
+
+  return rowsByRun
 }
 
 /**
@@ -350,6 +406,62 @@ export const getUserJobs = async (userId: string, limit = 100) => {
     },
     [
       'getUserJobs',
+      userId,
+      String(limit),
+      String(hasImportSource),
+      String(hasImportJobBoard),
+    ],
+    {
+      tags: [cacheTagsFor(userId).jobs],
+      revalidate: ONE_MINUTE,
+    },
+  )()
+}
+
+/**
+ * Slim projection for the /jobs table. Keep getUserJobs broader for /board and
+ * future full-row consumers; this page only needs list/filter fields.
+ */
+export const getUserJobsListRows = async (userId: string, limit = 100) => {
+  const cols = await getPublicJobTableColumnNames()
+  const hasImportSource = cols.has('importSource')
+  const hasImportJobBoard = cols.has('importJobBoard')
+
+  const select = {
+    id: true,
+    title: true,
+    company: true,
+    location: true,
+    status: true,
+    source: true,
+    tags: true,
+    notes: true,
+    createdAt: true,
+    ...(hasImportSource ? { importSource: true as const } : {}),
+    ...(hasImportJobBoard ? { importJobBoard: true as const } : {}),
+  }
+
+  return unstable_cache(
+    async () => {
+      const rows = await prisma.job.findMany({
+        where: { userId },
+        select,
+        orderBy: { savedAt: 'desc' },
+        take: limit,
+      })
+
+      return rows.map((r) => ({
+        ...r,
+        importSource: hasImportSource
+          ? ((r as { importSource?: string | null }).importSource ?? null)
+          : null,
+        importJobBoard: hasImportJobBoard
+          ? ((r as { importJobBoard?: string | null }).importJobBoard ?? null)
+          : null,
+      }))
+    },
+    [
+      'getUserJobsListRows',
       userId,
       String(limit),
       String(hasImportSource),
@@ -670,18 +782,15 @@ export const getBotRunsList = (userId: string) =>
           completedAt: true,
           duration: true,
           errors: true,
-          botRunListings: {
-            orderBy: { sequence: 'asc' },
-            select: {
-              scoringInputs: true,
-            },
-          },
         },
       })
 
-      return runs.map(({ botRunListings, ...run }) => ({
+      const profileSourceRows = await getCompactProfileSourceRows(runs.map((run) => run.id))
+      const profileSourcesByRun = summarizeProfileSourcesByRun(profileSourceRows)
+
+      return runs.map((run) => ({
         ...run,
-        profileSources: summarizeProfileSources(botRunListings),
+        profileSources: summarizeProfileSources(profileSourcesByRun.get(run.id) ?? []),
       }))
     },
     ['getBotRuns', userId],

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import type { JobSource } from '@prisma/client'
+import { Prisma, type JobSource } from '@prisma/client'
 import { jobSourceDisplayName } from '@/lib/job-source-display'
 import { getPublicJobTableColumnNames } from '@/lib/prisma-job-columns'
 
@@ -158,13 +158,39 @@ export async function GET(request: Request) {
   const duplicateFlags: Record<string, { appliedAt: Date; existingId: string }> = {}
 
   try {
-    const applied = await prisma.job.findMany({
-      where: {
-        userId: user.id,
-        status: { in: ['APPLIED', 'INTERVIEW', 'OFFER'] },
-      },
-      select: { id: true, url: true, company: true, title: true, updatedAt: true },
-    })
+    const duplicateUrlCandidates = new Set<string>()
+    const duplicateTitleCandidates = new Map<string, { company: string; title: string }>()
+    for (const job of deduped) {
+      const nu = normUrl(job.url)
+      if (nu) {
+        duplicateUrlCandidates.add(nu)
+        duplicateUrlCandidates.add(`${nu}/`)
+      }
+      duplicateTitleCandidates.set(titleKey(job.company, job.title), {
+        company: job.company.trim(),
+        title: job.title.trim(),
+      })
+    }
+
+    const duplicateFilters: Prisma.JobWhereInput[] = [
+      ...Array.from(duplicateUrlCandidates).map((candidate) => ({ url: candidate })),
+      ...Array.from(duplicateTitleCandidates.values()).map(({ company, title }) => ({
+        company: { equals: company, mode: 'insensitive' as const },
+        title: { equals: title, mode: 'insensitive' as const },
+      })),
+    ]
+
+    const applied =
+      duplicateFilters.length > 0
+        ? await prisma.job.findMany({
+            where: {
+              userId: user.id,
+              status: { in: ['APPLIED', 'INTERVIEW', 'OFFER'] },
+              OR: duplicateFilters,
+            },
+            select: { id: true, url: true, company: true, title: true, updatedAt: true },
+          })
+        : []
 
     const byUrl = new Map<string, { id: string; updatedAt: Date }>()
     const byTitle = new Map<string, { id: string; updatedAt: Date }>()

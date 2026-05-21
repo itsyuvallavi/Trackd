@@ -102,6 +102,23 @@ describe('/api/bot/queue', () => {
         orderBy: [{ savedAt: 'desc' }, { createdAt: 'desc' }],
       }),
     )
+    expect(mocks.jobFindMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 'user_1',
+          status: { in: ['APPLIED', 'INTERVIEW', 'OFFER'] },
+          OR: expect.arrayContaining([
+            { url: 'https://example.test/newer_lower_score' },
+            { url: 'https://example.test/newer_lower_score/' },
+            {
+              company: { equals: 'Acme', mode: 'insensitive' },
+              title: { equals: 'Newer Lower Score', mode: 'insensitive' },
+            },
+          ]),
+        }),
+      }),
+    )
     expect(body.jobs.map((job: { id: string }) => job.id)).toEqual([
       'newer_lower_score',
       'older_higher_score',

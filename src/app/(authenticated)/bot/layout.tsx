@@ -6,7 +6,7 @@ import { BotTabs } from '@/components/bot/bot-tabs'
 import { botSearchHasQueryableBackend } from '@/lib/bot/bot-search-sources'
 import { resolveResumeReadinessSource } from '@/lib/bot/profile-source-labels'
 import { prisma } from '@/lib/prisma'
-import type { BotSearchFrequency } from '@prisma/client'
+import { Prisma, type BotSearchFrequency } from '@prisma/client'
 
 /** Allow long-running bot search from "Run now" in the status strip. */
 export const maxDuration = 300
@@ -23,6 +23,38 @@ function toIsoString(value: Date | string): string {
   return value.toISOString()
 }
 
+async function getResumeReadinessCounts(userId: string): Promise<{
+  totalCount: number
+  parsedCount: number
+  rawTextCount: number
+}> {
+  const [totalCount, parsedCount, rawTextRows] = await Promise.all([
+    prisma.botResume.count({ where: { userId } }),
+    prisma.botResume.count({
+      where: {
+        userId,
+        NOT: [
+          { structuredData: { equals: Prisma.DbNull } },
+          { structuredData: { equals: Prisma.JsonNull } },
+        ],
+      },
+    }),
+    prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) AS count
+      FROM "BotResume"
+      WHERE "userId" = ${userId}
+        AND "rawText" IS NOT NULL
+        AND btrim("rawText") <> ''
+    `,
+  ])
+
+  return {
+    totalCount,
+    parsedCount,
+    rawTextCount: Number(rawTextRows[0]?.count ?? 0),
+  }
+}
+
 export default async function BotLayout({
   children,
 }: {
@@ -30,13 +62,10 @@ export default async function BotLayout({
 }) {
   const user = await requireAuth()
 
-  const [botConfig, lastRun, botResumes, appProfile] = await Promise.all([
+  const [botConfig, lastRun, resumeReadinessCounts, appProfile] = await Promise.all([
     getBotConfigByUserId(user.id),
     getBotLastRunForStrip(user.id),
-    prisma.botResume.findMany({
-      where: { userId: user.id },
-      select: { structuredData: true, rawText: true },
-    }),
+    getResumeReadinessCounts(user.id),
     prisma.applicationProfile.findUnique({
       where: { userId: user.id },
       select: {
@@ -61,8 +90,6 @@ export default async function BotLayout({
   const searchServiceConfigured = botSearchHasQueryableBackend()
   const hasKeywords = (botConfig?.keywords?.length ?? 0) > 0
   const canRun = searchServiceConfigured && hasKeywords
-  const parsedResumeCount = botResumes.filter((r) => r.structuredData != null).length
-  const rawTextCount = botResumes.filter((r) => r.rawText?.trim()).length
   const hasIdentityFallback = Boolean(
     appProfile &&
       (appProfile.applicationFullName?.trim() ||
@@ -81,9 +108,9 @@ export default async function BotLayout({
         appProfile.requiresSponsorship)
   )
   const resumeReadinessSource = resolveResumeReadinessSource({
-    totalCount: botResumes.length,
-    parsedCount: parsedResumeCount,
-    rawTextCount,
+    totalCount: resumeReadinessCounts.totalCount,
+    parsedCount: resumeReadinessCounts.parsedCount,
+    rawTextCount: resumeReadinessCounts.rawTextCount,
     hasIdentityFallback,
   })
   const runDisabledReason = !searchServiceConfigured
@@ -123,7 +150,7 @@ export default async function BotLayout({
                 canRun={canRun}
                 runDisabledReason={runDisabledReason}
                 resumeReadiness={{
-                  totalCount: botResumes.length,
+                  totalCount: resumeReadinessCounts.totalCount,
                   source: resumeReadinessSource,
                 }}
               />
