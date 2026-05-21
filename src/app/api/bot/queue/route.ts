@@ -22,6 +22,7 @@ type QueueJobRow = {
   botScore: number | null
   botReasoning: string | null
   coverLetter: string | null
+  savedAt: Date
   createdAt: Date
 }
 
@@ -125,9 +126,10 @@ export async function GET(request: Request) {
       botReasoning: true,
       coverLetter: true,
       tags: true,
+      savedAt: true,
       createdAt: true,
     },
-    orderBy: [{ botScore: 'desc' }, { createdAt: 'desc' }],
+    orderBy: [{ savedAt: 'desc' }, { createdAt: 'desc' }],
     take,
     skip: offset,
   })
@@ -200,6 +202,7 @@ export async function GET(request: Request) {
     },
     jobs: deduped.map((j) => ({
       ...j,
+      savedAt: j.savedAt.toISOString(),
       createdAt: j.createdAt.toISOString(),
       duplicate: duplicateFlags[j.id] ?? null,
       sourceDisplayName: jobSourceDisplayName(j.importSource, j.source, j.importJobBoard, {

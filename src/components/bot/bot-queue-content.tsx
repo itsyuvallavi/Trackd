@@ -47,6 +47,7 @@ interface QueueJob {
   botScore: number | null
   botReasoning: string | null
   coverLetter: string | null
+  savedAt: string
   createdAt: string
   duplicate: { appliedAt: string; existingId: string } | null
 }
