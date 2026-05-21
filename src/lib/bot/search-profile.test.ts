@@ -280,7 +280,7 @@ describe('search profile', () => {
         },
         expected: [
           'QA Automation Engineer',
-          'Software Engineer in Test',
+          'QA Engineer',
           'Test Automation Engineer',
           'SDET',
           'Playwright QA Engineer',
@@ -379,6 +379,8 @@ describe('search profile', () => {
     expect(refineSearchKeywordForProvider('AI Engineer')).toBe('LLM Engineer')
     expect(refineSearchKeywordForProvider('Machine Learning')).toBe('Machine Learning Engineer')
     expect(refineSearchKeywordForProvider('QA')).toBe('QA Automation Engineer')
+    expect(refineSearchKeywordForProvider('QA Engineer')).toBe('QA Engineer')
+    expect(refineSearchKeywordForProvider('Software Engineer in Test')).toBe('QA Engineer')
     expect(refineSearchKeywordForProvider('SDET')).toBe('SDET')
     expect(refineSearchKeywordForProvider('Playwright QA')).toBe('Playwright QA Engineer')
     expect(refineSearchKeywordForProvider('SRE')).toBe('SRE')

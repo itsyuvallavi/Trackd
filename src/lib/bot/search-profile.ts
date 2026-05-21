@@ -92,12 +92,24 @@ export function refineSearchKeywordForProvider(raw: string): string {
     return 'SDET'
   }
 
+  if (/\bsoftware engineer in test\b/.test(text)) {
+    return 'QA Engineer'
+  }
+
   if (/\bplaywright\b/.test(text)) {
     return 'Playwright QA Engineer'
   }
 
   if (/\btest automation\b/.test(text)) {
     return 'Test Automation Engineer'
+  }
+
+  if (/\bqa automation\b|\bquality assurance automation\b/.test(text)) {
+    return 'QA Automation Engineer'
+  }
+
+  if (/\bqa engineer\b|\bquality assurance engineer\b/.test(text)) {
+    return 'QA Engineer'
   }
 
   if (/\bqa\b|\bquality assurance\b/.test(text)) {
@@ -470,7 +482,7 @@ export function deriveSafeResumeSearchTerms(profile: CandidateProfile | null): s
   if (hasProductManagement && hasPlatformProduct) terms.push('Platform Product Manager')
   if (hasProductManagement) terms.push('Product Manager')
   if (hasQaAutomation) terms.push('QA Automation Engineer')
-  if (hasQaAutomation && hasBrowserAutomation) terms.push('Software Engineer in Test')
+  if (hasQaAutomation) terms.push('QA Engineer')
   if (hasQaAutomation && hasBrowserAutomation) terms.push('Test Automation Engineer')
   if (hasQaAutomation && hasBrowserAutomation) terms.push('SDET')
   if (hasQaAutomation && hasAny(text, [/\bplaywright\b/])) terms.push('Playwright QA Engineer')

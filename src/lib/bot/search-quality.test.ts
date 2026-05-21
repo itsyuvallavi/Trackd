@@ -110,6 +110,20 @@ describe('Job Search provider quality helpers', () => {
 
     expect(
       resolveJobsSearchCountryIndeed({
+        location: 'Remote Europe',
+        allLocations: ['Remote Europe', 'Dublin'],
+      }),
+    ).toEqual({ countryIndeed: 'Portugal', reason: 'europe_default' })
+
+    expect(
+      resolveJobsSearchCountryIndeed({
+        location: 'Dublin',
+        allLocations: ['Remote Europe', 'Dublin'],
+      }),
+    ).toEqual({ countryIndeed: 'Ireland', reason: 'location_pass' })
+
+    expect(
+      resolveJobsSearchCountryIndeed({
         location: 'United States',
         allLocations: ['United States'],
       }),

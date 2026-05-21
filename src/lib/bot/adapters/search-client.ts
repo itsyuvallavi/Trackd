@@ -22,6 +22,7 @@ import {
   BOT_SEARCH_RAPIDAPI_MIN_INTERVAL_MS,
   BOT_SEARCH_RAPIDAPI_CONCURRENCY,
   BOT_SEARCH_RAPIDAPI_RETRY_BACKOFF_MS,
+  BOT_SEARCH_PROVIDER_RESULTS_MIN,
   BOT_SEARCH_RESULTS_WANTED,
 } from '../search-constants'
 import { buildBotSearchPassPlan, type BotSearchProviderPass } from '../search-plan'
@@ -214,7 +215,7 @@ export async function runSearch(req: SearchRequest): Promise<SearchResponse> {
   const budget = req.results_wanted ?? BOT_SEARCH_RESULTS_WANTED
   const selectedPasses = searchPlan.passes.length
   const combos = Math.max(1, selectedPasses) * Math.max(1, platformSlots)
-  const perCombo = Math.max(5, Math.ceil(budget / combos))
+  const perCombo = Math.max(BOT_SEARCH_PROVIDER_RESULTS_MIN, Math.ceil(budget / combos))
 
   let skipJobsSearchApi = false
   let executedPasses = 0

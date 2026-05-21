@@ -19,6 +19,13 @@ export const BOT_SEARCH_LOCATION_PASSES_MAX = 5
 export const BOT_SEARCH_PROVIDER_PASSES_MAX = 10
 
 /**
+ * Minimum rows requested from each provider pass before local dedupe/final cap.
+ * Sparse provider queries can bury useful listings below the top 5, especially
+ * when duplicate-heavy role aliases share the same first few rows.
+ */
+export const BOT_SEARCH_PROVIDER_RESULTS_MIN = 10
+
+/**
  * Jobs Search API's RapidAPI plan rate-limits by second. Keep provider calls
  * serial and lightly spaced; AI scoring is where we use bounded parallelism.
  */

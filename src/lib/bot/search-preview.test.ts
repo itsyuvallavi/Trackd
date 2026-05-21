@@ -96,6 +96,35 @@ describe('buildBotSearchPreview', () => {
     expect(preview.jobsSearchPhrase).not.toContain('React Developer')
   })
 
+  it('previews broader QA aliases from resume-derived safe search terms', () => {
+    const preview = buildBotSearchPreview({
+      ...baseInput(),
+      keywords: ['QA Automation Engineer'],
+      safeResumeSearchTerms: [
+        'QA Automation Engineer',
+        'QA Engineer',
+        'Test Automation Engineer',
+        'SDET',
+        'Playwright QA Engineer',
+      ],
+      locations: ['Remote Europe'],
+      remoteOnly: true,
+      experienceLevelRaw: '',
+    })
+
+    expect(preview.keywordQuery).toBe(
+      'QA Automation Engineer OR QA Engineer OR Test Automation Engineer OR SDET OR Playwright QA Engineer'
+    )
+    expect(preview.providerSearchTerms).toEqual([
+      'QA Automation Engineer remote Europe',
+      'QA Engineer remote Europe',
+      'Test Automation Engineer remote Europe',
+      'SDET remote Europe',
+      'Playwright QA Engineer remote Europe',
+    ])
+    expect(preview.jobsSearchPhrase).not.toContain('Software Engineer in Test')
+  })
+
   it('exposes capped provider passes with balanced keyword and location coverage', () => {
     const preview = buildBotSearchPreview({
       ...baseInput(),

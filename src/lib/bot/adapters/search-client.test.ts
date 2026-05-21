@@ -60,7 +60,7 @@ describe('runSearch settings plumbing', () => {
     expect(searchJobsSearchApiExcelMock.mock.calls[0][0]).toMatchObject({
       searchTerm: 'Frontend Engineer remote Portugal',
       location: 'Portugal',
-      resultsWanted: 5,
+      resultsWanted: 10,
       isRemote: true,
       experienceHint: 'senior',
       siteNames: ['linkedin', 'glassdoor'],
@@ -70,7 +70,7 @@ describe('runSearch settings plumbing', () => {
     expect(searchJobsSearchApiExcelMock.mock.calls[1][0]).toMatchObject({
       searchTerm: 'Backend Engineer remote Portugal',
       location: 'Portugal',
-      resultsWanted: 5,
+      resultsWanted: 10,
       isRemote: true,
       experienceHint: 'senior',
       siteNames: ['linkedin', 'glassdoor'],
@@ -78,7 +78,7 @@ describe('runSearch settings plumbing', () => {
     expect(searchJobsSearchApiExcelMock.mock.calls[2][0]).toMatchObject({
       searchTerm: 'Frontend Engineer remote Europe',
       location: 'Remote Europe',
-      resultsWanted: 5,
+      resultsWanted: 10,
       isRemote: true,
       experienceHint: 'senior',
       siteNames: ['linkedin', 'glassdoor'],
@@ -86,7 +86,7 @@ describe('runSearch settings plumbing', () => {
     expect(searchJobsSearchApiExcelMock.mock.calls[3][0]).toMatchObject({
       searchTerm: 'Backend Engineer remote Europe',
       location: 'Remote Europe',
-      resultsWanted: 5,
+      resultsWanted: 10,
       isRemote: true,
       experienceHint: 'senior',
       siteNames: ['linkedin', 'glassdoor'],
@@ -131,7 +131,7 @@ describe('runSearch settings plumbing', () => {
     ])
     expect(response.meta.provider_country_indeed).toEqual({
       jobs_search_api: ['Portugal'],
-      reason: 'profile_scope,location_pass',
+      reason: 'profile_scope,location_pass,europe_default',
     })
   })
 
@@ -186,7 +186,7 @@ describe('runSearch settings plumbing', () => {
     expect(new Set(calls.map((params) => params.searchTerm)).size).toBeGreaterThan(1)
     expect(new Set(calls.map((params) => params.location)).size).toBeGreaterThan(1)
     expect(calls.every((params) => params.location === 'L1')).toBe(false)
-    expect(calls.every((params) => params.resultsWanted === 9)).toBe(true)
+    expect(calls.every((params) => params.resultsWanted === 10)).toBe(true)
 
     expect(response.meta.search_passes).toMatchObject({
       planned: 25,

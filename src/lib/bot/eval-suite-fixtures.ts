@@ -502,7 +502,7 @@ export const BOT_EVAL_PERSONA_FIXTURES: BotEvalPersonaFixture[] = [
     }),
     expectedSafeTerms: [
       'QA Automation Engineer',
-      'Software Engineer in Test',
+      'QA Engineer',
       'Test Automation Engineer',
       'SDET',
       'Playwright QA Engineer',
@@ -1279,6 +1279,23 @@ const EXTRA_EVAL_JOBS_BY_PERSONA: Record<string, BotEvalGoldJob[]> = {
       company: 'Browser Works',
       location: 'Dublin, Ireland',
       description: 'Automate web product checks with TypeScript, Cypress, Playwright, API tests, and CI pipelines.',
+    },
+    {
+      id: 'qa-good-qa-engineer-automation',
+      gold: 'good',
+      title: 'QA Engineer, Automation',
+      company: 'Release Signal',
+      location: 'Remote Europe',
+      isRemote: true,
+      description: 'Expand QA automation coverage with Playwright, TypeScript API checks, regression plans, and CI reporting.',
+    },
+    {
+      id: 'qa-good-test-engineer-web',
+      gold: 'good',
+      title: 'Test Engineer, Web Automation',
+      company: 'Quality Harbor',
+      location: 'Dublin, Ireland',
+      description: 'Build E2E browser tests, maintain Playwright fixtures, and improve automated release validation.',
     },
     {
       id: 'qa-partial-manual',

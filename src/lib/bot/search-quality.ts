@@ -99,6 +99,13 @@ function normaliseLocationToken(value: string): string {
     .replace(/\s+/g, ' ')
 }
 
+function isEuropeRemoteScope(location: string): boolean {
+  const loc = normaliseLocationToken(location)
+  return ['europe', 'eu', 'emea', 'eea', 'remote europe', 'remote eu', 'remote emea'].includes(
+    loc
+  )
+}
+
 export function resolveJobsSearchRemoteFlag(input: {
   location: string
   remoteOnly?: boolean
@@ -162,6 +169,10 @@ export function resolveJobsSearchCountryIndeed(input: {
 
   const direct = countryFromLocationToken(input.location)
   if (direct) return { countryIndeed: direct, reason: 'location_pass' }
+
+  if (isEuropeRemoteScope(input.location)) {
+    return { countryIndeed: 'Portugal', reason: 'europe_default' }
+  }
 
   for (const location of input.allLocations) {
     const scoped = countryFromLocationToken(location)
