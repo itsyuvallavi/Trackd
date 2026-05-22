@@ -422,7 +422,7 @@ export const getUserJobs = async (userId: string, limit = 100) => {
  * Slim projection for the /jobs table. Keep getUserJobs broader for /board and
  * future full-row consumers; this page only needs list/filter fields.
  */
-export const getUserJobsListRows = async (userId: string, limit = 100) => {
+export const getUserJobsListRows = async (userId: string, limit?: number | null) => {
   const cols = await getPublicJobTableColumnNames()
   const hasImportSource = cols.has('importSource')
   const hasImportJobBoard = cols.has('importJobBoard')
@@ -447,7 +447,7 @@ export const getUserJobsListRows = async (userId: string, limit = 100) => {
         where: { userId },
         select,
         orderBy: { savedAt: 'desc' },
-        take: limit,
+        ...(limit && limit > 0 ? { take: limit } : {}),
       })
 
       return rows.map((r) => ({
@@ -463,7 +463,7 @@ export const getUserJobsListRows = async (userId: string, limit = 100) => {
     [
       'getUserJobsListRows',
       userId,
-      String(limit),
+      limit && limit > 0 ? String(limit) : 'all',
       String(hasImportSource),
       String(hasImportJobBoard),
     ],

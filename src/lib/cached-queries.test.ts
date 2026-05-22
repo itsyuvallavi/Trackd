@@ -235,7 +235,18 @@ describe('bot run profile source summaries', () => {
         importJobBoard: true,
       },
       orderBy: { savedAt: 'desc' },
-      take: 100,
     })
+  })
+
+  it('still supports an explicit jobs-page row limit for callers that request one', async () => {
+    prismaMock.job.findMany.mockResolvedValue([])
+
+    await getUserJobsListRows('user_1', 25)
+
+    expect(prismaMock.job.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        take: 25,
+      })
+    )
   })
 })
