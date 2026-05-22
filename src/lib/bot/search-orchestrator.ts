@@ -13,7 +13,7 @@ import { JobSource, Prisma } from '@prisma/client'
 import type { BotConfig } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { SearchJobResult, OrchestratorResult } from './types'
-import { evaluateJob } from './job-evaluator'
+import { evaluateJobWithCandidateProfile } from './job-evaluator'
 import { preFilterJob, type PreFilterResult } from './pre-filter'
 import { runSearch } from './adapters/search-client'
 import { botSearchHasQueryableBackend } from './bot-search-sources'
@@ -816,6 +816,39 @@ export async function runBotSearch(
     evaluationFailures: [],
     platformsMeta: null,
   }
+  let processedSinceProgressPersist = 0
+  let progressPersistChain: Promise<void> = Promise.resolve()
+
+  const persistRunCounters = async () => {
+    const id = opts?.botRunId
+    if (!id) return
+    const snapshot = {
+      jobsFound: result.jobsFound,
+      jobsNew: result.jobsNew,
+      jobsEvaluated: result.jobsEvaluated,
+      jobsApproved: result.jobsApproved,
+    }
+    progressPersistChain = progressPersistChain
+      .catch(() => undefined)
+      .then(async () => {
+        await prisma.botRun.update({
+          where: { id },
+          data: snapshot,
+        })
+      })
+      .catch((e) => {
+        console.error('[bot] Failed to persist BotRun progress counters:', e)
+      })
+    await progressPersistChain
+  }
+
+  const maybePersistRunCounters = async (force = false) => {
+    if (!opts?.botRunId) return
+    processedSinceProgressPersist++
+    if (!force && processedSinceProgressPersist < 3) return
+    processedSinceProgressPersist = 0
+    await persistRunCounters()
+  }
 
   try {
     if (!botSearchHasQueryableBackend()) {
@@ -880,6 +913,7 @@ export async function runBotSearch(
 
     result.jobsFound = searchResponse.jobs.length
     result.platformsMeta = searchResponse.meta
+    await persistRunCounters()
 
     pushLog(
       'info',
@@ -1297,7 +1331,11 @@ export async function runBotSearch(
 
         if (openAi) {
           try {
-            const { evaluation, scoringInputs: si } = await evaluateJob(job, botConfig)
+            const { evaluation, scoringInputs: si } = await evaluateJobWithCandidateProfile(
+              job,
+              botConfig,
+              runProfile
+            )
             score = evaluation.score
             shouldApply = evaluation.shouldApply
             reasoning = evaluation.reasoning
@@ -1536,18 +1574,23 @@ export async function runBotSearch(
         })
       }
     }
+    const processJobWithProgress = async (item: Parameters<typeof processJob>[0]) => {
+      await processJob(item)
+      await maybePersistRunCounters()
+    }
 
     if (openAi) {
       pushLog(
         'info',
         `Running AI evaluation with concurrency=${Math.min(aiEvalConcurrency, jobsToProcess.length || 1)} for ${jobsToProcess.length} listing(s)`
       )
-      await runLimited(jobsToProcess, aiEvalConcurrency, processJob)
+      await runLimited(jobsToProcess, aiEvalConcurrency, processJobWithProgress)
     } else {
       for (const item of jobsToProcess) {
-        await processJob(item)
+        await processJobWithProgress(item)
       }
     }
+    await maybePersistRunCounters(true)
 
     pushLog(
       'info',

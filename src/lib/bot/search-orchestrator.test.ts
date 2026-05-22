@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   dismissedFindMany: vi.fn(),
   botRunLogCreateMany: vi.fn(),
   botRunListingCreateMany: vi.fn(),
+  botRunUpdate: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -39,6 +40,9 @@ vi.mock('@/lib/prisma', () => ({
     botRunListing: {
       createMany: mocks.botRunListingCreateMany,
     },
+    botRun: {
+      update: mocks.botRunUpdate,
+    },
   },
 }))
 
@@ -48,6 +52,7 @@ vi.mock('./adapters/search-client', () => ({
 
 vi.mock('./job-evaluator', () => ({
   evaluateJob: mocks.evaluateJob,
+  evaluateJobWithCandidateProfile: mocks.evaluateJob,
 }))
 
 vi.mock('./bot-search-sources', () => ({
@@ -146,6 +151,7 @@ describe('runBotSearch orchestration', () => {
     mocks.jobCreate.mockResolvedValue({ id: 'job_saved' })
     mocks.botRunLogCreateMany.mockResolvedValue({ count: 0 })
     mocks.botRunListingCreateMany.mockResolvedValue({ count: 0 })
+    mocks.botRunUpdate.mockResolvedValue({})
   })
 
   afterEach(() => {
@@ -505,7 +511,11 @@ describe('runBotSearch orchestration', () => {
     )
 
     expect(mocks.evaluateJob).toHaveBeenCalledTimes(1)
-    expect(mocks.evaluateJob).toHaveBeenCalledWith(designerMatch, expect.any(Object))
+    expect(mocks.evaluateJob).toHaveBeenCalledWith(
+      designerMatch,
+      expect.any(Object),
+      expect.any(Object),
+    )
     expect(result).toMatchObject({
       jobsFound: 2,
       jobsEvaluated: 1,
@@ -649,7 +659,11 @@ describe('runBotSearch orchestration', () => {
     const result = await runBotSearch(config(), 'user_1', { botRunId: 'run_1' })
 
     expect(mocks.evaluateJob).toHaveBeenCalledTimes(MANY_JOBS_COUNT)
-    expect(mocks.evaluateJob).toHaveBeenCalledWith(strongLateJob, expect.any(Object))
+    expect(mocks.evaluateJob).toHaveBeenCalledWith(
+      strongLateJob,
+      expect.any(Object),
+      expect.any(Object),
+    )
     expect(mocks.jobCreate).toHaveBeenCalledTimes(1)
     expect(mocks.jobCreate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -742,7 +756,11 @@ describe('runBotSearch orchestration', () => {
       { botRunId: 'run_1' },
     )
 
-    expect(mocks.evaluateJob).toHaveBeenCalledWith(frontendLateJob, expect.any(Object))
+    expect(mocks.evaluateJob).toHaveBeenCalledWith(
+      frontendLateJob,
+      expect.any(Object),
+      expect.any(Object),
+    )
     expect(mocks.evaluateJob).toHaveBeenCalledTimes(MANY_JOBS_COUNT)
     expect(result.jobsApproved).toBe(1)
     expect(result.jobsEvaluated).toBe(MANY_JOBS_COUNT)
@@ -811,7 +829,11 @@ describe('runBotSearch orchestration', () => {
     const result = await runBotSearch(config(), 'user_1', { botRunId: 'run_1' })
 
     expect(mocks.evaluateJob).toHaveBeenCalledTimes(1)
-    expect(mocks.evaluateJob).toHaveBeenCalledWith(validLateJob, expect.any(Object))
+    expect(mocks.evaluateJob).toHaveBeenCalledWith(
+      validLateJob,
+      expect.any(Object),
+      expect.any(Object),
+    )
     expect(mocks.jobCreate).toHaveBeenCalledTimes(1)
     expect(result).toMatchObject({
       jobsFound: MANY_JOBS_COUNT,

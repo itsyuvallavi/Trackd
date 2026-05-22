@@ -132,7 +132,19 @@ export function BotStatusStrip({
   function handleRun() {
     setToast({ kind: 'running' })
     startRun(async () => {
-      const res = await triggerBotSearch()
+      let res: Awaited<ReturnType<typeof triggerBotSearch>>
+      try {
+        res = await triggerBotSearch()
+      } catch (error) {
+        console.error('[bot] Manual search request failed:', error)
+        setToast({
+          kind: 'done',
+          ok: false,
+          msg: 'Search request was interrupted. Check Runs and Jobs for partial results before starting another run.',
+        })
+        router.refresh()
+        return
+      }
       if (res.success) {
         window.dispatchEvent(new CustomEvent(BOT_RUN_COMPLETE_EVENT))
         window.dispatchEvent(new CustomEvent(NOTIFICATIONS_REFRESH_EVENT))

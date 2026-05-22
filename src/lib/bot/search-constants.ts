@@ -38,4 +38,4 @@ export const BOT_SEARCH_RAPIDAPI_RETRY_BACKOFF_MS = 5_000
  * AI scoring is the slowest part of a run. Keep it bounded so the production
  * "Run now" action makes steady progress without overloading the model provider.
  */
-export const BOT_SEARCH_AI_EVAL_CONCURRENCY = 3
+export const BOT_SEARCH_AI_EVAL_CONCURRENCY = 5
