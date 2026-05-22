@@ -131,6 +131,16 @@ function evaluationFailuresFromRun(
   return out
 }
 
+function historicalBudgetNoteFromRun(errors: BotRun['errors']): string | null {
+  if (!errors || typeof errors !== 'object' || Array.isArray(errors)) return null
+  const budget = (errors as Record<string, unknown>).evaluation_budget
+  return typeof budget === 'string' ? budget : null
+}
+
+function displayFlags(flags: string[]): string[] {
+  return flags.filter((flag) => flag !== 'eval_budget')
+}
+
 function profileSourceBadgeClass(source: BotRunProfileSourceSummary): string {
   switch (source.kind) {
     case 'parsed_resume':
@@ -256,6 +266,7 @@ export function BotRunsPanel({ runs }: BotRunsPanelProps) {
           const budgetSkips = evalSkips.filter((s) => s.filterKind === 'eval_budget')
           const aiScoreSkips = evalSkips.filter((s) => s.filterKind === 'ai_score')
           const evalFailures = evaluationFailuresFromRun(run.errors)
+          const historicalBudgetNote = historicalBudgetNoteFromRun(run.errors)
           const profileSources = run.profileSources ?? []
           return (
             <div key={run.id} className="px-5 py-3 space-y-1.5">
@@ -326,40 +337,49 @@ export function BotRunsPanel({ runs }: BotRunsPanelProps) {
               {budgetSkips.length > 0 && (
                 <details className="text-xs group">
                   <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
-                    Budget skipped {budgetSkips.length} after deterministic ranking — show
-                    signals
+                    Historical scoring cap skipped {budgetSkips.length} in this old run —
+                    show details
                   </summary>
+                  <p className="mt-2 rounded-md border border-warning/25 bg-warning-bg px-3 py-2 text-[11px] leading-snug text-warning-text">
+                    These listings are preserved audit data from an older scorer version.
+                    Current Job Search runs no longer use the 12-listing AI evaluation cap;
+                    every eligible listing returned by search is sent through scoring.
+                    {historicalBudgetNote ? ` Previous run note: ${historicalBudgetNote}` : ''}
+                  </p>
                   <ul className="mt-2 space-y-3 border-l-2 border-border pl-3 max-h-64 overflow-y-auto">
-                    {budgetSkips.map((s, i) => (
-                      <li key={`${run.id}-budget-skip-${i}`}>
-                        <p className="font-medium text-foreground leading-tight">
-                          {s.title}{' '}
-                          <span className="text-muted-foreground font-normal">
-                            @ {s.company}
-                          </span>
-                        </p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
-                          Not AI scored
-                          {s.priorityScore != null ? ` · Rank ${s.priorityScore}` : ''}
-                          {s.flags.length > 0 ? ` · ${s.flags.join(', ')}` : ''}
-                        </p>
-                        {s.priorityReasons.length > 0 && (
-                          <p className="text-[11px] text-muted-foreground mt-0.5">
-                            Signals: {s.priorityReasons.join(', ')}
+                    {budgetSkips.map((s, i) => {
+                      const flags = displayFlags(s.flags)
+                      return (
+                        <li key={`${run.id}-budget-skip-${i}`}>
+                          <p className="font-medium text-foreground leading-tight">
+                            {s.title}{' '}
+                            <span className="text-muted-foreground font-normal">
+                              @ {s.company}
+                            </span>
                           </p>
-                        )}
-                        {(s.jobBoard || s.providerPass?.providerQuery) && (
-                          <p className="text-[11px] text-muted-foreground mt-0.5">
-                            {s.jobBoard ? `Board ${s.jobBoard}` : 'Provider pass'}
-                            {s.providerPass?.providerQuery ? ` · "${s.providerPass.providerQuery}"` : ''}
-                            {s.providerPass?.location ? ` · ${s.providerPass.location}` : ''}
+                          <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
+                            Legacy cap skip
+                            {s.priorityScore != null ? ` · Rank ${s.priorityScore}` : ''}
+                            {flags.length > 0 ? ` · ${flags.join(', ')}` : ''}
                           </p>
-                        )}
-                        <p className="text-[11px] leading-snug text-foreground/90 mt-1">
-                          {s.reasoning}
-                        </p>
-                      </li>
-                    ))}
+                          {s.priorityReasons.length > 0 && (
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                              Signals: {s.priorityReasons.join(', ')}
+                            </p>
+                          )}
+                          {(s.jobBoard || s.providerPass?.providerQuery) && (
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                              {s.jobBoard ? `Board ${s.jobBoard}` : 'Provider pass'}
+                              {s.providerPass?.providerQuery ? ` · "${s.providerPass.providerQuery}"` : ''}
+                              {s.providerPass?.location ? ` · ${s.providerPass.location}` : ''}
+                            </p>
+                          )}
+                          <p className="text-[11px] leading-snug text-foreground/90 mt-1">
+                            {s.reasoning}
+                          </p>
+                        </li>
+                      )
+                    })}
                   </ul>
                 </details>
               )}
