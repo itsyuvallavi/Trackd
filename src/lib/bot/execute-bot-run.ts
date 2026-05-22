@@ -1,5 +1,5 @@
 import { BotRunStatus, Prisma } from '@prisma/client'
-import type { BotConfig } from '@prisma/client'
+import type { BotConfig, BotRun } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { runBotSearch } from '@/lib/bot/search-orchestrator'
 import { sendBotRunSummary } from '@/lib/bot/telegram'
@@ -17,6 +17,26 @@ export type BotRunExecutionResult = {
   jobsEvaluationFailed: number
   error?: string
 }
+
+export type StartedBotRun = Pick<BotRun, 'id' | 'startedAt'>
+
+export type BotRunStartResult =
+  | {
+      started: true
+      runId: string
+      startedAt: Date
+    }
+  | {
+      started: false
+      runId: string
+      jobsFound: 0
+      jobsNew: 0
+      jobsApproved: 0
+      jobsHardFiltered: 0
+      jobsSkippedLowScore: 0
+      jobsEvaluationFailed: 0
+      error: string
+    }
 
 async function createBotRunNotification(input: {
   userId: string
@@ -103,13 +123,13 @@ async function createBotRunNotification(input: {
 }
 
 /**
- * One bot search: BotRun row, orchestrator, persistence, optional Telegram.
- * Used by Vercel cron and by the authenticated "Run now" server action.
+ * Reserve a BotRun row before execution. Used by synchronous cron runs and by
+ * queued manual runs so the user can see progress immediately.
  */
-export async function executeBotRunForConfig(
+export async function startBotRunForConfig(
   config: BotConfig,
   source: 'cron' | 'manual'
-): Promise<BotRunExecutionResult> {
+): Promise<BotRunStartResult> {
   const startedAt = new Date()
   const staleStartedBefore = new Date(startedAt.getTime() - STALE_RUNNING_BOT_RUN_MS)
 
@@ -162,6 +182,7 @@ export async function executeBotRunForConfig(
 
   if (runStart.activeRun || !runStart.botRun) {
     return {
+      started: false,
       runId: runStart.activeRun?.id ?? '',
       jobsFound: 0,
       jobsNew: 0,
@@ -173,7 +194,43 @@ export async function executeBotRunForConfig(
     }
   }
 
-  const botRun = runStart.botRun
+  return {
+    started: true,
+    runId: runStart.botRun.id,
+    startedAt: runStart.botRun.startedAt ?? startedAt,
+  }
+}
+
+export async function markStartedBotRunFailed(input: {
+  botRunId: string
+  startedAt: Date
+  error: string
+  extraErrors?: Record<string, unknown>
+}): Promise<void> {
+  await prisma.botRun.update({
+    where: { id: input.botRunId },
+    data: {
+      status: BotRunStatus.FAILED,
+      completedAt: new Date(),
+      duration: Date.now() - input.startedAt.getTime(),
+      errors: {
+        fatal: input.error,
+        ...input.extraErrors,
+      },
+    },
+  })
+}
+
+/**
+ * Execute an already-reserved BotRun. Queue consumers use this to keep the
+ * durable run id stable across retries.
+ */
+export async function executeStartedBotRunForConfig(
+  config: BotConfig,
+  source: 'cron' | 'manual',
+  botRun: StartedBotRun
+): Promise<BotRunExecutionResult> {
+  const startedAt = botRun.startedAt
 
   try {
     const orchestratorResult = await runBotSearch(config, config.userId, { botRunId: botRun.id })
@@ -347,14 +404,10 @@ export async function executeBotRunForConfig(
     const msg = err instanceof Error ? err.message : String(err)
     console.error(`[bot-run] Failed for user ${config.userId}:`, msg)
 
-    await prisma.botRun.update({
-      where: { id: botRun.id },
-      data: {
-        status: BotRunStatus.FAILED,
-        completedAt: new Date(),
-        duration: Date.now() - startedAt.getTime(),
-        errors: { fatal: msg },
-      },
+    await markStartedBotRunFailed({
+      botRunId: botRun.id,
+      startedAt,
+      error: msg,
     })
 
     try {
@@ -387,4 +440,33 @@ export async function executeBotRunForConfig(
       error: msg,
     }
   }
+}
+
+/**
+ * One bot search: BotRun row, orchestrator, persistence, optional Telegram.
+ * Used by Vercel cron and by tests that expect a synchronous execution result.
+ */
+export async function executeBotRunForConfig(
+  config: BotConfig,
+  source: 'cron' | 'manual'
+): Promise<BotRunExecutionResult> {
+  const started = await startBotRunForConfig(config, source)
+
+  if (!started.started) {
+    return {
+      runId: started.runId,
+      jobsFound: started.jobsFound,
+      jobsNew: started.jobsNew,
+      jobsApproved: started.jobsApproved,
+      jobsHardFiltered: started.jobsHardFiltered,
+      jobsSkippedLowScore: started.jobsSkippedLowScore,
+      jobsEvaluationFailed: started.jobsEvaluationFailed,
+      error: started.error,
+    }
+  }
+
+  return executeStartedBotRunForConfig(config, source, {
+    id: started.runId,
+    startedAt: started.startedAt,
+  })
 }

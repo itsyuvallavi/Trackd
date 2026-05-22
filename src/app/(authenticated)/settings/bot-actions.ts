@@ -7,6 +7,7 @@ import { requireAuth } from '@/lib/auth'
 import { verifyTelegramChatId } from '@/lib/bot/telegram'
 import { executeBotRunForConfig } from '@/lib/bot/execute-bot-run'
 import { botSearchHasQueryableBackend } from '@/lib/bot/bot-search-sources'
+import { revalidateBotRunViews } from '@/lib/bot/revalidate-bot-run-views'
 import { BotSearchFrequency } from '@prisma/client'
 
 export interface BotConfigFormData {
@@ -96,18 +97,7 @@ export async function triggerBotSearch() {
   // (runtime can freeze/end before search + OpenAI completes), so runs would appear to "finish" with no work.
   const out = await executeBotRunForConfig(config, 'manual')
 
-  const tags = cacheTagsFor(user.id)
-  revalidateTag(tags.jobs, { expire: 0 })
-  revalidateTag(tags.activity, { expire: 0 })
-  revalidateTag(tags.notifications, { expire: 0 })
-  revalidateTag(tags.bot, { expire: 0 })
-  revalidatePath('/jobs')
-  revalidatePath('/dashboard')
-  revalidatePath('/today')
-  revalidatePath('/board')
-  revalidatePath('/bot/settings')
-  revalidatePath('/bot')
-  revalidatePath('/bot/runs')
+  revalidateBotRunViews(user.id)
 
   if (out.error) {
     return {

@@ -1,12 +1,11 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { CheckCircle2, Loader2, Play, X, AlertCircle } from 'lucide-react'
-import { triggerBotSearch } from '@/app/(authenticated)/settings/bot-actions'
 import type { ResumeReadinessSource } from '@/lib/bot/profile-source-labels'
 import {
   BOT_RUN_COMPLETE_EVENT,
@@ -28,6 +27,29 @@ interface BotStatusStripProps {
     totalCount: number
     source: ResumeReadinessSource
   }
+}
+
+type ManualRunStartResponse = {
+  success?: boolean
+  runId?: string
+  error?: string
+  fatal?: string
+  jobsFound?: number
+  jobsNew?: number
+  jobsApproved?: number
+  jobsHardFiltered?: number
+  jobsSkippedLowScore?: number
+  jobsEvaluationFailed?: number
+}
+
+type ManualRunStatusResponse = {
+  id: string
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED'
+  jobsFound: number
+  jobsNew: number
+  jobsEvaluated: number
+  jobsApproved: number
+  errors?: unknown
 }
 
 function relativeTime(iso: string): string {
@@ -78,9 +100,9 @@ export function BotStatusStrip({
   resumeReadiness,
 }: BotStatusStripProps) {
   const router = useRouter()
-  const [running, startRun] = useTransition()
+  const [running, setRunning] = useState(false)
   const [toast, setToast] = useState<
-    | { kind: 'running' }
+    | { kind: 'running'; msg?: string }
     | { kind: 'done'; ok: boolean; msg: string }
     | null
   >(null)
@@ -129,49 +151,124 @@ export function BotStatusStrip({
     return `Search saved ${saved} new job${saved === 1 ? '' : 's'}${approved > 0 ? `, ${approved} approved` : ''}.`
   }
 
-  function handleRun() {
-    setToast({ kind: 'running' })
-    startRun(async () => {
-      let res: Awaited<ReturnType<typeof triggerBotSearch>>
-      try {
-        res = await triggerBotSearch()
-      } catch (error) {
-        console.error('[bot] Manual search request failed:', error)
+  function statusMessage(run: ManualRunStatusResponse) {
+    if (run.jobsFound > 0) {
+      return `Scoring in background: ${run.jobsEvaluated}/${run.jobsFound} evaluated, ${run.jobsNew} saved so far.`
+    }
+    return 'Search is running in the background. You can leave this page; progress is saved in Runs.'
+  }
+
+  function responseError(
+    payload: ManualRunStartResponse | Record<string, unknown>,
+    fallback: string
+  ) {
+    if (typeof payload.error === 'string' && payload.error.trim()) {
+      return payload.error
+    }
+    if (typeof payload.fatal === 'string' && payload.fatal.trim()) {
+      return payload.fatal
+    }
+    return fallback
+  }
+
+  async function pollRun(runId: string) {
+    const deadline = Date.now() + 15 * 60_000
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 2500))
+
+      const statusResponse = await fetch(`/api/bot/run/${encodeURIComponent(runId)}`, {
+        cache: 'no-store',
+      })
+      const payload = (await statusResponse.json().catch(() => ({}))) as
+        | ManualRunStatusResponse
+        | { error?: string }
+
+      if (!statusResponse.ok || !('status' in payload)) {
+        throw new Error(responseError(payload, 'Could not read job search status.'))
+      }
+
+      if (payload.status === 'RUNNING') {
+        setToast({ kind: 'running', msg: statusMessage(payload) })
+        continue
+      }
+
+      window.dispatchEvent(new CustomEvent(BOT_RUN_COMPLETE_EVENT))
+      window.dispatchEvent(new CustomEvent(NOTIFICATIONS_REFRESH_EVENT))
+      router.refresh()
+      setRunning(false)
+      setToast({
+        kind: 'done',
+        ok: payload.status === 'COMPLETED',
+        msg:
+          payload.status === 'COMPLETED'
+            ? completionMessage(payload)
+            : responseError(
+                payload.errors && typeof payload.errors === 'object'
+                  ? (payload.errors as Record<string, unknown>)
+                  : {},
+                'Search failed. Open Runs for details.'
+              ),
+      })
+      return
+    }
+
+    router.refresh()
+    setRunning(false)
+    setToast({
+      kind: 'done',
+      ok: false,
+      msg: 'Search is still running in the background. Open Runs for live counters before starting another run.',
+    })
+  }
+
+  async function handleRun() {
+    if (running) return
+    setRunning(true)
+    setToast({ kind: 'running', msg: 'Starting background search…' })
+
+    try {
+      const response = await fetch('/api/bot/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      const res = (await response.json().catch(() => ({}))) as ManualRunStartResponse
+
+      if (response.status === 202 && res.success && res.runId) {
         setToast({
-          kind: 'done',
-          ok: false,
-          msg: 'Search request was interrupted. Check Runs and Jobs for partial results before starting another run.',
+          kind: 'running',
+          msg: 'Search queued. You can leave this page; progress is saved in Runs.',
         })
         router.refresh()
+        await pollRun(res.runId)
         return
       }
-      if (res.success) {
-        window.dispatchEvent(new CustomEvent(BOT_RUN_COMPLETE_EVENT))
-        window.dispatchEvent(new CustomEvent(NOTIFICATIONS_REFRESH_EVENT))
-        router.refresh()
+
+      if (response.status === 409 && res.runId) {
         setToast({
-          kind: 'done',
-          ok: true,
-          msg: completionMessage(res),
+          kind: 'running',
+          msg: 'A search is already running. Watching that run now.',
         })
+        await pollRun(res.runId)
         return
       }
-      if ('runId' in res && res.runId) {
-        window.dispatchEvent(new CustomEvent(BOT_RUN_COMPLETE_EVENT))
-        window.dispatchEvent(new CustomEvent(NOTIFICATIONS_REFRESH_EVENT))
-        router.refresh()
-      }
+
+      setRunning(false)
+      router.refresh()
       setToast({
         kind: 'done',
         ok: false,
-        msg:
-          'jobsEvaluationFailed' in res && (res.jobsEvaluationFailed ?? 0) > 0
-            ? completionMessage(res)
-            : 'error' in res && res.error
-              ? res.error
-              : 'Search failed.',
+        msg: responseError(res, 'Search could not be started.'),
       })
-    })
+    } catch (error) {
+      console.error('[bot] Manual search request failed:', error)
+      setRunning(false)
+      router.refresh()
+      setToast({
+        kind: 'done',
+        ok: false,
+        msg: 'Search request was interrupted before it could be queued. Check Runs before starting another run.',
+      })
+    }
   }
 
   const profileSource = resumeReadiness.source
@@ -305,7 +402,7 @@ function SearchToast({
   onDismiss,
 }: {
   toast:
-    | { kind: 'running' }
+    | { kind: 'running'; msg?: string }
     | { kind: 'done'; ok: boolean; msg: string }
   onDismiss: () => void
 }) {
@@ -343,14 +440,14 @@ function SearchToast({
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium">
             {isRunning
-              ? 'Searching for jobs…'
+              ? 'Job search running'
               : isError
                 ? 'Search failed'
                 : 'Search complete'}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
             {isRunning
-              ? 'This can take 10–30 seconds.'
+              ? toast.msg ?? 'This can take a few minutes; progress is saved in Runs.'
               : toast.kind === 'done'
                 ? toast.msg
                 : ''}

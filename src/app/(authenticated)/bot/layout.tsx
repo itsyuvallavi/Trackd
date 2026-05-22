@@ -8,7 +8,7 @@ import { resolveResumeReadinessSource } from '@/lib/bot/profile-source-labels'
 import { prisma } from '@/lib/prisma'
 import { Prisma, type BotSearchFrequency } from '@prisma/client'
 
-/** Allow long-running bot search from "Run now" in the status strip. */
+/** Keep authenticated bot pages compatible with slower server actions. */
 export const maxDuration = 300
 
 const FREQUENCY_LABELS: Record<BotSearchFrequency, string> = {
