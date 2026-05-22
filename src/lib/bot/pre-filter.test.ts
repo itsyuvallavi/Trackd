@@ -89,4 +89,43 @@ describe('preFilterJob', () => {
       )
     ).toEqual({ rejected: false })
   })
+
+  it('rejects country-limited remote roles when only broad Europe/EU remote is targeted', () => {
+    const result = preFilterJob(
+      job({
+        title: 'Full Stack Engineer (Remote Ireland / UK)',
+        location: 'Remote',
+        is_remote: true,
+      }),
+      config({
+        keywords: ['Full Stack Engineer'],
+        locations: ['Remote', 'Lisbon', 'Europe', 'Porto', 'EU'],
+        remoteOnly: true,
+      })
+    )
+
+    expect(result).toMatchObject({
+      rejected: true,
+      flag: 'wrong_location',
+      score: 20,
+    })
+    expect(result.rejected && result.reason).toContain('Broad Europe/EU remote')
+  })
+
+  it('allows country-limited remote roles when that country is explicitly targeted', () => {
+    expect(
+      preFilterJob(
+        job({
+          title: 'Full Stack Engineer (Remote Ireland / UK)',
+          location: 'Remote',
+          is_remote: true,
+        }),
+        config({
+          keywords: ['Full Stack Engineer'],
+          locations: ['Remote Ireland', 'Dublin'],
+          remoteOnly: true,
+        })
+      )
+    ).toEqual({ rejected: false })
+  })
 })

@@ -89,6 +89,60 @@ export function deriveKnownSkillsFromText(rawText: string | null | undefined): s
     .map(([skill]) => skill)
 }
 
+function resumeTextBlob(resume: ResumeStructuredData): string {
+  const parts: string[] = [
+    resumeString(resume.summary),
+    ...resumeStringArray(resume.skills),
+    ...resumeStringArray(resume.certifications),
+  ]
+  for (const exp of Array.isArray(resume.experience) ? resume.experience : []) {
+    parts.push(
+      resumeString(exp.title),
+      resumeString(exp.company),
+      resumeString(exp.description),
+      ...resumeStringArray(exp.achievements)
+    )
+  }
+  return parts.join('\n')
+}
+
+function deriveAdjacentSkillsFromResume(resume: ResumeStructuredData): string[] {
+  const blob = resumeTextBlob(resume).toLowerCase()
+  const hasNode = /\bnode(?:\.js|js)\b/.test(blob)
+  if (hasNode) return []
+
+  const hasTypeScriptWebRuntime =
+    /\btypescript\b|\bjavascript\b|\bts\b|\bjs\b/.test(blob) &&
+    /\bnext(?:\.js|js)\b/.test(blob)
+  const hasBackendEvidence =
+    /\b(?:prisma|supabase|postgres(?:ql)?|rest(?:ful)?\s+apis?|api\s+routes?|backend|full[-\s]*stack|server\s+actions?|server[-\s]side|database|sql)\b/.test(
+      blob
+    )
+
+  return hasTypeScriptWebRuntime && hasBackendEvidence
+    ? ['Node.js-adjacent backend runtime']
+    : []
+}
+
+function enrichResumeWithAdjacentSkills(resume: ResumeStructuredData): ResumeStructuredData {
+  const inferredSkills = deriveAdjacentSkillsFromResume(resume)
+  if (inferredSkills.length === 0) return resume
+
+  const skills = uniqueStrings([...resume.skills, ...inferredSkills])
+  const inferredLine = `Inferred from resume context: ${inferredSkills.join(', ')} based on Next.js/TypeScript backend/API evidence.`
+  const summary = resume.summary
+    ? resume.summary.includes(inferredLine)
+      ? resume.summary
+      : `${resume.summary} ${inferredLine}`
+    : inferredLine
+
+  return {
+    ...resume,
+    skills,
+    summary,
+  }
+}
+
 function normalizeResume(resume: ResumeStructuredData): ResumeStructuredData {
   return {
     ...resume,
@@ -107,7 +161,7 @@ export function enrichResumeWithRawText(
   rawText: string | null | undefined
 ): ResumeStructuredData {
   const rawSkills = deriveKnownSkillsFromText(rawText)
-  if (rawSkills.length === 0) return normalizeResume(resume)
+  if (rawSkills.length === 0) return enrichResumeWithAdjacentSkills(normalizeResume(resume))
 
   const normalized = normalizeResume(resume)
   const skills = uniqueStrings([...normalized.skills, ...rawSkills])
@@ -119,9 +173,7 @@ export function enrichResumeWithRawText(
     : rawSignalLine
 
   return {
-    ...normalized,
-    summary,
-    skills,
+    ...enrichResumeWithAdjacentSkills({ ...normalized, summary, skills }),
   }
 }
 
@@ -132,7 +184,7 @@ export function resumeFromRawText(
   if (!rawText?.trim()) return null
   const excerpt = rawText.trim().slice(0, 1200)
   const skills = deriveKnownSkillsFromText(rawText)
-  return {
+  return enrichResumeWithAdjacentSkills({
     name: 'Candidate',
     email: '',
     summary:
@@ -152,7 +204,7 @@ export function resumeFromRawText(
     ],
     education: [],
     certifications: [],
-  }
+  })
 }
 
 export function hasApplicationProfileData(profile: ApplicationProfile): boolean {

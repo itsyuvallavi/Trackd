@@ -230,6 +230,69 @@ describe('evaluateJob minScore behavior', () => {
     })
   })
 
+  it('sends Node.js-adjacent full-stack evidence for Next.js backend resumes', async () => {
+    findManyMock.mockResolvedValue([
+      {
+        id: 'resume_fullstack',
+        label: 'Full Stack',
+        matchKeywords: ['full stack', 'react', 'node'],
+        isDefault: true,
+        rawText:
+          'Full-stack product engineer building Next.js and TypeScript apps with Prisma, PostgreSQL, Supabase, and REST APIs.',
+        structuredData: {
+          name: 'Candidate',
+          email: 'candidate@example.com',
+          phone: null,
+          location: null,
+          linkedin: null,
+          github: null,
+          portfolio: null,
+          summary: 'Full-stack product engineer.',
+          skills: ['React', 'Next.js', 'TypeScript', 'Prisma', 'PostgreSQL', 'REST APIs'],
+          languages: [],
+          experience: [],
+          education: [],
+          certifications: [],
+        },
+      },
+    ])
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 68,
+                reasoning:
+                  'The listing asks for "React + Node.js" and product API work.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'React, Next.js, TypeScript, Prisma, PostgreSQL, REST APIs',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJob } = await import('./job-evaluator')
+    const result = await evaluateJob(
+      job({
+        title: 'Javascript Developer (React + Node.js)',
+        description:
+          'Build product features in React + Node.js, REST APIs, and PostgreSQL for a SaaS platform.',
+      }),
+      cfg({ minScore: 60, keywords: ['Full Stack Engineer'] }),
+    )
+
+    const prompt = chatCompletionMock.mock.calls[0][0][1].content as string
+    expect(prompt).toContain('Node.js-adjacent backend runtime')
+    expect(result.scoringInputs.resumeUsed.skillsSentToPrompt).toEqual(
+      expect.arrayContaining(['Node.js-adjacent backend runtime'])
+    )
+    expect(result.evaluation.flags).not.toContain('stack_mismatch')
+  })
+
   it('can evaluate against an injected candidate profile without loading DB resumes', async () => {
     chatCompletionMock.mockResolvedValue({
       data: {

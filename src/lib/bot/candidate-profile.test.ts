@@ -95,6 +95,40 @@ describe('candidate profile source priority', () => {
     expect(profile.source.settingsSignals).toEqual([])
   })
 
+  it('infers Node.js-adjacent backend evidence from full-stack Next.js resume content', () => {
+    const profile = buildCandidateProfileFromSources({
+      jobTitle: 'React Node Full Stack Developer',
+      config: cfg({ keywords: ['Full Stack Engineer'] }),
+      applicationProfile: null,
+      resumes: [
+        {
+          id: 'resume-fullstack',
+          label: 'Full Stack',
+          matchKeywords: ['full stack', 'react'],
+          isDefault: true,
+          rawText:
+            'Full-stack product engineer building Next.js and TypeScript apps with Prisma, PostgreSQL, Supabase, and REST APIs.',
+          structuredData: {
+            name: 'Candidate',
+            email: 'candidate@example.com',
+            summary: 'Full-stack product engineer.',
+            skills: ['React', 'Next.js', 'TypeScript', 'Prisma', 'PostgreSQL', 'REST APIs'],
+            languages: [],
+            experience: [],
+            education: [],
+            certifications: [],
+          },
+        },
+      ],
+    })
+
+    expect(profile.source.kind).toBe('parsed_resume')
+    expect(profile.resume?.skills).toEqual(
+      expect.arrayContaining(['Node.js-adjacent backend runtime'])
+    )
+    expect(profile.resume?.summary).toContain('Inferred from resume context')
+  })
+
   it('uses raw resume fallback before Application Identity fallback', () => {
     const profile = buildCandidateProfileFromSources({
       jobTitle: 'Frontend Developer',

@@ -18,6 +18,7 @@
 import type { BotConfig } from '@prisma/client'
 import type { SearchJobResult } from './types'
 import {
+  EUROPE_COUNTRIES,
   parseUserLocations,
   jdLocationOverlapsUser,
   userAcceptsUnitedStates,
@@ -25,6 +26,7 @@ import {
   hasRemoteWorkSignal,
   userWantsRemoteFirstUnlessListedCities,
   jdOnsiteBlobIncludesUserCity,
+  type UserLocationTokens,
 } from './user-locations'
 import { analyzeJd } from './jd-excerpt'
 
@@ -82,6 +84,122 @@ function requiredBaseLocationSignals(job: SearchJobResult): string[] {
   return [...signals]
 }
 
+const BROAD_REMOTE_SCOPE_TOKENS = new Set([
+  'remote',
+  'anywhere',
+  'worldwide',
+  'global',
+  'europe',
+  'european union',
+  'eu',
+  'emea',
+  'eea',
+])
+
+const RECOGNIZED_REMOTE_COUNTRY_TOKENS = new Set([
+  ...EUROPE_COUNTRIES,
+  'united states',
+  'canada',
+  'mexico',
+  'brazil',
+  'argentina',
+  'india',
+  'china',
+  'japan',
+  'singapore',
+  'australia',
+  'new zealand',
+  'israel',
+  'united arab emirates',
+])
+
+const CITY_COUNTRY_HINTS: Record<string, string> = {
+  dublin: 'ireland',
+  london: 'united kingdom',
+  lisbon: 'portugal',
+  porto: 'portugal',
+  berlin: 'germany',
+  amsterdam: 'netherlands',
+  madrid: 'spain',
+  barcelona: 'spain',
+  paris: 'france',
+  copenhagen: 'denmark',
+  stockholm: 'sweden',
+}
+
+function normalizeRemoteScopeTokens(scope: string): string[] {
+  const tokens = countryTokensFromJobLocationLine(`Remote ${scope}`)
+    .map((token) => token.toLowerCase().trim())
+    .filter(Boolean)
+    .filter((token) => !BROAD_REMOTE_SCOPE_TOKENS.has(token))
+    .filter((token) => RECOGNIZED_REMOTE_COUNTRY_TOKENS.has(token))
+
+  return [...new Set(tokens)]
+}
+
+function countryLimitedRemoteSignals(job: SearchJobResult): string[] {
+  const signals = new Set<string>()
+  const snippets = [
+    job.title,
+    job.location ?? '',
+    (job.description ?? '').slice(0, 2500),
+  ].filter((snippet) => snippet.trim().length > 0)
+
+  const patterns = [
+    /\bremote(?:ly)?\s*(?:[-–—:/()|]|\s)+(?:from|in|within|across|for|only)?\s*(?:the\s+)?([a-z][a-z\s.'&,/+]{1,80})/gi,
+    /\b(?:candidates?|applicants?)\s+(?:must\s+)?(?:be\s+)?(?:based|located|resident|reside)\s+(?:in|within)\s+([a-z][a-z\s.'&,/+]{2,80})/gi,
+  ]
+
+  for (const snippet of snippets) {
+    for (const pattern of patterns) {
+      pattern.lastIndex = 0
+      let match: RegExpExecArray | null
+      while ((match = pattern.exec(snippet))) {
+        for (const token of normalizeRemoteScopeTokens(match[1] ?? '')) {
+          signals.add(token)
+        }
+        if (signals.size >= 6) break
+      }
+    }
+  }
+
+  return [...signals]
+}
+
+function userExplicitlyAcceptsCountryLimitedRemote(
+  signals: string[],
+  user: UserLocationTokens
+): boolean {
+  if (signals.length === 0) return true
+
+  const explicit = new Set<string>()
+  const add = (value: string) => {
+    const token = value.toLowerCase().trim()
+    if (!token || BROAD_REMOTE_SCOPE_TOKENS.has(token)) return
+    explicit.add(token)
+  }
+
+  for (const country of user.countries) add(country)
+  for (const city of user.cities) {
+    add(city)
+    const country = CITY_COUNTRY_HINTS[city]
+    if (country) add(country)
+  }
+  for (const token of user.tokens) {
+    if (token.startsWith('remote ')) continue
+    add(token)
+  }
+
+  return signals.some((signal) => {
+    if (explicit.has(signal)) return true
+    for (const token of explicit) {
+      if (token.length < 3) continue
+      if (signal.includes(token) || token.includes(signal)) return true
+    }
+    return false
+  })
+}
+
 function checkLocation(job: SearchJobResult, config: BotConfig): PreFilterResult {
   const user = parseUserLocations(config.locations)
   if (user.isAny) return { rejected: false }
@@ -98,6 +216,22 @@ function checkLocation(job: SearchJobResult, config: BotConfig): PreFilterResult
       reason:
         `Job text requires or implies a base location not in your Target locations ` +
         `(${baseLocationSignals.slice(0, 3).join(', ')}; yours: ${config.locations.join(', ')}).`,
+    }
+  }
+
+  const remoteCountrySignals = countryLimitedRemoteSignals(job)
+  if (
+    remoteCountrySignals.length > 0 &&
+    !userExplicitlyAcceptsCountryLimitedRemote(remoteCountrySignals, user)
+  ) {
+    return {
+      rejected: true,
+      score: 20,
+      flag: 'wrong_location',
+      reason:
+        `Remote role is limited to ${remoteCountrySignals.slice(0, 4).join(', ')}, ` +
+        `but your explicit Target locations are ${config.locations.join(', ') || 'none'}. ` +
+        'Broad Europe/EU remote preferences do not override country-limited remote hiring.',
     }
   }
 

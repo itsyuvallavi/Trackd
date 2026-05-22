@@ -244,6 +244,7 @@ ${prefs}
 ${resumeSection}
 SKILL FIT (your only job):
 - If the posting mandates a primary ecosystem (e.g. N+ years of a specific language/framework) the candidate resume does not mention, score below 45 unless the posting clearly marks it optional / "nice to have".
+- For general React + Node.js / JavaScript full-stack roles, treat a resume that shows Next.js + TypeScript plus backend/API/database evidence (Prisma, Supabase, REST APIs, PostgreSQL, server-side work) as Node.js-adjacent. Do not call that a hard Node.js stack mismatch unless the JD mandates dedicated multi-year Node/Nest/MERN production experience.
 - Do not inflate the score because the title matches the user's keywords when the core bullets demand a different stack.
 - Language requirements labeled mandatory for languages NOT in the candidate's spoken-language list are a major negative. If the user listed no spoken languages, do not penalise on language.
 - Do NOT flag or score-down on location — location hard rules are checked in code before you are called.
