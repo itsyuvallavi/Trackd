@@ -68,5 +68,8 @@ export const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
 /** Fired when a manual bot run finishes so client views can refetch (queue API, etc.). */
 export const BOT_RUN_COMPLETE_EVENT = 'trackd:bot-run-complete' as const
 
+/** Fired when a manual bot run is queued so shell-level progress can follow it. */
+export const BOT_RUN_STARTED_EVENT = 'trackd:bot-run-started' as const
+
 /** Fired after email sync (or similar) so the notification bell can refetch. */
 export const NOTIFICATIONS_REFRESH_EVENT = 'trackd:notifications-refresh' as const

@@ -782,6 +782,7 @@ export const getBotRunsList = (userId: string) =>
           completedAt: true,
           duration: true,
           errors: true,
+          searchMeta: true,
         },
       })
 

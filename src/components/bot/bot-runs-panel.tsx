@@ -18,6 +18,7 @@ type BotRunRow = Pick<
   | 'completedAt'
   | 'duration'
   | 'errors'
+  | 'searchMeta'
 > & {
   profileSources?: BotRunProfileSourceSummary[]
 }
@@ -38,6 +39,119 @@ function providerDuplicatesFromRun(errors: BotRun['errors']): string | null {
     return null
   const p = (errors as Record<string, unknown>).providerDuplicates
   return typeof p === 'string' ? p : null
+}
+
+type RuntimeTimingSummary = {
+  total_ms: number
+  bottleneck: {
+    phase: string
+    duration_ms: number
+  } | null
+  phases: Record<string, number>
+  counts: Record<string, number>
+}
+
+function runtimeTimingsFromRun(searchMeta: BotRun['searchMeta']): RuntimeTimingSummary | null {
+  if (!searchMeta || typeof searchMeta !== 'object' || Array.isArray(searchMeta)) return null
+  const raw = (searchMeta as Record<string, unknown>).runtime_timings
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const o = raw as Record<string, unknown>
+  if (typeof o.total_ms !== 'number') return null
+
+  const phases =
+    o.phases && typeof o.phases === 'object' && !Array.isArray(o.phases)
+      ? Object.fromEntries(
+          Object.entries(o.phases as Record<string, unknown>).filter(
+            (entry): entry is [string, number] => typeof entry[1] === 'number'
+          )
+        )
+      : {}
+  const counts =
+    o.counts && typeof o.counts === 'object' && !Array.isArray(o.counts)
+      ? Object.fromEntries(
+          Object.entries(o.counts as Record<string, unknown>).filter(
+            (entry): entry is [string, number] => typeof entry[1] === 'number'
+          )
+        )
+      : {}
+
+  const rawBottleneck = o.bottleneck
+  const bottleneck =
+    rawBottleneck && typeof rawBottleneck === 'object' && !Array.isArray(rawBottleneck)
+      ? (rawBottleneck as Record<string, unknown>)
+      : null
+
+  return {
+    total_ms: o.total_ms,
+    bottleneck:
+      typeof bottleneck?.phase === 'string' && typeof bottleneck.duration_ms === 'number'
+        ? { phase: bottleneck.phase, duration_ms: bottleneck.duration_ms }
+        : null,
+    phases,
+    counts,
+  }
+}
+
+function formatMs(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`
+  const minutes = Math.floor(ms / 60_000)
+  const seconds = Math.round((ms % 60_000) / 1000)
+  return `${minutes}m ${seconds}s`
+}
+
+function phaseLabel(phase: string): string {
+  const labels: Record<string, string> = {
+    profile_load: 'Profile',
+    search_profile_build: 'Search profile',
+    search_request_build: 'Query plan',
+    provider_search: 'Provider search',
+    dedupe_db_lookup: 'DB dedupe',
+    dedupe_filter: 'Dedupe',
+    pre_filter: 'Pre-filter',
+    priority_sort: 'Ranking',
+    ai_scoring: 'AI scoring',
+    job_persistence: 'Saving jobs',
+    listing_audit_persistence: 'Audit save',
+  }
+  return labels[phase] ?? phase.replaceAll('_', ' ')
+}
+
+function RuntimeTimings({ timings }: { timings: RuntimeTimingSummary }) {
+  const topPhases = Object.entries(timings.phases)
+    .filter(([, duration]) => duration > 0)
+    .slice(0, 4)
+
+  return (
+    <details className="text-xs group">
+      <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
+        Runtime {formatMs(timings.total_ms)}
+        {timings.bottleneck
+          ? ` · slowest ${phaseLabel(timings.bottleneck.phase)} ${formatMs(timings.bottleneck.duration_ms)}`
+          : ''}
+      </summary>
+      <div className="mt-2 grid gap-2 rounded-lg border border-border/60 bg-background/40 p-3 text-[11px] text-muted-foreground sm:grid-cols-2">
+        {topPhases.map(([phase, duration]) => (
+          <div key={phase} className="flex items-center justify-between gap-3">
+            <span>{phaseLabel(phase)}</span>
+            <span className="tabular-nums text-foreground/80">{formatMs(duration)}</span>
+          </div>
+        ))}
+        {typeof timings.counts.ai_scored === 'number' && (
+          <div className="flex items-center justify-between gap-3">
+            <span>AI scored</span>
+            <span className="tabular-nums text-foreground/80">{timings.counts.ai_scored}</span>
+          </div>
+        )}
+        {typeof timings.counts.jobs_saved === 'number' && (
+          <div className="flex items-center justify-between gap-3">
+            <span>Saved</span>
+            <span className="tabular-nums text-foreground/80">{timings.counts.jobs_saved}</span>
+          </div>
+        )}
+      </div>
+    </details>
+  )
 }
 
 type EvaluationSkipRow = {
@@ -268,6 +382,7 @@ export function BotRunsPanel({ runs }: BotRunsPanelProps) {
           const evalFailures = evaluationFailuresFromRun(run.errors)
           const historicalBudgetNote = historicalBudgetNoteFromRun(run.errors)
           const profileSources = run.profileSources ?? []
+          const runtimeTimings = runtimeTimingsFromRun(run.searchMeta)
           return (
             <div key={run.id} className="px-5 py-3 space-y-1.5">
               <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -300,6 +415,7 @@ export function BotRunsPanel({ runs }: BotRunsPanelProps) {
                   {providerDuplicates}
                 </p>
               )}
+              {runtimeTimings && <RuntimeTimings timings={runtimeTimings} />}
               {hardFilterSkips.length > 0 && (
                 <details className="text-xs group">
                   <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">

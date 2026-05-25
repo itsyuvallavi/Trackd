@@ -21,6 +21,7 @@ import { parseInterviewDateTime } from '@/lib/utils/interview-date-parser'
 import { cacheTagsFor } from '@/lib/cache-tags'
 import { alignEmailSyncLowerBound } from '@/lib/email-sync-window'
 import { buildEmailSyncCursorUpdate } from '@/lib/email-sync-cursor'
+import { findExistingJobForExtractedEmail } from '@/lib/email-job-dedupe'
 
 /**
  * Check if an email has already been processed for a specific job
@@ -130,6 +131,7 @@ export async function syncEmails() {
         location: true,
       },
     })
+    const jobsById = new Map(jobs.map((job) => [job.id, job]))
     console.log(`✓ Found ${jobs.length} jobs to match against`)
     
     if (jobs.length === 0) {
@@ -204,6 +206,7 @@ export async function syncEmails() {
         const matchResult = USE_AI_MATCHING
           ? await (matcher as AIJobMatcher).matchToJob(classified, jobs)
           : (matcher as EmailClassifier).matchToJob(classified, jobs, email)
+        const matchedJobId = matchResult.jobId
 
         // Track match type for logging
         if (matchResult.confidence === 'exact') {
@@ -214,17 +217,17 @@ export async function syncEmails() {
 
         if (matchResult.confidence === 'exact' || matchResult.confidence === 'fuzzy') {
           // We have a confident match - update the job
-          if (matchResult.jobId && classified.suggestedStatus) {
-            const job = jobs.find((j) => j.id === matchResult.jobId)
+          if (matchedJobId && classified.suggestedStatus) {
+            const job = jobsById.get(matchedJobId)
 
             // Create unique identifier for this email
             const emailIdentifier = createEmailIdentifier(email)
             
             // Check if this email has already been processed for this job
-            const alreadyProcessed = await isEmailAlreadyProcessed(userId, matchResult.jobId, emailIdentifier)
+            const alreadyProcessed = await isEmailAlreadyProcessed(userId, matchedJobId, emailIdentifier)
             
             if (alreadyProcessed) {
-              console.log(`Skipped duplicate email "${email.subject}" for job ${matchResult.jobId} (already processed)`)
+              console.log(`Skipped duplicate email "${email.subject}" for job ${matchedJobId} (already processed)`)
               continue
             }
 
@@ -236,7 +239,7 @@ export async function syncEmails() {
               
               // Verify job still exists before updating (it might have been deleted)
               if (!job) {
-                console.log(`Warning: Job ${matchResult.jobId} no longer exists, skipping update`)
+                console.log(`Warning: Job ${matchedJobId} no longer exists, skipping update`)
                 continue
               }
               
@@ -250,16 +253,16 @@ export async function syncEmails() {
                 interviewAt = parseInterviewDateTime(extracted.interviewDate, extracted.interviewTime)
                 
                 if (interviewAt) {
-                  console.log(`Setting interviewAt to ${interviewAt.toISOString()} for job ${matchResult.jobId}`)
+                  console.log(`Setting interviewAt to ${interviewAt.toISOString()} for job ${matchedJobId}`)
                 } else if (extracted.interviewDate || extracted.interviewTime) {
-                  console.log(`Could not parse interview date/time from email for job ${matchResult.jobId} (date: ${extracted.interviewDate}, time: ${extracted.interviewTime})`)
+                  console.log(`Could not parse interview date/time from email for job ${matchedJobId} (date: ${extracted.interviewDate}, time: ${extracted.interviewTime})`)
                 }
               }
 
               // Update job status
               try {
                 await prisma.job.update({
-                  where: { id: matchResult.jobId },
+                  where: { id: matchedJobId },
                   data: {
                     status: classified.suggestedStatus,
                     // Set interviewAt if we have a valid date/time
@@ -274,7 +277,7 @@ export async function syncEmails() {
                   'code' in updateError &&
                   updateError.code === 'P2025'
                 ) {
-                  console.log(`Warning: Job ${matchResult.jobId} was deleted, skipping update`)
+                  console.log(`Warning: Job ${matchedJobId} was deleted, skipping update`)
                   continue
                 }
                 throw updateError // Re-throw other errors
@@ -302,7 +305,7 @@ export async function syncEmails() {
 
               await prisma.activity.create({
                 data: {
-                  jobId: matchResult.jobId,
+                  jobId: matchedJobId,
                   userId,
                   type: getActivityType(classified.type),
                   fromStatus: oldStatus,
@@ -313,7 +316,7 @@ export async function syncEmails() {
               })
 
               jobChanges.push({
-                jobId: matchResult.jobId,
+                jobId: matchedJobId,
                 title: job.title,
                 company: job.company,
                 oldStatus: oldStatus,
@@ -325,9 +328,9 @@ export async function syncEmails() {
               // Activity feed captures the change; no separate JOB_UPDATED notification for email sync
 
               updatedCount++
-              console.log(`Updated job ${matchResult.jobId} to status ${classified.suggestedStatus}`)
+              console.log(`Updated job ${matchedJobId} to status ${classified.suggestedStatus}`)
             } else {
-              console.log(`Skipped updating job ${matchResult.jobId} - status would go backwards`)
+              console.log(`Skipped updating job ${matchedJobId} - status would go backwards`)
             }
           }
         } else if (matchResult.confidence === 'ambiguous') {
@@ -347,79 +350,25 @@ export async function syncEmails() {
           // No match found - check if we can detect a new job
           if (classified.jobInfo?.company && classified.jobInfo?.title && 
               classified.jobInfo.title !== 'Unknown Position') {
-            // Normalize titles for comparison (remove extra spaces, special chars)
-            const normalizeTitle = (title: string) => {
-              return title.toLowerCase()
-                .replace(/\s+/g, ' ')
-                .replace(/[^\w\s]/g, '')
-                .trim()
-            }
-            
-            const emailTitleNormalized = normalizeTitle(classified.jobInfo.title)
-            
-            // Check for duplicate by title first (primary matching)
-            // If title matches exactly or very closely, it's likely the same job
-            const titleMatches = jobs.filter(job => {
-              const jobTitleNormalized = normalizeTitle(job.title)
-              
-              // Exact match after normalization
-              if (jobTitleNormalized === emailTitleNormalized) {
-                return true
-              }
-              
-              // Check if one title contains the other (for variations like "React.js / Svelte Engineer" vs "React.js / Svelte Engineer - Remote")
-              if (jobTitleNormalized.includes(emailTitleNormalized) || 
-                  emailTitleNormalized.includes(jobTitleNormalized)) {
-                // If titles are very similar (one is subset of other), check length difference
-                const lengthDiff = Math.abs(jobTitleNormalized.length - emailTitleNormalized.length)
-                const shorterLength = Math.min(jobTitleNormalized.length, emailTitleNormalized.length)
-                // If difference is less than 30% of shorter title, consider it a match
-                if (lengthDiff < shorterLength * 0.3) {
-                  return true
-                }
-              }
-              
-              // Check word overlap - if most significant words match, it's likely the same
-              const emailWords = emailTitleNormalized.split(/\s+/).filter(w => w.length > 2)
-              const jobWords = jobTitleNormalized.split(/\s+/).filter(w => w.length > 2)
-              const commonWords = emailWords.filter(word => jobWords.includes(word))
-              const matchRatio = commonWords.length / Math.max(emailWords.length, jobWords.length)
-              
-              // If 80%+ of words match, consider it a duplicate
-              return matchRatio >= 0.8
-            })
-            
-            if (titleMatches.length > 0) {
-              console.log(`Job already exists (title match): "${classified.jobInfo.title}" matches existing job "${titleMatches[0].title}" at ${titleMatches[0].company}`)
-              // Don't create notification - job already exists
-            } else {
-              // Also check company + title combination (secondary check)
-              const companyTitleMatch = jobs.find(job => {
-                const companyMatch = job.company.toLowerCase().includes(classified.jobInfo!.company!.toLowerCase()) ||
-                                    classified.jobInfo!.company!.toLowerCase().includes(job.company.toLowerCase())
-                const titleMatch = job.title.toLowerCase().includes(classified.jobInfo!.title!.toLowerCase()) ||
-                                classified.jobInfo!.title!.toLowerCase().includes(job.title.toLowerCase())
-                return companyMatch && titleMatch
-              })
+            const existingJob = findExistingJobForExtractedEmail(classified.jobInfo, jobs)
 
-              if (!companyTitleMatch) {
-                // New job detected - create notification
-                await notificationService.createNewJobDetectedNotification(
-                  userId,
-                  email,
-                  classified,
-                  {
-                    company: classified.jobInfo.company,
-                    title: classified.jobInfo.title,
-                    location: classified.jobInfo.location,
-                  }
-                )
-                newJobsDetectedCount++
-                notificationsCreatedCount++
-                console.log(`New job detected: "${classified.jobInfo.title}" at ${classified.jobInfo.company}`)
-              } else {
-                console.log(`Job already exists (company+title match): "${classified.jobInfo.title}" at ${classified.jobInfo.company}`)
-              }
+            if (!existingJob) {
+              // New job detected - create notification
+              await notificationService.createNewJobDetectedNotification(
+                userId,
+                email,
+                classified,
+                {
+                  company: classified.jobInfo.company,
+                  title: classified.jobInfo.title,
+                  location: classified.jobInfo.location,
+                }
+              )
+              newJobsDetectedCount++
+              notificationsCreatedCount++
+              console.log(`New job detected: "${classified.jobInfo.title}" at ${classified.jobInfo.company}`)
+            } else {
+              console.log(`Job already exists (company+title match): "${classified.jobInfo.title}" at ${classified.jobInfo.company} matched "${existingJob.title}" at ${existingJob.company}`)
             }
           } else {
             // Insufficient info - create no-match notification

@@ -12,7 +12,7 @@
 import { JobSource, Prisma } from '@prisma/client'
 import type { BotConfig } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import type { SearchJobResult, OrchestratorResult } from './types'
+import type { BotRunTimingSummary, SearchJobResult, OrchestratorResult } from './types'
 import { evaluateJobWithCandidateProfile } from './job-evaluator'
 import { preFilterJob, type PreFilterResult } from './pre-filter'
 import { runSearch } from './adapters/search-client'
@@ -740,6 +740,10 @@ export async function runBotSearch(
   opts?: RunBotSearchOptions
 ): Promise<OrchestratorResult> {
   type LogLevel = 'info' | 'warn' | 'error'
+  const runStartedAtMs = Date.now()
+  const phaseDurations: Record<string, number> = {}
+  const phaseCounts: Record<string, number> = {}
+  let timingsLogged = false
   const runLogs: { seq: number; level: LogLevel; message: string; meta?: Prisma.InputJsonValue }[] = []
   let logSeq = 0
 
@@ -772,6 +776,68 @@ export async function runBotSearch(
       })
     } catch (e) {
       console.error('[bot] Failed to persist BotRunLog rows:', e)
+    }
+  }
+
+  const addPhaseDuration = (phase: string, durationMs: number) => {
+    phaseDurations[phase] = (phaseDurations[phase] ?? 0) + Math.max(0, Math.round(durationMs))
+  }
+
+  const incrementPhaseCount = (name: string, by = 1) => {
+    phaseCounts[name] = (phaseCounts[name] ?? 0) + by
+  }
+
+  const timePhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
+    const started = Date.now()
+    try {
+      return await fn()
+    } finally {
+      addPhaseDuration(phase, Date.now() - started)
+    }
+  }
+
+  const timePhaseSync = <T>(phase: string, fn: () => T): T => {
+    const started = Date.now()
+    try {
+      return fn()
+    } finally {
+      addPhaseDuration(phase, Date.now() - started)
+    }
+  }
+
+  const buildTimingSummary = (): BotRunTimingSummary => {
+    const phases = Object.fromEntries(
+      Object.entries(phaseDurations).sort((a, b) => b[1] - a[1])
+    )
+    const [phase, durationMs] = Object.entries(phases)[0] ?? []
+
+    return {
+      total_ms: Math.max(0, Date.now() - runStartedAtMs),
+      bottleneck:
+        phase && typeof durationMs === 'number'
+          ? { phase, duration_ms: durationMs }
+          : null,
+      phases,
+      counts: { ...phaseCounts },
+    }
+  }
+
+  const attachTimingSummary = () => {
+    const timings = buildTimingSummary()
+    result.runtimeTimings = timings
+    if (result.platformsMeta) {
+      result.platformsMeta.runtime_timings = timings
+    }
+
+    if (!timingsLogged) {
+      timingsLogged = true
+      pushLog(
+        'info',
+        timings.bottleneck
+          ? `Runtime timings captured: total=${timings.total_ms}ms bottleneck=${timings.bottleneck.phase}:${timings.bottleneck.duration_ms}ms`
+          : `Runtime timings captured: total=${timings.total_ms}ms`,
+        timings
+      )
     }
   }
 
@@ -859,15 +925,19 @@ export async function runBotSearch(
       return result
     }
 
-    const runProfile = await loadCandidateProfileForEvaluation(
-      userId,
-      botConfig.keywords[0] ?? 'Job Search',
-      botConfig
+    const runProfile = await timePhase('profile_load', () =>
+      loadCandidateProfileForEvaluation(
+        userId,
+        botConfig.keywords[0] ?? 'Job Search',
+        botConfig
+      )
     )
-    const safeSearchProfile = buildSafeSearchProfile({
-      config: botConfig,
-      candidateProfile: runProfile,
-    })
+    const safeSearchProfile = timePhaseSync('search_profile_build', () =>
+      buildSafeSearchProfile({
+        config: botConfig,
+        candidateProfile: runProfile,
+      })
+    )
 
     pushLog('info', 'Candidate profile source prepared for search ranking', {
       kind: runProfile.source.kind,
@@ -885,7 +955,9 @@ export async function runBotSearch(
       profileSource: safeSearchProfile.profileSource,
     })
 
-    const searchRequest = buildBotSearchRequest(botConfig, safeSearchProfile)
+    const searchRequest = timePhaseSync('search_request_build', () =>
+      buildBotSearchRequest(botConfig, safeSearchProfile)
+    )
 
     pushLog('info', 'Search request built from /settings/bot and safe profile', {
       keywords: searchRequest.keywords,
@@ -902,7 +974,7 @@ export async function runBotSearch(
 
     let searchResponse
     try {
-      searchResponse = await runSearch(searchRequest)
+      searchResponse = await timePhase('provider_search', () => runSearch(searchRequest))
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       result.errors['search'] = msg
@@ -974,29 +1046,33 @@ export async function runBotSearch(
       ),
     )
 
-    const [existingJobs, existingJobsForDedup, dismissedRows] = await Promise.all([
-      prisma.job.findMany({
-        where: { userId, url: { in: urls } },
-        select: { url: true, status: true },
-      }),
-      batchCompanies.length
-        ? prisma.job.findMany({
-            where: {
-              userId,
-              OR: batchCompanies.map((company) => ({
-                company: { equals: company, mode: 'insensitive' as const },
-              })),
-            },
-            select: { company: true, title: true },
-          })
-        : Promise.resolve(
-            [] as { company: string; title: string }[],
-          ),
-      prisma.dismissedJobImport.findMany({
-        where: { userId },
-        select: { fingerprint: true },
-      }),
-    ])
+    const [existingJobs, existingJobsForDedup, dismissedRows] = await timePhase(
+      'dedupe_db_lookup',
+      () =>
+        Promise.all([
+          prisma.job.findMany({
+            where: { userId, url: { in: urls } },
+            select: { url: true, status: true },
+          }),
+          batchCompanies.length
+            ? prisma.job.findMany({
+                where: {
+                  userId,
+                  OR: batchCompanies.map((company) => ({
+                    company: { equals: company, mode: 'insensitive' as const },
+                  })),
+                },
+                select: { company: true, title: true },
+              })
+            : Promise.resolve(
+                [] as { company: string; title: string }[],
+              ),
+          prisma.dismissedJobImport.findMany({
+            where: { userId },
+            select: { fingerprint: true },
+          }),
+        ])
+    )
 
     const existingUrls = new Set(
       existingJobs.map((j) => j.url?.trim().replace(/\/$/, '') ?? '').filter(Boolean)
@@ -1033,7 +1109,8 @@ export async function runBotSearch(
       errorMessage: null,
     })
 
-    for (let seq = 0; seq < searchResponse.jobs.length; seq++) {
+    timePhaseSync('dedupe_filter', () => {
+      for (let seq = 0; seq < searchResponse.jobs.length; seq++) {
       const job = searchResponse.jobs[seq]
       const rawUrl = job.url?.trim() ?? ''
       const normalizedUrl = rawUrl ? normalizeJobUrl(rawUrl) : ''
@@ -1156,7 +1233,8 @@ export async function runBotSearch(
         outcome: 'pending',
       })
       newJobs.push(job)
-    }
+      }
+    })
 
     const dedupTotal =
       result.skippedExistingByUrl +
@@ -1259,20 +1337,22 @@ export async function runBotSearch(
     const aiEligibleJobs: JobWithAudit[] = []
 
     if (openAi) {
-      for (const candidate of jobsWithAudit) {
-        const preFilter = preFilterJob(candidate.job, botConfig)
-        if (preFilter.rejected) {
-          finalizePreFilteredCandidate(candidate, preFilter)
-          continue
-        }
+      timePhaseSync('pre_filter', () => {
+        for (const candidate of jobsWithAudit) {
+          const preFilter = preFilterJob(candidate.job, botConfig)
+          if (preFilter.rejected) {
+            finalizePreFilteredCandidate(candidate, preFilter)
+            continue
+          }
 
-        const profileFilter = profileAwareHardFilter(candidate.job, runProfile)
-        if (profileFilter.rejected) {
-          finalizePreFilteredCandidate(candidate, profileFilter)
-        } else {
-          aiEligibleJobs.push(candidate)
+          const profileFilter = profileAwareHardFilter(candidate.job, runProfile)
+          if (profileFilter.rejected) {
+            finalizePreFilteredCandidate(candidate, profileFilter)
+          } else {
+            aiEligibleJobs.push(candidate)
+          }
         }
-      }
+      })
     } else {
       aiEligibleJobs.push(...jobsWithAudit)
     }
@@ -1285,12 +1365,14 @@ export async function runBotSearch(
       )
     }
 
-    const prioritizedJobs = openAi
-      ? sortCandidatesForEvaluation(aiEligibleJobs, botConfig, runProfile)
-      : aiEligibleJobs.map((candidate) => ({
-          ...candidate,
-          priority: { score: 0, reasons: [] },
-        }))
+    const prioritizedJobs = timePhaseSync('priority_sort', () =>
+      openAi
+        ? sortCandidatesForEvaluation(aiEligibleJobs, botConfig, runProfile)
+        : aiEligibleJobs.map((candidate) => ({
+            ...candidate,
+            priority: { score: 0, reasons: [] },
+          }))
+    )
     const jobsToProcess = prioritizedJobs
 
     if (openAi && prioritizedJobs.length > 0) {
@@ -1331,11 +1413,16 @@ export async function runBotSearch(
 
         if (openAi) {
           try {
-            const { evaluation, scoringInputs: si } = await evaluateJobWithCandidateProfile(
-              job,
-              botConfig,
-              runProfile
+            const { evaluation, scoringInputs: si } = await timePhase(
+              'ai_scoring',
+              () =>
+                evaluateJobWithCandidateProfile(
+                  job,
+                  botConfig,
+                  runProfile
+                )
             )
+            incrementPhaseCount('ai_scored')
             score = evaluation.score
             shouldApply = evaluation.shouldApply
             reasoning = evaluation.reasoning
@@ -1491,7 +1578,8 @@ export async function runBotSearch(
         if (shouldApply && evaluated) tags.push('bot-approved')
         if (job.is_remote) tags.push('remote')
 
-        await prisma.job.create({
+        await timePhase('job_persistence', () =>
+          prisma.job.create({
           data: {
             userId,
             title: job.title,
@@ -1513,7 +1601,9 @@ export async function runBotSearch(
               },
             },
           },
-        })
+          })
+        )
+        incrementPhaseCount('jobs_saved')
         result.jobsNew++
         if (evaluated && shouldApply) {
           result.jobsApproved++
@@ -1605,7 +1695,8 @@ export async function runBotSearch(
     auditFinished = true
     return result
   } finally {
+    await timePhase('listing_audit_persistence', () => persistListingAudit())
+    attachTimingSummary()
     await persistLogs()
-    await persistListingAudit()
   }
 }

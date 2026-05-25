@@ -259,7 +259,21 @@ describe('runBotSearch orchestration', () => {
       skippedExistingByTitle: 1,
       skippedBatchDuplicate: 1,
       skippedPreviouslyDismissed: 0,
+      runtimeTimings: expect.objectContaining({
+        total_ms: expect.any(Number),
+        phases: expect.objectContaining({
+          provider_search: expect.any(Number),
+          dedupe_db_lookup: expect.any(Number),
+          ai_scoring: expect.any(Number),
+          job_persistence: expect.any(Number),
+        }),
+        counts: expect.objectContaining({
+          ai_scored: 2,
+          jobs_saved: 1,
+        }),
+      }),
     })
+    expect(result.platformsMeta?.runtime_timings).toBe(result.runtimeTimings)
   })
 
   it('passes profile-derived safe terms to the provider search request', async () => {

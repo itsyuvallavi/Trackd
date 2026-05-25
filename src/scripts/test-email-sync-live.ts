@@ -17,11 +17,12 @@
 
 import { prisma } from '../lib/prisma'
 import { createEmailService } from '../lib/email-service'
-import { EmailClassifier, EmailType, ClassifiedEmail } from '../lib/email-classifier'
+import { EmailClassifier, EmailType } from '../lib/email-classifier'
 import { AIClassifier } from '../lib/ai-email-classifier'
 import { AIJobMatcher } from '../lib/ai-job-matcher'
 import { NotificationService } from '../lib/notification-service'
 import { EmailSyncLogger, SyncPhase } from '../lib/email-sync-logger'
+import { findExistingJobForExtractedEmail } from '../lib/email-job-dedupe'
 import { JobStatus, ActivityType } from '@prisma/client'
 
 // Feature flag: Use AI classifier if enabled
@@ -281,6 +282,7 @@ async function runLiveTest(config: TestConfig) {
     },
     orderBy: { createdAt: 'desc' },
   })
+  const jobsById = new Map(jobs.map((job) => [job.id, job]))
 
   console.log(`Found ${jobs.length} jobs:\n`)
 
@@ -458,6 +460,10 @@ async function runLiveTest(config: TestConfig) {
         })
 
     console.log(`  Match: ${formatMatchResult(matchResult.confidence)} - ${matchResult.reason}`)
+    const matchedJobId = matchResult.jobId
+    if (matchedJobId) {
+      console.log(colorize(`  Matched Job ID: ${matchedJobId}`, 'gray'))
+    }
 
     let action: TestResult['action'] = 'no_match'
     let actionDetails: string | undefined
@@ -466,7 +472,10 @@ async function runLiveTest(config: TestConfig) {
       if (matchResult.confidence === 'exact') stats.exactMatches++
       else stats.fuzzyMatches++
 
-      const matchedJob = jobs.find(j => j.id === matchResult.jobId)
+      const matchedJob = matchedJobId ? jobsById.get(matchedJobId) : undefined
+      if (matchedJob) {
+        console.log(colorize(`  Resolved Job ID: ${matchedJob.id}`, 'gray'))
+      }
       if (matchedJob && classified.suggestedStatus) {
         const shouldUpdate = shouldUpdateStatus(matchedJob.status, classified.suggestedStatus)
 
@@ -479,12 +488,12 @@ async function runLiveTest(config: TestConfig) {
 
           if (config.liveMode) {
             await prisma.job.update({
-              where: { id: matchResult.jobId! },
+              where: { id: matchedJobId! },
               data: { status: classified.suggestedStatus },
             })
             await prisma.activity.create({
               data: {
-                jobId: matchResult.jobId!,
+                jobId: matchedJobId!,
                 userId: profile.id,
                 type: getActivityType(classified.type),
                 fromStatus: matchedJob.status,
@@ -569,7 +578,7 @@ async function runLiveTest(config: TestConfig) {
       // No match
       if (classified.jobInfo?.company && classified.jobInfo?.title && classified.jobInfo.title !== 'Unknown Position') {
         // Check if job already exists
-        const existingJob = checkForExistingJob(classified, jobs)
+        const existingJob = findExistingJobForExtractedEmail(classified.jobInfo, jobs)
         if (existingJob) {
           action = 'skipped'
           actionDetails = `Job already exists: "${existingJob.title}" at ${existingJob.company}`
@@ -726,52 +735,6 @@ function getActivityType(emailType: EmailType): ActivityType {
     default:
       return ActivityType.EMAIL_UPDATE
   }
-}
-
-function checkForExistingJob(
-  classified: ClassifiedEmail,
-  jobs: Array<{ id: string; title: string; company: string }>
-): { title: string; company: string } | null {
-  if (!classified.jobInfo?.title) return null
-
-  const normalizeTitle = (title: string) => {
-    return title.toLowerCase()
-      .replace(/\s+/g, ' ')
-      .replace(/[^\w\s]/g, '')
-      .trim()
-  }
-
-  const emailTitleNormalized = normalizeTitle(classified.jobInfo.title)
-
-  for (const job of jobs) {
-    const jobTitleNormalized = normalizeTitle(job.title)
-
-    // Exact match
-    if (jobTitleNormalized === emailTitleNormalized) {
-      return job
-    }
-
-    // Substring match
-    if (jobTitleNormalized.includes(emailTitleNormalized) || emailTitleNormalized.includes(jobTitleNormalized)) {
-      const lengthDiff = Math.abs(jobTitleNormalized.length - emailTitleNormalized.length)
-      const shorterLength = Math.min(jobTitleNormalized.length, emailTitleNormalized.length)
-      if (lengthDiff < shorterLength * 0.3) {
-        return job
-      }
-    }
-
-    // Word overlap
-    const emailWords = emailTitleNormalized.split(/\s+/).filter(w => w.length > 2)
-    const jobWords = jobTitleNormalized.split(/\s+/).filter(w => w.length > 2)
-    const commonWords = emailWords.filter(word => jobWords.includes(word))
-    const matchRatio = commonWords.length / Math.max(emailWords.length, jobWords.length)
-
-    if (matchRatio >= 0.8) {
-      return job
-    }
-  }
-
-  return null
 }
 
 // ============================================================================

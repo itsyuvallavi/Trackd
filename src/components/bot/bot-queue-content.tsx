@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Bot,
   ExternalLink,
@@ -18,6 +18,8 @@ import {
   Inbox,
   UserCircle,
   Trash2,
+  Square,
+  CheckSquare2,
 } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
@@ -60,6 +62,13 @@ interface QueueResponse {
     offset: number
     nextOffset: number | null
   }
+  error?: string
+}
+
+interface BulkActionResponse {
+  success?: boolean
+  succeeded?: string[]
+  failed?: Array<{ jobId: string; error: string }>
   error?: string
 }
 
@@ -122,11 +131,17 @@ function ScoreBadge({ score }: { score: number }) {
 
 function JobCard({
   job,
+  selected,
+  selectionDisabled,
+  onSelectedChange,
   onApply,
   onSkip,
   onDelete,
 }: {
   job: QueueJob
+  selected: boolean
+  selectionDisabled: boolean
+  onSelectedChange: (id: string, selected: boolean) => void
   onApply: (id: string) => Promise<void>
   onSkip: (id: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
@@ -231,10 +246,27 @@ function JobCard({
     <>
     <div className={cn(
       'glass glass-subtle rounded-2xl p-5 flex flex-col gap-4 transition-[box-shadow] duration-200 ease-[var(--ease-ios)]',
-      job.duplicate && 'ring-1 ring-warning/30 bg-warning-bg/30'
+      job.duplicate && 'ring-1 ring-warning/30 bg-warning-bg/30',
+      selected && 'ring-2 ring-primary/45',
     )}>
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => onSelectedChange(job.id, !selected)}
+          disabled={selectionDisabled}
+          className="mt-0.5 shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-foreground/[0.06] transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          title={selected ? 'Deselect job' : 'Select job'}
+          aria-label={selected ? `Deselect ${job.title}` : `Select ${job.title}`}
+          aria-pressed={selected}
+        >
+          {selected ? (
+            <CheckSquare2 className="size-5 text-primary" aria-hidden />
+          ) : (
+            <Square className="size-5" aria-hidden />
+          )}
+        </button>
+
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2 mb-1">
             <h3 className="font-semibold text-base truncate">{job.title}</h3>
@@ -477,9 +509,12 @@ function JobCard({
 
 export function BotQueueContent() {
   const [jobs, setJobs] = useState<QueueJob[]>([])
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [profileComplete, setProfileComplete] = useState(true)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkMessage, setBulkMessage] = useState<{ kind: 'success' | 'warning'; text: string } | null>(null)
   const [nextOffset, setNextOffset] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -501,6 +536,7 @@ export function BotQueueContent() {
       }
       if (!res.ok) throw new Error(data.error ?? 'Failed to load queue')
       setJobs((prev) => mergeQueueJobs(prev, data.jobs ?? [], append))
+      if (!append) setSelectedIds(new Set())
       setProfileComplete(data.profileComplete ?? true)
       setNextOffset(data.pagination?.nextOffset ?? null)
     } catch (e) {
@@ -532,6 +568,11 @@ export function BotQueueContent() {
       throw new Error(data.message ?? data.error ?? 'Failed to apply')
     }
     setJobs((prev) => prev.filter((j) => j.id !== jobId))
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      next.delete(jobId)
+      return next
+    })
   }
 
   const handleSkip = async (jobId: string) => {
@@ -543,6 +584,11 @@ export function BotQueueContent() {
     const data = await res.json() as { error?: string }
     if (!res.ok) throw new Error(data.error ?? 'Failed to skip')
     setJobs((prev) => prev.filter((j) => j.id !== jobId))
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      next.delete(jobId)
+      return next
+    })
   }
 
   const handleDelete = async (jobId: string) => {
@@ -554,9 +600,83 @@ export function BotQueueContent() {
     const data = await res.json() as { error?: string }
     if (!res.ok) throw new Error(data.error ?? 'Failed to remove')
     setJobs((prev) => prev.filter((j) => j.id !== jobId))
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      next.delete(jobId)
+      return next
+    })
   }
 
   const duplicateCount = jobs.filter((j) => j.duplicate).length
+  const selectedJobIds = useMemo(
+    () => jobs.filter((job) => selectedIds.has(job.id)).map((job) => job.id),
+    [jobs, selectedIds],
+  )
+  const selectedCount = selectedJobIds.length
+  const allVisibleSelected = jobs.length > 0 && selectedCount === jobs.length
+
+  const handleSelectionChange = (jobId: string, selected: boolean) => {
+    setBulkMessage(null)
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (selected) next.add(jobId)
+      else next.delete(jobId)
+      return next
+    })
+  }
+
+  const handleSelectVisible = () => {
+    setBulkMessage(null)
+    setSelectedIds((prev) => {
+      if (allVisibleSelected) return new Set()
+
+      const next = new Set(prev)
+      for (const job of jobs) next.add(job.id)
+      return next
+    })
+  }
+
+  const handleBulkAction = async (action: 'apply' | 'skip') => {
+    if (selectedJobIds.length === 0) return
+
+    setBulkBusy(true)
+    setBulkMessage(null)
+    try {
+      const res = await fetch('/api/bot/queue/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, jobIds: selectedJobIds }),
+      })
+      const data = await res.json() as BulkActionResponse
+      if (!res.ok) throw new Error(data.error ?? 'Bulk action failed')
+
+      const succeeded = data.succeeded ?? []
+      const failed = data.failed ?? []
+      const succeededIds = new Set(succeeded)
+      setJobs((prev) => prev.filter((job) => !succeededIds.has(job.id)))
+      setSelectedIds(new Set(failed.map((item) => item.jobId)))
+
+      if (failed.length > 0) {
+        const sample = failed.slice(0, 2).map((item) => item.error).join(' ')
+        setBulkMessage({
+          kind: 'warning',
+          text: `${succeeded.length} completed, ${failed.length} failed. ${sample}`,
+        })
+      } else {
+        setBulkMessage({
+          kind: 'success',
+          text: `${succeeded.length} job${succeeded.length === 1 ? '' : 's'} ${action === 'apply' ? 'marked applied' : 'skipped'}.`,
+        })
+      }
+    } catch (e) {
+      setBulkMessage({
+        kind: 'warning',
+        text: e instanceof Error ? e.message : 'Bulk action failed',
+      })
+    } finally {
+      setBulkBusy(false)
+    }
+  }
 
   return (
     <div className="w-full">
@@ -567,7 +687,7 @@ export function BotQueueContent() {
 
         <button
           onClick={() => load()}
-          disabled={loading}
+          disabled={loading || bulkBusy}
           className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50"
         >
           <RefreshCw className={cn('size-4', loading && 'animate-spin')} />
@@ -607,6 +727,75 @@ export function BotQueueContent() {
         </div>
       )}
 
+      {jobs.length > 0 && !loading && (
+        <div className="sticky top-3 z-10 mb-4 rounded-2xl border border-border/60 bg-background/90 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/75">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSelectVisible}
+              disabled={bulkBusy}
+              className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50"
+              aria-pressed={allVisibleSelected}
+            >
+              {allVisibleSelected ? (
+                <CheckSquare2 className="size-4 text-primary" aria-hidden />
+              ) : (
+                <Square className="size-4" aria-hidden />
+              )}
+              {allVisibleSelected ? 'Deselect visible' : 'Select visible'}
+            </button>
+
+            <span className="text-sm text-muted-foreground">
+              {selectedCount} selected
+            </span>
+
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleBulkAction('apply')}
+                disabled={bulkBusy || selectedCount === 0}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border/60 px-3 py-1.5 text-sm font-medium hover:bg-foreground/[0.05] transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              >
+                {bulkBusy ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <CheckCircle className="size-4" aria-hidden />
+                )}
+                Mark applied
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkAction('skip')}
+                disabled={bulkBusy || selectedCount === 0}
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              >
+                <XCircle className="size-4" aria-hidden />
+                Skip
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set())}
+                disabled={bulkBusy || selectedCount === 0}
+                className="rounded-full px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          {bulkMessage && (
+            <p
+              className={cn(
+                'mt-2 text-sm',
+                bulkMessage.kind === 'success' ? 'text-success-text' : 'text-warning-text',
+              )}
+            >
+              {bulkMessage.text}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Content */}
       {loading ? (
         <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
@@ -638,6 +827,9 @@ export function BotQueueContent() {
             <JobCard
               key={job.id}
               job={job}
+              selected={selectedIds.has(job.id)}
+              selectionDisabled={bulkBusy}
+              onSelectedChange={handleSelectionChange}
               onApply={handleApply}
               onSkip={handleSkip}
               onDelete={handleDelete}

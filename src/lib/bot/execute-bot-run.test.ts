@@ -232,6 +232,12 @@ describe('executeBotRunForConfig Telegram routing', () => {
           },
           by_source_raw: { jobs_search_api: 5 },
           by_source_deduped: { jobs_search_api: 3 },
+          runtime_timings: {
+            total_ms: 1234,
+            bottleneck: { phase: 'provider_search', duration_ms: 900 },
+            phases: { provider_search: 900, ai_scoring: 300 },
+            counts: { ai_scored: 2, jobs_saved: 1 },
+          },
         },
       }),
     )
@@ -248,6 +254,10 @@ describe('executeBotRunForConfig Telegram routing', () => {
               removed_total: 2,
               removed_by_url: 1,
               removed_by_company_title: 1,
+            }),
+            runtime_timings: expect.objectContaining({
+              total_ms: 1234,
+              bottleneck: { phase: 'provider_search', duration_ms: 900 },
             }),
           }),
           errors: expect.objectContaining({

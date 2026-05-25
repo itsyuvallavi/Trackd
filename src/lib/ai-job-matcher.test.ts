@@ -1,0 +1,207 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { AIJobMatcher } from '@/lib/ai-job-matcher'
+import { EmailType, type ClassifiedEmail } from '@/lib/ai-email-classifier'
+import { JobStatus } from '@prisma/client'
+
+const mocks = vi.hoisted(() => ({
+  chatCompletion: vi.fn(),
+  getStats: vi.fn(),
+}))
+
+vi.mock('@/lib/ai/client', () => ({
+  getAIClient: () => ({
+    chatCompletion: mocks.chatCompletion,
+    getStats: mocks.getStats,
+  }),
+}))
+
+function aiJson(value: unknown) {
+  return {
+    data: {
+      choices: [
+        {
+          message: {
+            content: JSON.stringify(value),
+          },
+        },
+      ],
+    },
+  }
+}
+
+function classified(company: string, title: string): ClassifiedEmail {
+  return {
+    type: EmailType.REJECTION,
+    confidence: 95,
+    suggestedStatus: JobStatus.REJECTED,
+    jobInfo: { company, title },
+    metadata: {
+      keywords: [],
+      shouldProcess: true,
+      extractedEntities: {
+        company,
+        title,
+        location: null,
+      },
+    },
+  }
+}
+
+describe('AIJobMatcher safety gates', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('rejects AI matches where the extracted company conflicts with the matched job company', async () => {
+    mocks.chatCompletion.mockResolvedValueOnce(aiJson({
+      jobId: 'limesurvey',
+      confidence: 88,
+      reasoning: 'Title is very similar',
+      requiresUserInput: false,
+      alternativeMatches: [],
+    }))
+
+    const matcher = new AIJobMatcher()
+    const result = await matcher.matchToJob(
+      classified('Nothing', 'Full Stack Developer'),
+      [
+        {
+          id: 'limesurvey',
+          title: 'Full Stack Developer (m/f/d)',
+          company: 'LimeSurvey GmbH',
+          location: null,
+          contactEmail: null,
+        },
+      ],
+      { from: 'no-reply@nothing.tech', subject: 'Update on your application to Nothing' },
+    )
+
+    expect(result.confidence).toBe('none')
+    expect(result.jobId).toBeNull()
+    expect(result.reason).toContain('does not match')
+  })
+
+  it('allows AI matches when company differs only by suffix/location decoration', async () => {
+    mocks.chatCompletion.mockResolvedValueOnce(aiJson({
+      jobId: 'vw',
+      confidence: 95,
+      reasoning: 'Same role and company',
+      requiresUserInput: false,
+      alternativeMatches: [],
+    }))
+
+    const matcher = new AIJobMatcher()
+    const result = await matcher.matchToJob(
+      classified('Volkswagen Group Digital Solutions', 'Fullstack Developer - Agnostic'),
+      [
+        {
+          id: 'vw',
+          title: 'Fullstack Developer - Agnostic',
+          company: 'Volkswagen Group Digital Solutions [Portugal]',
+          location: null,
+          contactEmail: null,
+        },
+      ],
+      { from: 'mail@hire.eu.lever.co', subject: 'VW Group Digital Solutions application update' },
+    )
+
+    expect(result.confidence).toBe('exact')
+    expect(result.jobId).toBe('vw')
+  })
+
+  it('matches deterministic company/title variations before relying on AI output', async () => {
+    const matcher = new AIJobMatcher()
+    const result = await matcher.matchToJob(
+      classified('Reaktor', 'Full-Stack Developer'),
+      [
+        {
+          id: 'reaktor',
+          title: 'Full-Stack Developer (Lisbon)',
+          company: 'Reaktor',
+          location: 'Lisbon',
+          contactEmail: null,
+        },
+      ],
+      { from: 'lorraine.gualter@reaktor.com', subject: 'Update on your application with Reaktor' },
+    )
+
+    expect(mocks.chatCompletion).not.toHaveBeenCalled()
+    expect(result.confidence).toBe('exact')
+    expect(result.jobId).toBe('reaktor')
+  })
+
+  it('matches a unique company when the email omits the title', async () => {
+    const matcher = new AIJobMatcher()
+    const result = await matcher.matchToJob(
+      classified('Qualio', ''),
+      [
+        {
+          id: 'qualio',
+          title: 'Full Stack Engineer (Remote Ireland / UK)',
+          company: 'Qualio',
+          location: null,
+          contactEmail: null,
+        },
+      ],
+      { from: 'no-reply@qualio.com', subject: 'Update on Your Application at Qualio' },
+    )
+
+    expect(mocks.chatCompletion).not.toHaveBeenCalled()
+    expect(result.confidence).toBe('exact')
+    expect(result.jobId).toBe('qualio')
+  })
+
+  it('does not reuse the first deterministic company match for later unrelated companies', async () => {
+    const matcher = new AIJobMatcher()
+    const candidates = [
+      {
+        id: 'qualio',
+        title: 'Full Stack Engineer (Remote Ireland / UK)',
+        company: 'Qualio',
+        location: null,
+        contactEmail: null,
+      },
+      {
+        id: 'vw-infra',
+        title: 'Fullstack Developer (Infra & Cloud)',
+        company: 'Volkswagen Group Digital Solutions [Portugal]',
+        location: null,
+        contactEmail: null,
+      },
+      {
+        id: 'reaktor',
+        title: 'Full-Stack Developer (Lisbon)',
+        company: 'Reaktor',
+        location: 'Lisbon',
+        contactEmail: null,
+      },
+      {
+        id: 'primeit',
+        title: 'Full Stack Engineer',
+        company: 'PrimeIT',
+        location: null,
+        contactEmail: null,
+      },
+    ]
+
+    const vw = await matcher.matchToJob(
+      classified('Volkswagen Group Digital Solutions', 'Fullstack Developer (Infra & Cloud)'),
+      candidates,
+      { from: 'mail@hire.eu.lever.co', subject: 'VW Group Digital Solutions update' },
+    )
+    const reaktor = await matcher.matchToJob(
+      classified('Reaktor', 'Full-Stack Developer'),
+      candidates,
+      { from: 'lorraine.gualter@reaktor.com', subject: 'Update on your application with Reaktor' },
+    )
+    const primeit = await matcher.matchToJob(
+      classified('PrimeIT', 'Full Stack Engineer'),
+      candidates,
+      { from: 'inmail-hit-reply@linkedin.com', subject: 'Full Stack Engineer - PrimeIT' },
+    )
+
+    expect(vw.jobId).toBe('vw-infra')
+    expect(reaktor.jobId).toBe('reaktor')
+    expect(primeit.jobId).toBe('primeit')
+  })
+})

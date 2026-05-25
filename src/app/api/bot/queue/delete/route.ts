@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { dismissedRowsForUser } from '@/lib/bot/dismissed-job-imports'
+import { BotQueueActionError, deleteBotQueueJob } from '@/lib/bot/queue-actions'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -19,34 +18,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'jobId required' }, { status: 400 })
   }
 
-  const job = await prisma.job.findFirst({
-    where: {
-      id: jobId,
-      userId: user.id,
-      tags: { has: 'bot-approved' },
-    },
-    select: { url: true, title: true, company: true },
-  })
+  try {
+    await deleteBotQueueJob(user.id, jobId)
 
-  if (!job) {
-    return NextResponse.json(
-      { error: 'Job not found or not in bot queue' },
-      { status: 404 }
-    )
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    if (error instanceof BotQueueActionError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      )
+    }
+
+    throw error
   }
-
-  const rows = dismissedRowsForUser(user.id, job)
-  if (rows.length > 0) {
-    await prisma.dismissedJobImport.createMany({ data: rows, skipDuplicates: true })
-  }
-
-  await prisma.job.deleteMany({
-    where: {
-      id: jobId,
-      userId: user.id,
-      tags: { has: 'bot-approved' },
-    },
-  })
-
-  return NextResponse.json({ success: true })
 }

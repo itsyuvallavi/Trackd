@@ -102,6 +102,8 @@ export interface SearchMeta {
   by_job_board_raw?: Record<string, number>
   /** Counts by provider job board after exclude filters + URL dedup. */
   by_job_board_deduped?: Record<string, number>
+  /** Lightweight per-run timing summary used for diagnostics and progress UX. */
+  runtime_timings?: BotRunTimingSummary
 }
 
 export interface SearchResponse {
@@ -151,6 +153,16 @@ export interface EvaluationFailureAudit {
   error: string
 }
 
+export interface BotRunTimingSummary {
+  total_ms: number
+  bottleneck: {
+    phase: string
+    duration_ms: number
+  } | null
+  phases: Record<string, number>
+  counts: Record<string, number>
+}
+
 export interface OrchestratorResult {
   jobsFound: number
   jobsNew: number
@@ -180,4 +192,5 @@ export interface OrchestratorResult {
   /** Evaluation failures — inspect errors when provider/model requests fail. */
   evaluationFailures: EvaluationFailureAudit[]
   platformsMeta: SearchMeta | null
+  runtimeTimings?: BotRunTimingSummary
 }

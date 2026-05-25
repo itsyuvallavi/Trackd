@@ -9,6 +9,7 @@ import { CheckCircle2, Loader2, Play, X, AlertCircle } from 'lucide-react'
 import type { ResumeReadinessSource } from '@/lib/bot/profile-source-labels'
 import {
   BOT_RUN_COMPLETE_EVENT,
+  BOT_RUN_STARTED_EVENT,
   NOTIFICATIONS_REFRESH_EVENT,
 } from '@/lib/constants'
 
@@ -234,6 +235,9 @@ export function BotStatusStrip({
       const res = (await response.json().catch(() => ({}))) as ManualRunStartResponse
 
       if (response.status === 202 && res.success && res.runId) {
+        window.dispatchEvent(
+          new CustomEvent(BOT_RUN_STARTED_EVENT, { detail: { runId: res.runId } })
+        )
         setToast({
           kind: 'running',
           msg: 'Search queued. You can leave this page; progress is saved in Runs.',
@@ -244,6 +248,9 @@ export function BotStatusStrip({
       }
 
       if (response.status === 409 && res.runId) {
+        window.dispatchEvent(
+          new CustomEvent(BOT_RUN_STARTED_EVENT, { detail: { runId: res.runId } })
+        )
         setToast({
           kind: 'running',
           msg: 'A search is already running. Watching that run now.',
