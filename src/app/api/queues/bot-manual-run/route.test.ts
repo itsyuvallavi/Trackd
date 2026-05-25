@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   botRunFindFirst: vi.fn(),
+  botRunUpdate: vi.fn(),
   botConfigFindFirst: vi.fn(),
   executeStartedBotRunForConfig: vi.fn(),
   markStartedBotRunFailed: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     botRun: {
       findFirst: mocks.botRunFindFirst,
+      update: mocks.botRunUpdate,
     },
     botConfig: {
       findFirst: mocks.botConfigFindFirst,
@@ -68,6 +70,7 @@ describe('/api/queues/bot-manual-run', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.botRunFindFirst.mockResolvedValue(run)
+    mocks.botRunUpdate.mockResolvedValue({ ...run, startedAt: new Date('2026-05-22T10:01:00.000Z') })
     mocks.botConfigFindFirst.mockResolvedValue(config)
     mocks.executeStartedBotRunForConfig.mockResolvedValue({
       runId: 'run_1',
@@ -90,9 +93,16 @@ describe('/api/queues/bot-manual-run', () => {
     )
 
     expect(response.status).toBe(200)
+    expect(mocks.botRunUpdate).toHaveBeenCalledWith({
+      where: { id: 'run_1' },
+      data: {
+        startedAt: expect.any(Date),
+        duration: null,
+      },
+    })
     expect(mocks.executeStartedBotRunForConfig).toHaveBeenCalledWith(config, 'manual', {
       id: 'run_1',
-      startedAt: run.startedAt,
+      startedAt: expect.any(Date),
     })
     expect(mocks.revalidateBotRunViews).toHaveBeenCalledWith('user_1')
   })

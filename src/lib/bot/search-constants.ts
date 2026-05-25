@@ -25,11 +25,22 @@ export const BOT_SEARCH_PROVIDER_PASSES_MAX = 10
  */
 export const BOT_SEARCH_PROVIDER_RESULTS_MIN = 10
 
+function positiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (!raw) return fallback
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
 /**
- * Jobs Search API's RapidAPI plan rate-limits by second. Keep provider calls
- * serial and lightly spaced; AI scoring is where we use bounded parallelism.
+ * Jobs Search API calls are slow. We keep request starts spaced to respect
+ * per-second rate limits, but allow HTTP responses to overlap so broad runs do
+ * not spend 1-2 minutes waiting on provider I/O.
  */
-export const BOT_SEARCH_RAPIDAPI_CONCURRENCY = 1
+export const BOT_SEARCH_RAPIDAPI_CONCURRENCY = positiveIntEnv(
+  'BOT_SEARCH_RAPIDAPI_CONCURRENCY',
+  2
+)
 export const BOT_SEARCH_RAPIDAPI_MIN_INTERVAL_MS = 1_100
 export const BOT_SEARCH_RAPIDAPI_MAX_ATTEMPTS = 3
 export const BOT_SEARCH_RAPIDAPI_RETRY_BACKOFF_MS = 5_000
@@ -38,4 +49,7 @@ export const BOT_SEARCH_RAPIDAPI_RETRY_BACKOFF_MS = 5_000
  * AI scoring is the slowest part of a run. Keep it bounded so the production
  * "Run now" action makes steady progress without overloading the model provider.
  */
-export const BOT_SEARCH_AI_EVAL_CONCURRENCY = 5
+export const BOT_SEARCH_AI_EVAL_CONCURRENCY = positiveIntEnv(
+  'BOT_SEARCH_AI_EVAL_CONCURRENCY',
+  6
+)

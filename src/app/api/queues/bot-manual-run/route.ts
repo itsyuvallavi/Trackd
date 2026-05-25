@@ -60,9 +60,18 @@ const handleManualBotRunQueueCallback = handleManualBotRunCallback<BotManualRunM
       return
     }
 
+    const executionStartedAt = new Date()
+    await prisma.botRun.update({
+      where: { id: run.id },
+      data: {
+        startedAt: executionStartedAt,
+        duration: null,
+      },
+    })
+
     await executeStartedBotRunForConfig(config, 'manual', {
       id: run.id,
-      startedAt: run.startedAt,
+      startedAt: executionStartedAt,
     })
     revalidateBotRunViews(message.userId)
   },

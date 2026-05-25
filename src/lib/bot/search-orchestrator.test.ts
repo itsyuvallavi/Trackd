@@ -264,7 +264,8 @@ describe('runBotSearch orchestration', () => {
         phases: expect.objectContaining({
           provider_search: expect.any(Number),
           dedupe_db_lookup: expect.any(Number),
-          ai_scoring: expect.any(Number),
+          ai_scoring_wall: expect.any(Number),
+          ai_scoring_request_sum: expect.any(Number),
           job_persistence: expect.any(Number),
         }),
         counts: expect.objectContaining({

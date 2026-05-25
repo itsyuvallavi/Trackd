@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server'
+import { after, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
 import { botSearchHasQueryableBackend } from '@/lib/bot/bot-search-sources'
 import {
+  executeStartedBotRunForConfig,
   markStartedBotRunFailed,
   startBotRunForConfig,
 } from '@/lib/bot/execute-bot-run'
@@ -11,7 +12,7 @@ import { revalidateBotRunViews } from '@/lib/bot/revalidate-bot-run-views'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 30
+export const maxDuration = 300
 
 export async function POST() {
   const user = await getCurrentUser()
@@ -51,6 +52,55 @@ export async function POST() {
   const started = await startBotRunForConfig(config, 'manual')
   if (!started.started) {
     return NextResponse.json({ success: false, ...started }, { status: 409 })
+  }
+
+  const useQueue = process.env.BOT_MANUAL_RUN_USE_QUEUE === '1'
+
+  if (!useQueue) {
+    const executionStartedAt = new Date()
+    await prisma.botRun.update({
+      where: { id: started.runId },
+      data: {
+        startedAt: executionStartedAt,
+        duration: null,
+      },
+    })
+
+    after(async () => {
+      try {
+        await executeStartedBotRunForConfig(config, 'manual', {
+          id: started.runId,
+          startedAt: executionStartedAt,
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        await markStartedBotRunFailed({
+          botRunId: started.runId,
+          startedAt: executionStartedAt,
+          error: `Manual job search failed after it was started: ${message}`,
+          extraErrors: { after: true },
+        })
+      } finally {
+        revalidateBotRunViews(user.id)
+      }
+    })
+
+    revalidateBotRunViews(user.id)
+    return NextResponse.json(
+      {
+        success: true,
+        status: 'started',
+        runId: started.runId,
+        messageId: null,
+        jobsFound: 0,
+        jobsNew: 0,
+        jobsApproved: 0,
+        jobsHardFiltered: 0,
+        jobsSkippedLowScore: 0,
+        jobsEvaluationFailed: 0,
+      },
+      { status: 202 }
+    )
   }
 
   try {

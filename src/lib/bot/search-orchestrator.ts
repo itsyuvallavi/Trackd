@@ -1414,7 +1414,7 @@ export async function runBotSearch(
         if (openAi) {
           try {
             const { evaluation, scoringInputs: si } = await timePhase(
-              'ai_scoring',
+              'ai_scoring_request_sum',
               () =>
                 evaluateJobWithCandidateProfile(
                   job,
@@ -1674,7 +1674,9 @@ export async function runBotSearch(
         'info',
         `Running AI evaluation with concurrency=${Math.min(aiEvalConcurrency, jobsToProcess.length || 1)} for ${jobsToProcess.length} listing(s)`
       )
-      await runLimited(jobsToProcess, aiEvalConcurrency, processJobWithProgress)
+      await timePhase('ai_scoring_wall', () =>
+        runLimited(jobsToProcess, aiEvalConcurrency, processJobWithProgress)
+      )
     } else {
       for (const item of jobsToProcess) {
         await processJobWithProgress(item)

@@ -3,12 +3,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   botConfigFindUnique: vi.fn(),
+  botRunUpdate: vi.fn(),
   botSearchHasQueryableBackend: vi.fn(),
   startBotRunForConfig: vi.fn(),
+  executeStartedBotRunForConfig: vi.fn(),
   markStartedBotRunFailed: vi.fn(),
   enqueueManualBotRun: vi.fn(),
   revalidateBotRunViews: vi.fn(),
+  after: vi.fn((task: () => void | Promise<void>) => {
+    void task()
+  }),
 }))
+
+vi.mock('next/server', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('next/server')>()
+  return {
+    ...actual,
+    after: mocks.after,
+  }
+})
 
 vi.mock('@/lib/auth', () => ({
   getCurrentUser: mocks.getCurrentUser,
@@ -19,6 +32,9 @@ vi.mock('@/lib/prisma', () => ({
     botConfig: {
       findUnique: mocks.botConfigFindUnique,
     },
+    botRun: {
+      update: mocks.botRunUpdate,
+    },
   },
 }))
 
@@ -28,6 +44,7 @@ vi.mock('@/lib/bot/bot-search-sources', () => ({
 
 vi.mock('@/lib/bot/execute-bot-run', () => ({
   startBotRunForConfig: mocks.startBotRunForConfig,
+  executeStartedBotRunForConfig: mocks.executeStartedBotRunForConfig,
   markStartedBotRunFailed: mocks.markStartedBotRunFailed,
 }))
 
@@ -56,26 +73,45 @@ describe('/api/bot/run', () => {
       runId: 'run_1',
       startedAt: new Date('2026-05-22T10:00:00.000Z'),
     })
+    mocks.botRunUpdate.mockResolvedValue({})
+    mocks.executeStartedBotRunForConfig.mockResolvedValue({
+      runId: 'run_1',
+      jobsFound: 1,
+      jobsNew: 1,
+      jobsApproved: 1,
+      jobsHardFiltered: 0,
+      jobsSkippedLowScore: 0,
+      jobsEvaluationFailed: 0,
+    })
     mocks.enqueueManualBotRun.mockResolvedValue({ messageId: 'msg_1' })
+    delete process.env.BOT_MANUAL_RUN_USE_QUEUE
   })
 
-  it('reserves a run, enqueues durable manual work, and returns immediately', async () => {
+  it('reserves a run, starts post-response manual work, and returns immediately', async () => {
     const { POST } = await import('./route')
     const response = await POST()
     const body = await response.json()
 
     expect(response.status).toBe(202)
     expect(mocks.startBotRunForConfig).toHaveBeenCalledWith(config, 'manual')
-    expect(mocks.enqueueManualBotRun).toHaveBeenCalledWith({
-      runId: 'run_1',
-      configId: 'cfg_1',
-      userId: 'user_1',
+    expect(mocks.botRunUpdate).toHaveBeenCalledWith({
+      where: { id: 'run_1' },
+      data: {
+        startedAt: expect.any(Date),
+        duration: null,
+      },
     })
+    expect(mocks.after).toHaveBeenCalledTimes(1)
+    expect(mocks.executeStartedBotRunForConfig).toHaveBeenCalledWith(config, 'manual', {
+      id: 'run_1',
+      startedAt: expect.any(Date),
+    })
+    expect(mocks.enqueueManualBotRun).not.toHaveBeenCalled()
     expect(body).toMatchObject({
       success: true,
-      status: 'queued',
+      status: 'started',
       runId: 'run_1',
-      messageId: 'msg_1',
+      messageId: null,
     })
   })
 
@@ -104,7 +140,29 @@ describe('/api/bot/run', () => {
     })
   })
 
+  it('can still use the durable queue path when explicitly enabled', async () => {
+    process.env.BOT_MANUAL_RUN_USE_QUEUE = '1'
+    const { POST } = await import('./route')
+    const response = await POST()
+    const body = await response.json()
+
+    expect(response.status).toBe(202)
+    expect(mocks.enqueueManualBotRun).toHaveBeenCalledWith({
+      runId: 'run_1',
+      configId: 'cfg_1',
+      userId: 'user_1',
+    })
+    expect(mocks.executeStartedBotRunForConfig).not.toHaveBeenCalled()
+    expect(body).toMatchObject({
+      success: true,
+      status: 'queued',
+      runId: 'run_1',
+      messageId: 'msg_1',
+    })
+  })
+
   it('marks the reserved run failed if queue publishing fails', async () => {
+    process.env.BOT_MANUAL_RUN_USE_QUEUE = '1'
     mocks.enqueueManualBotRun.mockRejectedValue(new Error('queue unavailable'))
 
     const { POST } = await import('./route')
