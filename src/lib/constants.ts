@@ -73,3 +73,6 @@ export const BOT_RUN_STARTED_EVENT = 'trackd:bot-run-started' as const
 
 /** Fired after email sync (or similar) so the notification bell can refetch. */
 export const NOTIFICATIONS_REFRESH_EVENT = 'trackd:notifications-refresh' as const
+
+/** Fired after a manual email sync finishes so the sync history can refetch. */
+export const EMAIL_SYNC_COMPLETE_EVENT = 'trackd:email-sync-complete' as const

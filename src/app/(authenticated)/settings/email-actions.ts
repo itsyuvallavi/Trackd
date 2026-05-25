@@ -64,6 +64,7 @@ async function isEmailAlreadyProcessed(
  */
 export async function syncEmails() {
   let userId: string | null = null
+  let syncLogId: string | null = null
   const syncStartTime = new Date()
 
   try {
@@ -109,6 +110,25 @@ export async function syncEmails() {
           `📅 Incremental sync: window from ${syncSince.toISOString()} (day-aligned; last run ${lastSync.toISOString()})`,
         )
       }
+    }
+
+    try {
+      const syncLog = await prisma.emailSyncLog.create({
+        data: {
+          userId,
+          startedAt: syncStartTime,
+          source: 'manual',
+          success: false,
+          errorMessage: 'Sync started but has not completed yet.',
+          details: {
+            syncSince: syncSince.toISOString(),
+            state: 'running',
+          },
+        },
+      })
+      syncLogId = syncLog.id
+    } catch (logError) {
+      console.warn('Failed to create starting sync log:', logError)
     }
 
     console.log('Starting email fetch...')
@@ -453,10 +473,7 @@ export async function syncEmails() {
 
     // Save sync log to database
     try {
-      await prisma.emailSyncLog.create({
-      data: {
-        userId,
-        startedAt: syncStartTime,
+      const data = {
         completedAt: syncCompletedAt,
         duration: syncDuration,
         source: 'manual',
@@ -473,15 +490,31 @@ export async function syncEmails() {
         jobsUpdated: updatedCount,
         notificationsCreated: notificationsCreatedCount,
         success: true,
+        errorMessage: null,
         details: {
           syncSince: syncSince.toISOString(),
           jobsCount: jobs.length,
           partial: !cursorUpdate.completedFullWindow,
           processingErrors: processingErrorsCount,
           reachedFetchCap: cursorUpdate.reachedFetchCap,
+          state: 'completed',
         },
-      },
-      })
+      }
+
+      if (syncLogId) {
+        await prisma.emailSyncLog.update({
+          where: { id: syncLogId },
+          data,
+        })
+      } else {
+        await prisma.emailSyncLog.create({
+          data: {
+            userId,
+            startedAt: syncStartTime,
+            ...data,
+          },
+        })
+      }
     } catch (logError) {
       // If emailSyncLog model doesn't exist, log warning but don't fail the sync
       console.warn('Failed to save sync log (model may not be available). Run: bunx prisma generate && restart server', logError)
@@ -514,10 +547,7 @@ export async function syncEmails() {
         // Save error sync log (only if model exists)
         const syncCompletedAt = new Date()
         try {
-          await prisma.emailSyncLog.create({
-          data: {
-            userId,
-            startedAt: syncStartTime,
+          const data = {
             completedAt: syncCompletedAt,
             duration: syncCompletedAt.getTime() - syncStartTime.getTime(),
             source: 'manual',
@@ -535,8 +565,22 @@ export async function syncEmails() {
             notificationsCreated: 1, // Error notification
             success: false,
             errorMessage,
-          },
-          })
+            details: { state: 'failed' },
+          }
+          if (syncLogId) {
+            await prisma.emailSyncLog.update({
+              where: { id: syncLogId },
+              data,
+            })
+          } else {
+            await prisma.emailSyncLog.create({
+              data: {
+                userId,
+                startedAt: syncStartTime,
+                ...data,
+              },
+            })
+          }
         } catch (logError) {
           console.error('Failed to save error sync log:', logError)
         }

@@ -1,16 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { CheckCircle2, Loader2, Play, X, AlertCircle } from 'lucide-react'
+import { Loader2, Play, AlertCircle, X } from 'lucide-react'
 import type { ResumeReadinessSource } from '@/lib/bot/profile-source-labels'
 import {
-  BOT_RUN_COMPLETE_EVENT,
   BOT_RUN_STARTED_EVENT,
-  NOTIFICATIONS_REFRESH_EVENT,
 } from '@/lib/constants'
 
 interface BotStatusStripProps {
@@ -41,16 +38,6 @@ type ManualRunStartResponse = {
   jobsHardFiltered?: number
   jobsSkippedLowScore?: number
   jobsEvaluationFailed?: number
-}
-
-type ManualRunStatusResponse = {
-  id: string
-  status: 'RUNNING' | 'COMPLETED' | 'FAILED'
-  jobsFound: number
-  jobsNew: number
-  jobsEvaluated: number
-  jobsApproved: number
-  errors?: unknown
 }
 
 function relativeTime(iso: string): string {
@@ -102,12 +89,11 @@ export function BotStatusStrip({
 }: BotStatusStripProps) {
   const router = useRouter()
   const [running, setRunning] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const [toast, setToast] = useState<
-    | { kind: 'running'; msg?: string }
     | { kind: 'done'; ok: boolean; msg: string }
     | null
   >(null)
-  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -118,46 +104,6 @@ export function BotStatusStrip({
     const t = setTimeout(() => setToast(null), 6000)
     return () => clearTimeout(t)
   }, [toast])
-
-  function completionMessage(res: {
-    jobsFound?: number
-    jobsNew?: number
-    jobsApproved?: number
-    jobsHardFiltered?: number
-    jobsSkippedLowScore?: number
-    jobsEvaluationFailed?: number
-  }) {
-    const found = res.jobsFound ?? 0
-    const saved = res.jobsNew ?? 0
-    const approved = res.jobsApproved ?? 0
-    const hardFiltered = res.jobsHardFiltered ?? 0
-    const belowScore = res.jobsSkippedLowScore ?? 0
-    const evalFailed = res.jobsEvaluationFailed ?? 0
-
-    if (evalFailed > 0 && saved === 0) {
-      return `Search found ${found} listing${found === 1 ? '' : 's'}, but AI scoring failed. Open Runs for details.`
-    }
-
-    if (saved === 0) {
-      if (belowScore > 0) {
-        const aiLowScore = Math.max(0, belowScore - hardFiltered)
-        if (hardFiltered > 0 && aiLowScore === 0) {
-          return `Search found ${found} listing${found === 1 ? '' : 's'}, but all matches were filtered by location or seniority. Open Runs for details.`
-        }
-        return `Search found ${found} listing${found === 1 ? '' : 's'}, but none met your match threshold. Open Runs for reasoning.`
-      }
-      return `Search finished: ${found} listing${found === 1 ? '' : 's'} found, 0 saved. Open Runs for details.`
-    }
-
-    return `Search saved ${saved} new job${saved === 1 ? '' : 's'}${approved > 0 ? `, ${approved} approved` : ''}.`
-  }
-
-  function statusMessage(run: ManualRunStatusResponse) {
-    if (run.jobsFound > 0) {
-      return `Scoring in background: ${run.jobsEvaluated}/${run.jobsFound} evaluated, ${run.jobsNew} saved so far.`
-    }
-    return 'Search is running in the background. You can leave this page; progress is saved in Runs.'
-  }
 
   function responseError(
     payload: ManualRunStartResponse | Record<string, unknown>,
@@ -172,60 +118,9 @@ export function BotStatusStrip({
     return fallback
   }
 
-  async function pollRun(runId: string) {
-    const deadline = Date.now() + 15 * 60_000
-    while (Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 2500))
-
-      const statusResponse = await fetch(`/api/bot/run/${encodeURIComponent(runId)}`, {
-        cache: 'no-store',
-      })
-      const payload = (await statusResponse.json().catch(() => ({}))) as
-        | ManualRunStatusResponse
-        | { error?: string }
-
-      if (!statusResponse.ok || !('status' in payload)) {
-        throw new Error(responseError(payload, 'Could not read job search status.'))
-      }
-
-      if (payload.status === 'RUNNING') {
-        setToast({ kind: 'running', msg: statusMessage(payload) })
-        continue
-      }
-
-      window.dispatchEvent(new CustomEvent(BOT_RUN_COMPLETE_EVENT))
-      window.dispatchEvent(new CustomEvent(NOTIFICATIONS_REFRESH_EVENT))
-      router.refresh()
-      setRunning(false)
-      setToast({
-        kind: 'done',
-        ok: payload.status === 'COMPLETED',
-        msg:
-          payload.status === 'COMPLETED'
-            ? completionMessage(payload)
-            : responseError(
-                payload.errors && typeof payload.errors === 'object'
-                  ? (payload.errors as Record<string, unknown>)
-                  : {},
-                'Search failed. Open Runs for details.'
-              ),
-      })
-      return
-    }
-
-    router.refresh()
-    setRunning(false)
-    setToast({
-      kind: 'done',
-      ok: false,
-      msg: 'Search is still running in the background. Open Runs for live counters before starting another run.',
-    })
-  }
-
   async function handleRun() {
     if (running) return
     setRunning(true)
-    setToast({ kind: 'running', msg: 'Starting background search…' })
 
     try {
       const response = await fetch('/api/bot/run', {
@@ -238,12 +133,8 @@ export function BotStatusStrip({
         window.dispatchEvent(
           new CustomEvent(BOT_RUN_STARTED_EVENT, { detail: { runId: res.runId } })
         )
-        setToast({
-          kind: 'running',
-          msg: 'Search queued. You can leave this page; progress is saved in Runs.',
-        })
         router.refresh()
-        await pollRun(res.runId)
+        setRunning(false)
         return
       }
 
@@ -251,11 +142,8 @@ export function BotStatusStrip({
         window.dispatchEvent(
           new CustomEvent(BOT_RUN_STARTED_EVENT, { detail: { runId: res.runId } })
         )
-        setToast({
-          kind: 'running',
-          msg: 'A search is already running. Watching that run now.',
-        })
-        await pollRun(res.runId)
+        router.refresh()
+        setRunning(false)
         return
       }
 
@@ -396,9 +284,8 @@ export function BotStatusStrip({
         </div>
       )}
 
-      {mounted && toast && createPortal(
-        <SearchToast toast={toast} onDismiss={() => setToast(null)} />,
-        document.body
+      {toast && (
+        <SearchToast toast={toast} onDismiss={() => setToast(null)} />
       )}
     </div>
   )
@@ -408,13 +295,10 @@ function SearchToast({
   toast,
   onDismiss,
 }: {
-  toast:
-    | { kind: 'running'; msg?: string }
-    | { kind: 'done'; ok: boolean; msg: string }
+  toast: { kind: 'done'; ok: boolean; msg: string }
   onDismiss: () => void
 }) {
-  const isRunning = toast.kind === 'running'
-  const isError = toast.kind === 'done' && !toast.ok
+  const isError = !toast.ok
 
   return (
     <div
@@ -431,45 +315,29 @@ function SearchToast({
         <span
           className={cn(
             'shrink-0 mt-0.5',
-            isRunning && 'text-primary',
-            !isRunning && !isError && 'text-success',
             isError && 'text-error-text'
           )}
         >
-          {isRunning ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : isError ? (
-            <AlertCircle className="size-4" />
-          ) : (
-            <CheckCircle2 className="size-4" />
-          )}
+          <AlertCircle className="size-4" />
         </span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium">
-            {isRunning
-              ? 'Job search running'
-              : isError
+            {isError
                 ? 'Search failed'
                 : 'Search complete'}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {isRunning
-              ? toast.msg ?? 'This can take a few minutes; progress is saved in Runs.'
-              : toast.kind === 'done'
-                ? toast.msg
-                : ''}
+            {toast.msg}
           </p>
         </div>
-        {!isRunning && (
-          <button
-            type="button"
-            onClick={onDismiss}
-            aria-label="Dismiss"
-            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors -mr-1 -mt-1 p-1 rounded-md hover:bg-foreground/[0.04]"
-          >
-            <X className="size-3.5" />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss"
+          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors -mr-1 -mt-1 p-1 rounded-md hover:bg-foreground/[0.04]"
+        >
+          <X className="size-3.5" />
+        </button>
       </div>
     </div>
   )

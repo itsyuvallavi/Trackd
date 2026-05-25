@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Clock, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
+import { Clock, CheckCircle2, Loader2, XCircle, RefreshCw } from 'lucide-react'
+import { EMAIL_SYNC_COMPLETE_EVENT } from '@/lib/constants'
 
 interface SyncLog {
   id: string
@@ -29,8 +30,19 @@ export function SyncHistory() {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    fetchLogs()
+    void fetchLogs()
+    const onSyncComplete = () => void fetchLogs()
+    window.addEventListener(EMAIL_SYNC_COMPLETE_EVENT, onSyncComplete)
+    return () => {
+      window.removeEventListener(EMAIL_SYNC_COMPLETE_EVENT, onSyncComplete)
+    }
   }, [])
+
+  useEffect(() => {
+    if (!logs.some((log) => !log.completedAt)) return
+    const interval = window.setInterval(() => void fetchLogs(), 5000)
+    return () => window.clearInterval(interval)
+  }, [logs])
 
   async function fetchLogs() {
     try {
@@ -124,7 +136,9 @@ export function SyncHistory() {
           >
             <div className="flex items-start justify-between mb-2 gap-3 flex-wrap">
               <div className="flex items-center gap-2">
-                {log.success ? (
+                {!log.completedAt ? (
+                  <Loader2 className="size-4 animate-spin text-primary" />
+                ) : log.success ? (
                   <CheckCircle2 className="size-4 text-success" />
                 ) : (
                   <XCircle className="size-4 text-error" />
@@ -141,7 +155,13 @@ export function SyncHistory() {
               </span>
             </div>
 
-            {!log.success && log.errorMessage && (
+            {!log.completedAt && (
+              <p className="text-xs text-muted-foreground mb-2">
+                Sync is running or was interrupted before completion.
+              </p>
+            )}
+
+            {log.completedAt && !log.success && log.errorMessage && (
               <p className="text-xs text-error-text mb-2">
                 Error: {log.errorMessage}
               </p>

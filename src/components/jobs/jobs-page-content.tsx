@@ -1,7 +1,6 @@
 'use client'
 
-import { Search, StickyNote, CheckCircle2 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { Archive, CheckCircle2, Loader2, Search, XCircle } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -22,9 +21,10 @@ import { STATUS_LABELS } from '@/lib/constants'
 import type { JobSource, JobStatus } from '@prisma/client'
 import { jobSourceDisplayName } from '@/lib/job-source-display'
 import { JobCardMobile } from '@/components/jobs/job-card-mobile'
-import { useColumnVisibility, type ColumnKey } from '@/components/jobs/column-visibility-settings'
+import { useColumnVisibility } from '@/components/jobs/column-visibility-settings'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
+import { updateJobStatus } from '@/app/(authenticated)/jobs/actions'
 
 // Lazy load modals since they're not immediately visible
 const AddJobModal = dynamic(() => import('@/components/jobs/add-job-modal').then(mod => ({ default: mod.AddJobModal })), {
@@ -77,12 +77,23 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeStatus, setActiveStatus] = useState('all')
   const [dateRange, setDateRange] = useState<DateRange>({ from: null, to: null })
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null)
   const { visibleColumns, setVisibleColumns, isHydrated } = useColumnVisibility()
 
   // Keep client list in sync when the server payload changes (e.g. after
   // add/delete or a completed router.refresh()).
   useEffect(() => {
     setListJobs(jobs)
+  }, [jobs])
+
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const available = new Set(jobs.map((job) => job.id))
+      const next = new Set([...prev].filter((id) => available.has(id)))
+      return next.size === prev.size ? prev : next
+    })
   }, [jobs])
 
   // Filter jobs based on search query, status, and date range
@@ -158,6 +169,18 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
     return filtered
   }, [listJobs, searchQuery, activeStatus, dateRange])
 
+  const visibleJobIds = useMemo(
+    () => filteredJobs.map((job) => job.id),
+    [filteredJobs]
+  )
+  const selectedVisibleIds = useMemo(
+    () => visibleJobIds.filter((id) => selectedIds.has(id)),
+    [selectedIds, visibleJobIds]
+  )
+  const selectedVisibleCount = selectedVisibleIds.length
+  const allVisibleSelected =
+    visibleJobIds.length > 0 && selectedVisibleCount === visibleJobIds.length
+
   // Calculate status counts from active jobs only (excluding ARCHIVED and REJECTED for "all" count)
   const statusCounts = listJobs.reduce((acc, job) => {
     const status = job.status as keyof typeof acc
@@ -201,6 +224,77 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
     []
   )
 
+  const toggleJobSelection = useCallback((jobId: string) => {
+    setBulkMessage(null)
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(jobId)) {
+        next.delete(jobId)
+      } else {
+        next.add(jobId)
+      }
+      return next
+    })
+  }, [])
+
+  const toggleVisibleSelection = useCallback(() => {
+    setBulkMessage(null)
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allVisibleSelected) {
+        visibleJobIds.forEach((id) => next.delete(id))
+      } else {
+        visibleJobIds.forEach((id) => next.add(id))
+      }
+      return next
+    })
+  }, [allVisibleSelected, visibleJobIds])
+
+  const clearSelection = useCallback(() => {
+    setBulkMessage(null)
+    setSelectedIds(new Set())
+  }, [])
+
+  const applyBulkStatus = useCallback(
+    async (status: JobStatus) => {
+      const ids = selectedVisibleIds
+      if (ids.length === 0 || bulkBusy) return
+
+      const previousStatuses = new Map(
+        listJobs
+          .filter((job) => ids.includes(job.id))
+          .map((job) => [job.id, job.status])
+      )
+      setBulkBusy(true)
+      setBulkMessage(null)
+      setListJobs((prev) =>
+        prev.map((job) => (ids.includes(job.id) ? { ...job, status } : job))
+      )
+
+      try {
+        await Promise.all(ids.map((id) => updateJobStatus(id, status)))
+        setSelectedIds((prev) => {
+          const next = new Set(prev)
+          ids.forEach((id) => next.delete(id))
+          return next
+        })
+        setBulkMessage(`${ids.length} application${ids.length === 1 ? '' : 's'} updated.`)
+      } catch (error) {
+        console.error('[jobs] Bulk status update failed:', error)
+        setListJobs((prev) =>
+          prev.map((job) => {
+            const previous = previousStatuses.get(job.id)
+            return previous ? { ...job, status: previous } : job
+          })
+        )
+        setBulkMessage('Bulk update failed. No saved status changes were kept.')
+      } finally {
+        setBulkBusy(false)
+      }
+    },
+    [bulkBusy, listJobs, selectedVisibleIds]
+  )
+
   return (
     <>
       <AddJobModal
@@ -230,6 +324,66 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
             visibleColumns={visibleColumns}
             onColumnsChange={setVisibleColumns}
           />
+
+      {filteredJobs.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card/45 px-3 py-2 text-sm">
+          <label className="inline-flex cursor-pointer items-center gap-2 text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              onChange={toggleVisibleSelection}
+              disabled={bulkBusy}
+              className="size-4 rounded border-border bg-background accent-primary"
+              aria-label="Select visible applications"
+            />
+            <span>Select visible</span>
+          </label>
+          <span className="text-muted-foreground">
+            <span className="tabular-nums text-foreground">{selectedVisibleCount}</span> selected
+          </span>
+
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {bulkMessage && (
+              <span className="text-xs text-muted-foreground">{bulkMessage}</span>
+            )}
+            <button
+              type="button"
+              onClick={() => applyBulkStatus('APPLIED')}
+              disabled={selectedVisibleCount === 0 || bulkBusy}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-foreground/[0.04] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {bulkBusy ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+              Mark applied
+            </button>
+            <button
+              type="button"
+              onClick={() => applyBulkStatus('ARCHIVED')}
+              disabled={selectedVisibleCount === 0 || bulkBusy}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-foreground/[0.04] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <Archive className="size-3.5" />
+              Archive
+            </button>
+            <button
+              type="button"
+              onClick={() => applyBulkStatus('REJECTED')}
+              disabled={selectedVisibleCount === 0 || bulkBusy}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-foreground/[0.04] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <XCircle className="size-3.5" />
+              Reject
+            </button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              disabled={selectedVisibleCount === 0 || bulkBusy}
+              className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div>
@@ -275,6 +429,16 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                   <Table>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent border-b border-border/60">
+                      <TableHead className="py-1.5 pl-3 pr-1 w-10 min-w-10 max-w-10">
+                        <input
+                          type="checkbox"
+                          checked={allVisibleSelected}
+                          onChange={toggleVisibleSelection}
+                          disabled={bulkBusy}
+                          className="size-4 rounded border-border bg-background accent-primary"
+                          aria-label="Select visible applications"
+                        />
+                      </TableHead>
                       {visibleColumns.has('role') && (
                         <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider py-1.5" style={{ width: '250px', minWidth: '250px', maxWidth: '250px' }}>
                           Role
@@ -323,8 +487,21 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                   {filteredJobs.map((job) => (
                     <TableRow
                       key={job.id}
-                      className="border-b border-border/40 last:border-b-0 hover:bg-foreground/[0.03] transition-colors duration-150"
+                      className={cn(
+                        'border-b border-border/40 last:border-b-0 hover:bg-foreground/[0.03] transition-colors duration-150',
+                        selectedIds.has(job.id) && 'bg-primary/5'
+                      )}
                     >
+                      <TableCell className="py-2 pl-3 pr-1 w-10 min-w-10 max-w-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(job.id)}
+                          onChange={() => toggleJobSelection(job.id)}
+                          disabled={bulkBusy}
+                          className="size-4 rounded border-border bg-background accent-primary"
+                          aria-label={`Select ${job.title} at ${job.company}`}
+                        />
+                      </TableCell>
                       {visibleColumns.has('role') && (
                         <TableCell className="py-2" style={{ width: '250px', minWidth: '250px', maxWidth: '250px' }}>
                           <div className="flex items-center gap-2.5">

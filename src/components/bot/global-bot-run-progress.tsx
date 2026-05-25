@@ -172,7 +172,7 @@ export function GlobalBotRunProgress() {
   const running = run.status === 'RUNNING'
 
   return (
-    <div className="fixed bottom-24 right-4 z-[90] w-[min(100%-2rem,22rem)] md:bottom-5">
+    <div className="fixed right-4 top-24 z-[90] w-[min(100%-2rem,22rem)] md:right-5">
       <div
         className={cn(
           'glass glass-subtle rounded-xl border px-3.5 py-3 shadow-lg',

@@ -6,7 +6,7 @@ import type { EmailIntegration } from '@prisma/client'
 import { saveEmailIntegration, syncEmails, testEmailConnection, updateAutoSyncSettings } from '@/app/(authenticated)/settings/email-actions'
 import { Button } from '@/components/ui/button'
 import { SyncResultToast, type SyncResultToastState } from './sync-result-toast'
-import { NOTIFICATIONS_REFRESH_EVENT } from '@/lib/constants'
+import { EMAIL_SYNC_COMPLETE_EVENT, NOTIFICATIONS_REFRESH_EVENT } from '@/lib/constants'
 import { Clock, RefreshCw } from 'lucide-react'
 
 interface EmailIntegrationFormProps {
@@ -117,6 +117,7 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
     } finally {
       setIsSyncing(false)
     }
+    window.dispatchEvent(new CustomEvent(EMAIL_SYNC_COMPLETE_EVENT))
     window.dispatchEvent(new CustomEvent(NOTIFICATIONS_REFRESH_EVENT))
     await router.refresh()
   }

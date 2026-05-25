@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { syncEmails } from '@/app/(authenticated)/settings/email-actions'
 import { SyncResultToast, type SyncResultToastState } from './sync-result-toast'
-import { NOTIFICATIONS_REFRESH_EVENT } from '@/lib/constants'
+import { EMAIL_SYNC_COMPLETE_EVENT, NOTIFICATIONS_REFRESH_EVENT } from '@/lib/constants'
 
 export function SyncEmailsButton() {
   const router = useRouter()
@@ -60,6 +60,7 @@ export function SyncEmailsButton() {
     } finally {
       setIsSyncing(false)
     }
+    window.dispatchEvent(new CustomEvent(EMAIL_SYNC_COMPLETE_EVENT))
     window.dispatchEvent(new CustomEvent(NOTIFICATIONS_REFRESH_EVENT))
     await router.refresh()
   }
