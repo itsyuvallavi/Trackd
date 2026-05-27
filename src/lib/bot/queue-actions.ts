@@ -112,7 +112,7 @@ export async function markBotQueueJobApplied(userId: string, jobId: string) {
 export async function skipBotQueueJob(userId: string, jobId: string) {
   const job = await prisma.job.findFirst({
     where: { id: jobId, userId },
-    select: { id: true, tags: true },
+    select: { id: true, tags: true, status: true },
   })
 
   if (!job) {
@@ -124,11 +124,14 @@ export async function skipBotQueueJob(userId: string, jobId: string) {
   await prisma.job.update({
     where: { id: jobId },
     data: {
+      status: 'ARCHIVED',
       tags: { set: tags },
       activities: {
         create: {
           userId,
-          type: 'NOTE',
+          type: 'STATUS_CHANGE',
+          fromStatus: job.status,
+          toStatus: 'ARCHIVED',
           description: 'Skipped from Bot Queue',
         },
       },

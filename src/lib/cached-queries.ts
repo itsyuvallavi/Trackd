@@ -388,10 +388,7 @@ export const getUserJobs = async (userId: string, limit = 100) => {
   return unstable_cache(
     async () => {
       const rows = await prisma.job.findMany({
-        where: {
-          userId,
-          NOT: { tags: { has: 'bot-skipped' } },
-        },
+        where: { userId },
         select,
         orderBy: { savedAt: 'desc' },
         take: limit,
@@ -447,10 +444,7 @@ export const getUserJobsListRows = async (userId: string, limit?: number | null)
   return unstable_cache(
     async () => {
       const rows = await prisma.job.findMany({
-        where: {
-          userId,
-          NOT: { tags: { has: 'bot-skipped' } },
-        },
+        where: { userId },
         select,
         orderBy: { savedAt: 'desc' },
         ...(limit && limit > 0 ? { take: limit } : {}),
