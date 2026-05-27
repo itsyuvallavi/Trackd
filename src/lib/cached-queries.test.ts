@@ -220,7 +220,10 @@ describe('bot run profile source summaries', () => {
     ])
 
     expect(prismaMock.job.findMany).toHaveBeenCalledWith({
-      where: { userId: 'user_1' },
+      where: {
+        userId: 'user_1',
+        NOT: { tags: { has: 'bot-skipped' } },
+      },
       select: {
         id: true,
         title: true,
@@ -246,6 +249,21 @@ describe('bot run profile source summaries', () => {
     expect(prismaMock.job.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         take: 25,
+      })
+    )
+  })
+
+  it('excludes skipped bot jobs from the applications list query', async () => {
+    prismaMock.job.findMany.mockResolvedValue([])
+
+    await getUserJobsListRows('user_1')
+
+    expect(prismaMock.job.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: 'user_1',
+          NOT: { tags: { has: 'bot-skipped' } },
+        },
       })
     )
   })

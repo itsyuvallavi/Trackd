@@ -1,5 +1,14 @@
 import { prisma } from '@/lib/prisma'
 import { dismissedRowsForUser } from '@/lib/bot/dismissed-job-imports'
+import { revalidateTag } from 'next/cache'
+import { cacheTagsFor } from '@/lib/cache-tags'
+
+function invalidateBotQueueActionCaches(userId: string) {
+  const tags = cacheTagsFor(userId)
+  revalidateTag(tags.jobs, { expire: 0 })
+  revalidateTag(tags.bot, { expire: 0 })
+  revalidateTag(tags.activity, { expire: 0 })
+}
 
 function withoutTag(tags: string[], tag: string): string[] {
   return tags.filter((item) => item !== tag)
@@ -78,7 +87,7 @@ export async function markBotQueueJobApplied(userId: string, jobId: string) {
     'bot-applied',
   )
 
-  return prisma.job.update({
+  const updated = await prisma.job.update({
     where: { id: jobId },
     data: {
       status: 'APPLIED',
@@ -96,6 +105,8 @@ export async function markBotQueueJobApplied(userId: string, jobId: string) {
     },
     select: { id: true, status: true },
   })
+  invalidateBotQueueActionCaches(userId)
+  return updated
 }
 
 export async function skipBotQueueJob(userId: string, jobId: string) {
@@ -123,6 +134,7 @@ export async function skipBotQueueJob(userId: string, jobId: string) {
       },
     },
   })
+  invalidateBotQueueActionCaches(userId)
 }
 
 export async function deleteBotQueueJob(userId: string, jobId: string) {
@@ -151,4 +163,5 @@ export async function deleteBotQueueJob(userId: string, jobId: string) {
       tags: { has: 'bot-approved' },
     },
   })
+  invalidateBotQueueActionCaches(userId)
 }
