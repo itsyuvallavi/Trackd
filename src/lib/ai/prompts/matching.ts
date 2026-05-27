@@ -16,7 +16,8 @@ export interface JobCandidate {
 
 export function getMatchingPrompt(
   extracted: ExtractedEntities,
-  candidates: JobCandidate[]
+  candidates: JobCandidate[],
+  email?: { from: string; subject: string }
 ): string {
   const candidatesList = candidates
     .map(
@@ -31,6 +32,7 @@ Extracted information from email:
 - Company: ${extracted.company || 'Not found'}
 - Title: ${extracted.title || 'Not found'}
 - Location: ${extracted.location || 'Not found'}
+${email ? `\nEmail context:\n- From: ${email.from}\n- Subject: ${email.subject}` : ''}
 
 User's existing jobs:
 ${candidatesList || 'No jobs found'}
@@ -40,6 +42,7 @@ Determine which job (if any) this email is about. Consider:
 - Job title matching (exact or similar - e.g., "React Developer" matches "React.js Engineer")
 - Location matching (if available)
 - Contact email domain matching (if available)
+- Sender domain and subject line context when the ATS sender is generic
 
 Return a JSON object with this exact structure:
 {
@@ -65,7 +68,9 @@ Guidelines:
 - If confidence is below 70, set requiresUserInput to true
 - Consider variations in job titles (e.g., "Software Engineer" vs "Software Developer")
 - Consider variations in company names (e.g., "Google" vs "Google LLC")
+- Do not match different companies because their names look similar (for example, "Air Apps" is not "Aira")
+- If the email clearly names one company in the subject/body, do not include jobs from another company as alternatives
+- If the email is a verification code, OTP, login, or security message, return jobId null, confidence 0, requiresUserInput false
 
 Return ONLY the JSON object, no other text.`
 }
-

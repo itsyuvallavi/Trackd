@@ -10,7 +10,6 @@ import { getAIClient } from './ai/client'
 import { getMatchingPrompt, JobCandidate } from './ai/prompts/matching'
 import { MatchResult as AIMatchResult } from './ai/types'
 import { MatchResult } from './email-classifier'
-import { emailJobTitleMatches } from './email-job-dedupe'
 
 /**
  * Normalize a string for comparison (lowercase, trim, remove special chars, collapse spaces)
@@ -23,15 +22,50 @@ function normalizeString(str: string): string {
     .replace(/\s+/g, ' ') // Collapse multiple spaces to single space
 }
 
+const GENERIC_SENDER_ROOTS = new Set([
+  'ashbyhq',
+  'greenhouse',
+  'lever',
+  'workday',
+  'myworkday',
+  'smartrecruiters',
+  'recruitee',
+  'teamtailor',
+  'zohocalendar',
+  'noreply',
+  'no-reply',
+])
+
 function senderDomainRoot(from: string | undefined): string | null {
   const domain = from?.match(/@([^>\s]+)/)?.[1]?.toLowerCase()
   return domain?.split('.')[0] ?? null
 }
 
+function companyTokens(value: string): string[] {
+  const ignored = new Set(['group', 'gmbh', 'llc', 'ltd', 'limited', 'inc', 'sa', 'ag'])
+  return normalizeString(value)
+    .split(/\s+/)
+    .map((token) => token.replace(/com$/, ''))
+    .filter((token) => token.length > 1 && !ignored.has(token))
+}
+
 function companyMatches(left: string, right: string): boolean {
-  const a = normalizeString(left).replace(/\s+/g, '')
-  const b = normalizeString(right).replace(/\s+/g, '')
-  return a.includes(b) || b.includes(a)
+  const a = companyTokens(left)
+  const b = companyTokens(right)
+  if (a.length === 0 || b.length === 0) return false
+
+  const compactA = a.join('')
+  const compactB = b.join('')
+  if (compactA === compactB) return true
+
+  const hasSharedToken = a.some((token) => b.includes(token))
+  if (hasSharedToken) return true
+
+  return (
+    compactA.length >= 5 &&
+    compactB.length >= 5 &&
+    (compactA.includes(compactB) || compactB.includes(compactA))
+  )
 }
 
 function senderDomainSupportsMatch(
@@ -40,6 +74,7 @@ function senderDomainSupportsMatch(
 ): boolean {
   const root = senderDomainRoot(from)
   if (!root) return false
+  if (GENERIC_SENDER_ROOTS.has(root)) return false
 
   const companyRoot = normalizeString(job.company).replace(/\s+/g, '')
   if (companyRoot.includes(root) || root.includes(companyRoot)) return true
@@ -48,66 +83,23 @@ function senderDomainSupportsMatch(
   return Boolean(contactDomain && contactDomain.split('.')[0] === root)
 }
 
-function deterministicMatch(
+function shortlistCandidates(
   extracted: { company?: string | null; title?: string | null },
   jobs: Array<{ id: string; title: string; company: string; location?: string | null; contactEmail?: string | null }>,
-): MatchResult | null {
-  if (!extracted.company && !extracted.title) return null
-
-  if (extracted.company && extracted.title) {
-    const companyTitleMatches = jobs.filter((job) =>
-      companyMatches(job.company, extracted.company!) &&
-      emailJobTitleMatches(job.title, extracted.title!),
+  emailMessage?: { from: string; subject: string },
+) {
+  if (extracted.company) {
+    const companyMatchesOnly = jobs.filter((job) =>
+      companyMatches(job.company, extracted.company!) ||
+      senderDomainSupportsMatch(emailMessage?.from, job),
     )
-
-    if (companyTitleMatches.length === 1) {
-      return {
-        jobId: companyTitleMatches[0].id,
-        confidence: 'exact',
-        reason: `Deterministic match: company "${extracted.company}" + title "${extracted.title}"`,
-      }
-    }
-
-    if (companyTitleMatches.length > 1) {
-      return {
-        jobId: null,
-        confidence: 'ambiguous',
-        matchedJobs: companyTitleMatches.map((job) => ({
-          id: job.id,
-          title: job.title,
-          company: job.company,
-        })),
-        reason: `Multiple jobs match company "${extracted.company}" and title "${extracted.title}"`,
-      }
-    }
+    if (companyMatchesOnly.length > 0) return companyMatchesOnly
   }
 
-  if (extracted.company && !extracted.title) {
-    const companyMatchesOnly = jobs.filter((job) => companyMatches(job.company, extracted.company!))
+  const senderMatches = jobs.filter((job) => senderDomainSupportsMatch(emailMessage?.from, job))
+  if (senderMatches.length > 0) return senderMatches
 
-    if (companyMatchesOnly.length === 1) {
-      return {
-        jobId: companyMatchesOnly[0].id,
-        confidence: 'exact',
-        reason: `Deterministic company-only match: "${extracted.company}"`,
-      }
-    }
-
-    if (companyMatchesOnly.length > 1) {
-      return {
-        jobId: null,
-        confidence: 'ambiguous',
-        matchedJobs: companyMatchesOnly.map((job) => ({
-          id: job.id,
-          title: job.title,
-          company: job.company,
-        })),
-        reason: `Multiple jobs match company "${extracted.company}" and the email did not include a title`,
-      }
-    }
-  }
-
-  return null
+  return jobs
 }
 
 export class AIJobMatcher {
@@ -149,11 +141,6 @@ export class AIJobMatcher {
             location: classified.jobInfo.location || null,
           }
 
-      const deterministic = deterministicMatch(extracted, jobs)
-      if (deterministic) {
-        return deterministic
-      }
-
       // SAFETY CHECK: Before calling AI, check if multiple jobs match the same company+title
       // This prevents the AI from arbitrarily picking one when there are duplicates
       if (extracted.company && extracted.title) {
@@ -192,8 +179,18 @@ export class AIJobMatcher {
         }
       }
 
+      const candidatePool = shortlistCandidates(extracted, jobs, emailMessage)
+
+      if (!extracted.company && candidatePool.length === jobs.length && jobs.length > 20) {
+        return {
+          jobId: null,
+          confidence: 'none',
+          reason: 'No company or sender-domain context was available; title-only matching across the full job history is unsafe.',
+        }
+      }
+
       // Prepare job candidates
-      const candidates: JobCandidate[] = jobs.map(job => ({
+      const candidates: JobCandidate[] = candidatePool.map(job => ({
         id: job.id,
         title: job.title,
         company: job.company,
@@ -202,7 +199,7 @@ export class AIJobMatcher {
       }))
 
       // Use AI to match
-      const matchingPrompt = getMatchingPrompt(extracted, candidates)
+      const matchingPrompt = getMatchingPrompt(extracted, candidates, emailMessage)
       const response = await this.client.chatCompletion([
         {
           role: 'user',
@@ -216,16 +213,6 @@ export class AIJobMatcher {
       }
 
       const aiMatch: AIMatchResult = JSON.parse(content)
-
-      if (!aiMatch.jobId && aiMatch.confidence >= 70) {
-        const fallbackMatch = deterministicMatch(extracted, jobs)
-        if (fallbackMatch) {
-          return {
-            ...fallbackMatch,
-            reason: `${fallbackMatch.reason}; AI omitted jobId (${aiMatch.reasoning || 'no reasoning'})`,
-          }
-        }
-      }
 
       // Convert AI match result to MatchResult format
       if (!aiMatch.jobId || aiMatch.confidence < 70) {
@@ -278,7 +265,14 @@ export class AIJobMatcher {
         }
       }
 
-      const matchedJob = aiMatch.jobId ? jobs.find(job => job.id === aiMatch.jobId) : null
+      const matchedJob = aiMatch.jobId ? candidatePool.find(job => job.id === aiMatch.jobId) : null
+      if (aiMatch.jobId && !matchedJob) {
+        return {
+          jobId: null,
+          confidence: 'none',
+          reason: `AI returned job ${aiMatch.jobId}, but it was outside the shortlisted candidates for this email.`,
+        }
+      }
       if (matchedJob && extracted.company) {
         const companyAligned =
           companyMatches(matchedJob.company, extracted.company) ||
@@ -307,7 +301,7 @@ export class AIJobMatcher {
           if (normalizedMatchedCompany === normalizedEmailCompany && 
               normalizedMatchedTitle === normalizedEmailTitle) {
             // Now check if there are other jobs with the same normalized (company, title)
-            const siblingJobs = jobs.filter(job => {
+            const siblingJobs = candidatePool.filter(job => {
               const normalizedJobCompany = normalizeString(job.company)
               const normalizedJobTitle = normalizeString(job.title)
               return normalizedJobCompany === normalizedEmailCompany && 

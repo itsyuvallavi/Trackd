@@ -40,7 +40,7 @@ export function emailJobTitleMatches(jobTitle: string, extractedTitle: string): 
   ) {
     const lengthDiff = Math.abs(jobTitleNormalized.length - emailTitleNormalized.length)
     const shorterLength = Math.min(jobTitleNormalized.length, emailTitleNormalized.length)
-    if (lengthDiff < shorterLength * 0.5) {
+    if (lengthDiff < shorterLength * 0.8) {
       return true
     }
   }

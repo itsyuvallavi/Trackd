@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EmailProvider, JobStatus } from '@prisma/client'
-import { EmailClassifier, EmailType } from '@/lib/email-classifier'
+import { EmailType } from '@/lib/ai/types'
 import type { EmailMessage } from '@/lib/email-service'
 import { fetchEmailsSinceForIntegration } from '@/lib/fetch-emails-integration'
 import { syncEmailsForUser } from './sync-helper'
@@ -24,6 +24,12 @@ const prismaMock = vi.hoisted(() => ({
 }))
 
 const fetchEmailsSinceForIntegrationMock = vi.hoisted(() => vi.fn())
+const aiClassifierMock = vi.hoisted(() => ({
+  classify: vi.fn(),
+}))
+const aiMatcherMock = vi.hoisted(() => ({
+  matchToJob: vi.fn(),
+}))
 
 const notificationMocks = vi.hoisted(() => ({
   createAmbiguousMatchNotification: vi.fn(),
@@ -49,11 +55,15 @@ vi.mock('@/lib/notification-service', () => ({
 }))
 
 vi.mock('@/lib/ai-email-classifier', () => ({
-  AIClassifier: vi.fn(),
+  AIClassifier: vi.fn(function AIClassifier() {
+    return aiClassifierMock
+  }),
 }))
 
 vi.mock('@/lib/ai-job-matcher', () => ({
-  AIJobMatcher: vi.fn(),
+  AIJobMatcher: vi.fn(function AIJobMatcher() {
+    return aiMatcherMock
+  }),
 }))
 
 const previousCursor = new Date('2026-05-14T08:00:00.000Z')
@@ -106,6 +116,17 @@ beforeEach(() => {
   notificationMocks.createNoMatchNotification.mockResolvedValue(undefined)
   notificationMocks.createSyncCompleteNotification.mockResolvedValue(undefined)
   notificationMocks.createSyncErrorNotification.mockResolvedValue(undefined)
+  aiClassifierMock.classify.mockResolvedValue({
+    type: EmailType.OTHER,
+    confidence: 0,
+    metadata: { keywords: [], shouldProcess: false },
+  })
+  aiMatcherMock.matchToJob.mockResolvedValue({
+    confidence: 'none',
+    jobId: null,
+    matchedJobs: [],
+    reason: 'test no match',
+  })
 })
 
 afterEach(() => {
@@ -120,10 +141,10 @@ describe('syncEmailsForUser provider edge cases', () => {
       emailMessage('gmail:2'),
       emailMessage('gmail:3'),
     ])
-    vi.spyOn(EmailClassifier.prototype, 'classify').mockReturnValue({
+    aiClassifierMock.classify.mockResolvedValue({
       type: EmailType.OTHER,
       confidence: 0,
-      metadata: { keywords: [] },
+      metadata: { keywords: [], shouldProcess: false },
     })
 
     const result = await syncEmailsForUser('user-1')
@@ -164,16 +185,16 @@ describe('syncEmailsForUser provider edge cases', () => {
       emailMessage('gmail:bad', 'Bad provider payload'),
       emailMessage('gmail:ok', 'Regular newsletter'),
     ])
-    vi.spyOn(EmailClassifier.prototype, 'classify').mockImplementation((email) => {
+    aiClassifierMock.classify.mockImplementation((email: EmailMessage) => {
       if (email.id === 'gmail:bad') {
         throw new Error('classifier failed on malformed message')
       }
 
-      return {
+      return Promise.resolve({
         type: EmailType.OTHER,
         confidence: 0,
-        metadata: { keywords: [] },
-      }
+        metadata: { keywords: [], shouldProcess: false },
+      })
     })
 
     const result = await syncEmailsForUser('user-1')
@@ -236,7 +257,7 @@ describe('syncEmailsForUser provider edge cases', () => {
         },
       },
     ])
-    vi.spyOn(EmailClassifier.prototype, 'classify').mockReturnValue({
+    aiClassifierMock.classify.mockResolvedValue({
       type: EmailType.APPLICATION_CONFIRMATION,
       confidence: 95,
       jobInfo: {
@@ -244,7 +265,13 @@ describe('syncEmailsForUser provider edge cases', () => {
         title: 'Frontend Engineer',
       },
       suggestedStatus: JobStatus.APPLIED,
-      metadata: { keywords: ['application'] },
+      metadata: { keywords: [], shouldProcess: true },
+    })
+    aiMatcherMock.matchToJob.mockResolvedValue({
+      confidence: 'exact',
+      jobId: 'job-1',
+      matchedJobs: [],
+      reason: 'test match',
     })
 
     const result = await syncEmailsForUser('user-1')

@@ -12,6 +12,11 @@ const jobs = [
     title: 'Fullstack Developer (Java+React)',
     company: 'Volkswagen Group Digital Solutions [Portugal]',
   },
+  {
+    id: 'restream',
+    title: 'Software Engineer - Backend - AI Clips Team',
+    company: 'Restream',
+  },
 ]
 
 describe('email job dedupe', () => {
@@ -40,5 +45,14 @@ describe('email job dedupe', () => {
     )
 
     expect(result?.id).toBe('limesurvey')
+  })
+
+  it('matches existing jobs when the email title omits a team suffix', () => {
+    const result = findExistingJobForExtractedEmail(
+      { company: 'Restream', title: 'Software Engineer - Backend' },
+      jobs,
+    )
+
+    expect(result?.id).toBe('restream')
   })
 })

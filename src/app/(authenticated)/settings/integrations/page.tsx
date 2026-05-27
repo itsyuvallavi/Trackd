@@ -6,6 +6,9 @@ import { AppShell } from '@/components/layout/app-shell'
 import { requireAuth } from '@/lib/auth'
 import { OAuthCallbackHandler } from '@/components/email/oauth-callback-handler'
 import { serializeForClient } from '@/lib/serialize-for-client'
+import Link from 'next/link'
+
+export const maxDuration = 300
 
 export default async function IntegrationsPage() {
   const user = await requireAuth()
@@ -48,8 +51,14 @@ export default async function IntegrationsPage() {
               )}
             </div>
             <p className="text-sm text-muted-foreground mb-4">
-              Manage your email integration and extension settings.
+              Manage mailbox sync, review AI email findings, and extension settings.
             </p>
+            <Link
+              href="/settings/integrations/logs"
+              className="inline-flex text-sm font-medium text-primary hover:text-primary/80 mb-4"
+            >
+              Review email sync log
+            </Link>
             {integrationForClient && integrationForClient.isActive && (
               <div className="text-sm text-foreground/70 mb-2 space-y-1">
                 <p>{integrationForClient.email}</p>

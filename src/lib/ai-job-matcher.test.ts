@@ -49,7 +49,8 @@ function classified(company: string, title: string): ClassifiedEmail {
 
 describe('AIJobMatcher safety gates', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    mocks.chatCompletion.mockReset()
+    mocks.getStats.mockReset()
   })
 
   it('rejects AI matches where the extracted company conflicts with the matched job company', async () => {
@@ -109,11 +110,26 @@ describe('AIJobMatcher safety gates', () => {
     expect(result.jobId).toBe('vw')
   })
 
-  it('matches deterministic company/title variations before relying on AI output', async () => {
+  it('uses AI on a company-focused shortlist for title variations', async () => {
+    mocks.chatCompletion.mockResolvedValueOnce(aiJson({
+      jobId: 'reaktor',
+      confidence: 95,
+      reasoning: 'Company and role match',
+      requiresUserInput: false,
+      alternativeMatches: [],
+    }))
+
     const matcher = new AIJobMatcher()
     const result = await matcher.matchToJob(
       classified('Reaktor', 'Full-Stack Developer'),
       [
+        {
+          id: 'primeit',
+          title: 'Full Stack Engineer',
+          company: 'PrimeIT',
+          location: null,
+          contactEmail: null,
+        },
         {
           id: 'reaktor',
           title: 'Full-Stack Developer (Lisbon)',
@@ -125,16 +141,34 @@ describe('AIJobMatcher safety gates', () => {
       { from: 'lorraine.gualter@reaktor.com', subject: 'Update on your application with Reaktor' },
     )
 
-    expect(mocks.chatCompletion).not.toHaveBeenCalled()
+    expect(mocks.chatCompletion).toHaveBeenCalled()
+    const prompt = mocks.chatCompletion.mock.calls[0][0][0].content as string
+    expect(prompt).toContain('ID: reaktor')
+    expect(prompt).not.toContain('ID: primeit')
     expect(result.confidence).toBe('exact')
     expect(result.jobId).toBe('reaktor')
   })
 
-  it('matches a unique company when the email omits the title', async () => {
+  it('uses AI on a company-focused shortlist when the email omits the title', async () => {
+    mocks.chatCompletion.mockResolvedValueOnce(aiJson({
+      jobId: 'qualio',
+      confidence: 95,
+      reasoning: 'Company is enough because only one Qualio job is in the shortlist',
+      requiresUserInput: false,
+      alternativeMatches: [],
+    }))
+
     const matcher = new AIJobMatcher()
     const result = await matcher.matchToJob(
       classified('Qualio', ''),
       [
+        {
+          id: 'primeit',
+          title: 'Full Stack Engineer',
+          company: 'PrimeIT',
+          location: null,
+          contactEmail: null,
+        },
         {
           id: 'qualio',
           title: 'Full Stack Engineer (Remote Ireland / UK)',
@@ -146,12 +180,38 @@ describe('AIJobMatcher safety gates', () => {
       { from: 'no-reply@qualio.com', subject: 'Update on Your Application at Qualio' },
     )
 
-    expect(mocks.chatCompletion).not.toHaveBeenCalled()
+    expect(mocks.chatCompletion).toHaveBeenCalled()
+    const prompt = mocks.chatCompletion.mock.calls[0][0][0].content as string
+    expect(prompt).toContain('ID: qualio')
+    expect(prompt).not.toContain('ID: primeit')
     expect(result.confidence).toBe('exact')
     expect(result.jobId).toBe('qualio')
   })
 
-  it('does not reuse the first deterministic company match for later unrelated companies', async () => {
+  it('does not let broad job history distract company-scoped AI matching', async () => {
+    mocks.chatCompletion
+      .mockResolvedValueOnce(aiJson({
+        jobId: 'vw-infra',
+        confidence: 95,
+        reasoning: 'same company',
+        requiresUserInput: false,
+        alternativeMatches: [],
+      }))
+      .mockResolvedValueOnce(aiJson({
+        jobId: 'reaktor',
+        confidence: 95,
+        reasoning: 'same company',
+        requiresUserInput: false,
+        alternativeMatches: [],
+      }))
+      .mockResolvedValueOnce(aiJson({
+        jobId: 'primeit',
+        confidence: 95,
+        reasoning: 'same company',
+        requiresUserInput: false,
+        alternativeMatches: [],
+      }))
+
     const matcher = new AIJobMatcher()
     const candidates = [
       {
@@ -203,5 +263,79 @@ describe('AIJobMatcher safety gates', () => {
     expect(vw.jobId).toBe('vw-infra')
     expect(reaktor.jobId).toBe('reaktor')
     expect(primeit.jobId).toBe('primeit')
+  })
+
+  it('does not confuse Air Apps with Aira', async () => {
+    mocks.chatCompletion.mockResolvedValueOnce(aiJson({
+      jobId: 'air-apps',
+      confidence: 95,
+      reasoning: 'Air Apps is the named company',
+      requiresUserInput: false,
+      alternativeMatches: [],
+    }))
+
+    const matcher = new AIJobMatcher()
+    const result = await matcher.matchToJob(
+      classified('Air Apps', ''),
+      [
+        {
+          id: 'air-apps',
+          title: 'Backend Engineer',
+          company: 'Air Apps',
+          location: null,
+          contactEmail: null,
+        },
+        {
+          id: 'aira',
+          title: 'Frontend Developer - Planning',
+          company: 'Aira',
+          location: null,
+          contactEmail: null,
+        },
+      ],
+      { from: 'no-reply@ashbyhq.com', subject: 'Thanks for applying to Air Apps!' },
+    )
+
+    const prompt = mocks.chatCompletion.mock.calls[0][0][0].content as string
+    expect(prompt).toContain('ID: air-apps')
+    expect(prompt).not.toContain('ID: aira')
+    expect(result.jobId).toBe('air-apps')
+  })
+
+  it('shortlists Restream so suffix title variants can match the existing job', async () => {
+    mocks.chatCompletion.mockResolvedValueOnce(aiJson({
+      jobId: 'restream',
+      confidence: 92,
+      reasoning: 'Software Engineer - Backend is the same backend role',
+      requiresUserInput: false,
+      alternativeMatches: [],
+    }))
+
+    const matcher = new AIJobMatcher()
+    const result = await matcher.matchToJob(
+      classified('Restream', 'Software Engineer - Backend'),
+      [
+        {
+          id: 'primeit',
+          title: 'Data Scientist/IA Engineer',
+          company: 'PrimeIT',
+          location: null,
+          contactEmail: null,
+        },
+        {
+          id: 'restream',
+          title: 'Software Engineer - Backend - AI Clips Team',
+          company: 'Restream',
+          location: null,
+          contactEmail: null,
+        },
+      ],
+      { from: 'no-reply@ashbyhq.com', subject: 'Thank you for your application to Restream' },
+    )
+
+    const prompt = mocks.chatCompletion.mock.calls[0][0][0].content as string
+    expect(prompt).toContain('ID: restream')
+    expect(prompt).not.toContain('ID: primeit')
+    expect(result.jobId).toBe('restream')
   })
 })

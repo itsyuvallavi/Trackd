@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Clock, CheckCircle2, Loader2, XCircle, RefreshCw } from 'lucide-react'
 import { EMAIL_SYNC_COMPLETE_EVENT } from '@/lib/constants'
+import Link from 'next/link'
 
 interface SyncLog {
   id: string
@@ -127,6 +128,12 @@ export function SyncHistory() {
           <RefreshCw className="size-4" />
         </button>
       </div>
+      <Link
+        href="/settings/integrations/logs"
+        className="mb-4 inline-flex text-xs font-medium text-primary hover:text-primary/80"
+      >
+        Open full review log
+      </Link>
 
       <div className="space-y-2.5">
         {logs.map((log) => (

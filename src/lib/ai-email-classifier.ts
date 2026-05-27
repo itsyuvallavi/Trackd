@@ -11,10 +11,6 @@ import { getAIClient } from './ai/client'
 import { getClassificationPrompt } from './ai/prompts/classification'
 import { getExtractionPrompt } from './ai/prompts/extraction'
 import { ClassificationResult, EmailType, ExtractedEntities } from './ai/types'
-import {
-  EmailClassifier as DeterministicEmailClassifier,
-  EmailType as DeterministicEmailType,
-} from './email-classifier'
 
 // Re-export types for compatibility with existing code
 export { EmailType } from './ai/types'
@@ -39,7 +35,6 @@ export interface ClassifiedEmail {
 
 export class AIClassifier {
   private client = getAIClient()
-  private deterministic = new DeterministicEmailClassifier()
 
   /**
    * Classify an email and extract job-related information
@@ -67,9 +62,6 @@ export class AIClassifier {
 
       // Step 2: If shouldProcess is false, return early (don't extract)
       if (!classification.shouldProcess) {
-        const fallback = this.deterministicFallback(email, classification.reasoning)
-        if (fallback) return fallback
-
         return {
           type: classification.type as EmailType,
           confidence: classification.confidence,
@@ -97,8 +89,6 @@ export class AIClassifier {
       }
 
       const extracted: ExtractedEntities = JSON.parse(extractionContent)
-      const fallback = this.deterministicFallback(email)
-      const fallbackEntities = fallback?.metadata.extractedEntities
 
       // Step 4: Map email type to suggested job status
       const suggestedStatus = this.mapEmailTypeToStatus(
@@ -109,9 +99,9 @@ export class AIClassifier {
         type: classification.type as EmailType,
         confidence: classification.confidence,
         jobInfo: {
-          company: extracted.company || fallbackEntities?.company || undefined,
-          title: extracted.title || fallbackEntities?.title || undefined,
-          location: extracted.location || fallbackEntities?.location || undefined,
+          company: extracted.company || undefined,
+          title: extracted.title || undefined,
+          location: extracted.location || undefined,
         },
         suggestedStatus,
         metadata: {
@@ -119,24 +109,11 @@ export class AIClassifier {
           reasoning: classification.reasoning,
           shouldProcess: true,
           // Store full extracted entities for use in Activity metadata
-          extractedEntities: {
-            ...extracted,
-            company: extracted.company || fallbackEntities?.company || null,
-            title: extracted.title || fallbackEntities?.title || null,
-            location: extracted.location || fallbackEntities?.location || null,
-          },
+          extractedEntities: extracted,
         },
       }
     } catch (error) {
       console.error('AI classification error:', error)
-      const fallback = this.deterministicFallback(
-        email,
-        error instanceof Error ? error.message : 'Unknown AI classification error',
-      )
-      if (fallback) return fallback
-
-      // Fallback: return OTHER type with low confidence when deterministic
-      // classification also cannot identify a direct application email.
       return {
         type: EmailType.OTHER,
         confidence: 0,
@@ -146,41 +123,6 @@ export class AIClassifier {
           shouldProcess: false,
         },
       }
-    }
-  }
-
-  private deterministicFallback(
-    email: EmailMessage,
-    reason?: string,
-  ): ClassifiedEmail | null {
-    const fallback = this.deterministic.classify(email)
-    if (fallback.type === DeterministicEmailType.OTHER || fallback.confidence < 20) {
-      return null
-    }
-    if (!fallback.jobInfo?.company || !fallback.jobInfo?.title) {
-      return null
-    }
-
-    const extractedEntities: ExtractedEntities = {
-      company: fallback.jobInfo?.company ?? null,
-      title: fallback.jobInfo?.title ?? null,
-      location: fallback.jobInfo?.location ?? null,
-      nextSteps: [],
-    }
-
-    return {
-      type: fallback.type as unknown as EmailType,
-      confidence: fallback.confidence,
-      jobInfo: fallback.jobInfo,
-      suggestedStatus: fallback.suggestedStatus,
-      metadata: {
-        keywords: fallback.metadata.keywords,
-        reasoning: reason
-          ? `Deterministic fallback rescued email after AI result: ${reason}`
-          : 'Deterministic fallback supplied missing email entities.',
-        shouldProcess: true,
-        extractedEntities,
-      },
     }
   }
 

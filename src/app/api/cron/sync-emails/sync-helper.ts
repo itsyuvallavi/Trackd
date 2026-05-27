@@ -1,8 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { fetchEmailsSinceForIntegration, MAX_OAUTH_MESSAGES } from '@/lib/fetch-emails-integration'
-import { EmailClassifier, EmailType } from '@/lib/email-classifier'
 import { AIClassifier } from '@/lib/ai-email-classifier'
 import { AIJobMatcher } from '@/lib/ai-job-matcher'
+import { EmailType } from '@/lib/ai/types'
 import { ActivityType, JobStatus } from '@prisma/client'
 import { NotificationService, type SyncCompleteJobChange } from '@/lib/notification-service'
 import { createEmailIdentifier } from '@/lib/email-identifiers'
@@ -10,10 +10,6 @@ import { parseInterviewDateTime } from '@/lib/utils/interview-date-parser'
 import { alignEmailSyncLowerBound } from '@/lib/email-sync-window'
 import { buildEmailSyncCursorUpdate } from '@/lib/email-sync-cursor'
 import { findExistingJobForExtractedEmail } from '@/lib/email-job-dedupe'
-
-// Feature flags
-const USE_AI_CLASSIFIER = process.env.ENABLE_AI_CLASSIFICATION === 'true'
-const USE_AI_MATCHING = process.env.ENABLE_AI_MATCHING === 'true'
 
 export { createEmailIdentifier } from '@/lib/email-identifiers'
 
@@ -122,12 +118,12 @@ export async function syncEmailsForUser(userId: string) {
       console.log('⚠️  No jobs found - emails will be classified but not matched')
     }
 
-    // Classify and process each email
-    console.log(`Starting email classification... (using ${USE_AI_CLASSIFIER ? 'AI' : 'keyword-based'} classifier)`)
-    console.log(`Job matching... (using ${USE_AI_MATCHING ? 'AI' : 'keyword-based'} matcher)`)
-    const classifier = USE_AI_CLASSIFIER ? new AIClassifier() : new EmailClassifier()
-    const keywordClassifier = new EmailClassifier() // Keep for matchToJob method (fallback)
-    const aiMatcher = USE_AI_MATCHING ? new AIJobMatcher() : null
+    // Production sync is AI-reviewed. Deterministic code is only used for
+    // safety checks/dedupe around AI output, not for classifying or matching.
+    console.log('Starting email classification... (using AI classifier)')
+    console.log('Job matching... (using AI matcher)')
+    const classifier = new AIClassifier()
+    const aiMatcher = new AIJobMatcher()
     const notificationService = new NotificationService()
     const jobChanges: SyncCompleteJobChange[] = []
     let updatedCount = 0
@@ -150,16 +146,12 @@ export async function syncEmailsForUser(userId: string) {
         console.log(`Processing email ${i + 1}/${emails.length}...`)
       }
       try {
-        // Classify email (AI classifier is async, keyword-based is sync)
-        const classified = USE_AI_CLASSIFIER 
-          ? await (classifier as AIClassifier).classify(email)
-          : (classifier as EmailClassifier).classify(email)
+        const classified = await classifier.classify(email)
         
         console.log(`Email "${email.subject}": type=${classified.type}, confidence=${classified.confidence}%, jobInfo=`, classified.jobInfo)
 
         // Check if AI says we should process this email
-        // Only check shouldProcess if using AI classifier (keyword-based doesn't have this field)
-        if (USE_AI_CLASSIFIER && 'shouldProcess' in classified.metadata && classified.metadata.shouldProcess === false) {
+        if ('shouldProcess' in classified.metadata && classified.metadata.shouldProcess === false) {
           skippedCount++
           skippedOtherCount++
           console.log(`Skipped email "${email.subject}" - AI determined it's not job-related (shouldProcess=false)`)
@@ -184,10 +176,7 @@ export async function syncEmailsForUser(userId: string) {
         processedCount++
         console.log(`Processing email: ${email.subject} (type: ${classified.type}, confidence: ${classified.confidence}%)`)
 
-        // Try to match email to existing job using AI or keyword-based matching
-        const matchResult = USE_AI_MATCHING && aiMatcher
-          ? await aiMatcher.matchToJob(classified, jobs, email)
-          : keywordClassifier.matchToJob(classified, jobs, email)
+        const matchResult = await aiMatcher.matchToJob(classified, jobs, email)
         
         console.log(`Match result: ${matchResult.confidence} - ${matchResult.reason}`)
         const matchedJobId = matchResult.jobId

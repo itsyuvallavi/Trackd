@@ -9,9 +9,9 @@ import {
   verifyGmailConnection,
   verifyMicrosoftConnection,
 } from '@/lib/fetch-emails-integration'
-import { EmailClassifier, EmailType } from '@/lib/email-classifier'
 import { AIClassifier } from '@/lib/ai-email-classifier'
 import { AIJobMatcher } from '@/lib/ai-job-matcher'
+import { EmailType } from '@/lib/ai/types'
 import { ActivityType, EmailProvider, JobStatus, Prisma } from '@prisma/client'
 import { requireAuth } from '@/lib/auth'
 import { NotificationService, type SyncCompleteJobChange } from '@/lib/notification-service'
@@ -158,14 +158,11 @@ export async function syncEmails() {
       console.log('⚠️  No jobs found - emails will be classified but not matched')
     }
 
-    // Classify and process each email
-    // Feature flags
-    const USE_AI_CLASSIFIER = process.env.ENABLE_AI_CLASSIFICATION === 'true'
-    const USE_AI_MATCHING = process.env.ENABLE_AI_MATCHING === 'true'
-
-    console.log(`Starting email classification... (using ${USE_AI_CLASSIFIER ? 'AI' : 'keyword-based'} classifier)`)
-    const classifier = USE_AI_CLASSIFIER ? new AIClassifier() : new EmailClassifier()
-    const matcher = USE_AI_MATCHING ? new AIJobMatcher() : new EmailClassifier() // Use AIJobMatcher or EmailClassifier for matching
+    // Production sync is AI-reviewed. Deterministic code is only used for
+    // safety checks/dedupe around AI output, not for classifying or matching.
+    console.log('Starting email classification... (using AI classifier)')
+    const classifier = new AIClassifier()
+    const matcher = new AIJobMatcher()
     const notificationService = new NotificationService()
     const jobChanges: SyncCompleteJobChange[] = []
     let updatedCount = 0
@@ -188,15 +185,12 @@ export async function syncEmails() {
         console.log(`Processing email ${i + 1}/${emails.length}...`)
       }
       try {
-        // Classify email (AI classifier is async, keyword-based is sync)
-        const classified = USE_AI_CLASSIFIER
-          ? await (classifier as AIClassifier).classify(email)
-          : (classifier as EmailClassifier).classify(email)
+        const classified = await classifier.classify(email)
 
         console.log(`Email "${email.subject}": type=${classified.type}, confidence=${classified.confidence}%, jobInfo=`, classified.jobInfo)
 
         // Check if AI determined email should not be processed
-        if (USE_AI_CLASSIFIER && 'shouldProcess' in classified.metadata && classified.metadata.shouldProcess === false) {
+        if ('shouldProcess' in classified.metadata && classified.metadata.shouldProcess === false) {
           skippedCount++
           skippedOtherCount++
           console.log(`Skipped email "${email.subject}" - AI determined it's not job-related (shouldProcess=false)`)
@@ -221,11 +215,8 @@ export async function syncEmails() {
         processedCount++
         console.log(`Processing email: ${email.subject} (type: ${classified.type}, confidence: ${classified.confidence}%)`)
 
-        // Try to match email to existing job (AI matcher is async, keyword-based is sync)
-        console.log(`Starting job matching... (using ${USE_AI_MATCHING ? 'AI' : 'keyword-based'} matcher)`)
-        const matchResult = USE_AI_MATCHING
-          ? await (matcher as AIJobMatcher).matchToJob(classified, jobs)
-          : (matcher as EmailClassifier).matchToJob(classified, jobs, email)
+        console.log('Starting job matching... (using AI matcher)')
+        const matchResult = await matcher.matchToJob(classified, jobs, email)
         const matchedJobId = matchResult.jobId
 
         // Track match type for logging
@@ -266,7 +257,6 @@ export async function syncEmails() {
               // Parse interview date/time if this is an interview invite
               let interviewAt: Date | null = null
               if (classified.type === EmailType.INTERVIEW_INVITE && 
-                  USE_AI_CLASSIFIER &&
                   'extractedEntities' in classified.metadata && 
                   classified.metadata.extractedEntities) {
                 const extracted = classified.metadata.extractedEntities as ExtractedEntities
@@ -312,7 +302,7 @@ export async function syncEmails() {
               }
 
               // Add AI-extracted entities to metadata if available
-              if (USE_AI_CLASSIFIER && 'extractedEntities' in classified.metadata && classified.metadata.extractedEntities) {
+              if ('extractedEntities' in classified.metadata && classified.metadata.extractedEntities) {
                 const extracted = classified.metadata.extractedEntities as ExtractedEntities
                 if (extracted.interviewDate) activityMetadata.interviewDate = extracted.interviewDate
                 if (extracted.interviewTime) activityMetadata.interviewTime = extracted.interviewTime

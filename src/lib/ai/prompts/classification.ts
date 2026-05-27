@@ -18,6 +18,7 @@ IGNORE these types of emails:
 - Job board notifications about new jobs (not about YOUR application)
 - Company updates/news that aren't about your application
 - Promotional emails
+- One-time passwords, verification codes, login codes, security alerts, and magic links
 - Unrelated personal or business emails
 
 ONLY PROCESS emails that are about YOUR specific job application:
@@ -53,8 +54,8 @@ IMPORTANT:
 - Set "shouldProcess" to false if the email is not directly about YOUR application
 - Set "shouldProcess" to true only if the email is about a specific job you applied to
 - Application confirmations ARE job-related and should have shouldProcess: true
+- OTP/code/security emails are not application status updates and must have shouldProcess: false
 - General newsletters, marketing emails, and job board notifications should have shouldProcess: false
 
 Return ONLY the JSON object, no other text.`
 }
-
