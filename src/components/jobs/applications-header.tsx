@@ -23,6 +23,7 @@ interface DateRange {
 
 interface ApplicationsHeaderProps {
   totalJobs: number
+  totalApplications: number
   statusCounts: {
     SAVED: number
     APPLIED: number
@@ -45,6 +46,7 @@ interface ApplicationsHeaderProps {
 
 export function ApplicationsHeader({
   totalJobs,
+  totalApplications,
   statusCounts,
   onSearchChange,
   onStatusChange,
@@ -74,7 +76,7 @@ export function ApplicationsHeader({
       {/* Title Section */}
       <div className="mb-4">
         <h1 className="text-xl md:text-2xl font-semibold">Applications</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">{totalJobs} total applications</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{totalApplications} total applications</p>
       </div>
 
       {/* Mobile: Dropdown, Desktop: Tabs */}

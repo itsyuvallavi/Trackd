@@ -25,6 +25,7 @@ import { useColumnVisibility } from '@/components/jobs/column-visibility-setting
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { updateJobStatus } from '@/app/(authenticated)/jobs/actions'
+import { isActiveApplicationStatus } from '@/lib/job-status-groups'
 
 // Lazy load modals since they're not immediately visible
 const AddJobModal = dynamic(() => import('@/components/jobs/add-job-modal').then(mod => ({ default: mod.AddJobModal })), {
@@ -97,12 +98,12 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
   }, [jobs])
 
   // Filter jobs based on search query, status, and date range
-  // By default, exclude archived and rejected jobs unless explicitly viewing them
+  // By default, show only real active applications. SAVED jobs are review/queue
+  // items and live in their own tab.
   const filteredJobs = useMemo(() => {
     let filtered = listJobs.filter(job => {
-      // If viewing "all" (active applications), exclude archived and rejected jobs
       if (activeStatus === 'all') {
-        return job.status !== 'ARCHIVED' && job.status !== 'REJECTED'
+        return isActiveApplicationStatus(job.status)
       }
       // Otherwise, show jobs matching the selected status
       return true
@@ -181,7 +182,7 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
   const allVisibleSelected =
     visibleJobIds.length > 0 && selectedVisibleCount === visibleJobIds.length
 
-  // Calculate status counts from active jobs only (excluding ARCHIVED and REJECTED for "all" count)
+  // Calculate status counts for each explicit tab.
   const statusCounts = listJobs.reduce((acc, job) => {
     const status = job.status as keyof typeof acc
     if (status in acc) {
@@ -197,9 +198,9 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
     ARCHIVED: 0,
   })
   
-  // Calculate total active jobs (excluding ARCHIVED and REJECTED)
-  const totalActiveJobs = listJobs.filter(job => 
-    job.status !== 'ARCHIVED' && job.status !== 'REJECTED'
+  const totalApplications = listJobs.length
+  const totalActiveJobs = listJobs.filter((job) =>
+    isActiveApplicationStatus(job.status)
   ).length
 
   // Debounced search handler
@@ -312,6 +313,7 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
       {/* Applications Header with Tabs */}
       <ApplicationsHeader
             totalJobs={totalActiveJobs}
+            totalApplications={totalApplications}
             statusCounts={statusCounts}
             onSearchChange={handleSearchChange}
             onStatusChange={handleStatusChange}
