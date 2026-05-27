@@ -179,6 +179,16 @@ describe('syncEmailsForUser provider edge cases', () => {
           partial: true,
           processingErrors: 0,
           reachedFetchCap: true,
+          emailOutcomes: expect.arrayContaining([
+            expect.objectContaining({
+              emailIdentifier: 'gmail:1',
+              outcome: 'skipped_ai_not_job_related',
+              classification: expect.objectContaining({
+                type: EmailType.OTHER,
+                confidence: 0,
+              }),
+            }),
+          ]),
         }),
       }),
     })
@@ -226,6 +236,17 @@ describe('syncEmailsForUser provider edge cases', () => {
           partial: true,
           processingErrors: 1,
           reachedFetchCap: false,
+          emailOutcomes: expect.arrayContaining([
+            expect.objectContaining({
+              emailIdentifier: 'gmail:bad',
+              outcome: 'processing_error',
+              error: 'classifier failed on malformed message',
+            }),
+            expect.objectContaining({
+              emailIdentifier: 'gmail:ok',
+              outcome: 'skipped_ai_not_job_related',
+            }),
+          ]),
         }),
       }),
     })
@@ -298,6 +319,18 @@ describe('syncEmailsForUser provider edge cases', () => {
         lastSyncedAt: completedAt,
         lastError: null,
       },
+    })
+    expect(prismaMock.emailSyncLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        details: expect.objectContaining({
+          emailOutcomes: [
+            expect.objectContaining({
+              emailIdentifier: '<message-1@example.com>',
+              outcome: 'skipped_already_recorded',
+            }),
+          ],
+        }),
+      }),
     })
   })
 })

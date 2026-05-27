@@ -4,6 +4,7 @@ import { NotificationType, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { AppShell } from '@/components/layout/app-shell'
+import type { EmailSyncOutcome } from '@/lib/email-sync-outcomes'
 
 export const metadata = { title: 'Email sync log — Trackd' }
 
@@ -21,9 +22,18 @@ type FindingMetadata = {
   kind?: string
 }
 
+type SyncLogDetails = {
+  emailOutcomes?: EmailSyncOutcome[]
+}
+
 function metadataObject(value: Prisma.JsonValue | null): FindingMetadata {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   return value as FindingMetadata
+}
+
+function logDetails(value: Prisma.JsonValue | null): SyncLogDetails {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return value as SyncLogDetails
 }
 
 function formatDate(value: Date | string): string {
@@ -125,6 +135,7 @@ export default async function EmailSyncLogPage() {
               <div className="divide-y divide-border/60">
                 {logs.map((log) => {
                   const running = !log.completedAt
+                  const outcomes = logDetails(log.details).emailOutcomes ?? []
                   return (
                     <div key={log.id} className="px-5 py-3 space-y-1.5">
                       <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -159,6 +170,45 @@ export default async function EmailSyncLogPage() {
                       )}
                       {!running && !log.success && log.errorMessage && (
                         <p className="text-[11px] text-error-text">{log.errorMessage}</p>
+                      )}
+                      {outcomes.length > 0 && (
+                        <details className="text-xs group pt-1">
+                          <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
+                            Email outcomes ({outcomes.length})
+                          </summary>
+                          <div className="mt-2 max-h-72 overflow-y-auto rounded-lg border border-border/60 bg-background/35">
+                            <div className="divide-y divide-border/50">
+                              {outcomes.map((outcome) => (
+                                <div key={`${outcome.index}-${outcome.emailIdentifier}`} className="px-3 py-2">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] font-medium">
+                                      {outcome.outcome.replaceAll('_', ' ')}
+                                    </span>
+                                    <span className="min-w-0 flex-1 truncate text-xs font-medium">
+                                      {outcome.subject || '(no subject)'}
+                                    </span>
+                                    {outcome.classification?.type && (
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {outcome.classification.type.toLowerCase().replaceAll('_', ' ')}
+                                        {typeof outcome.classification.confidence === 'number'
+                                          ? ` · ${outcome.classification.confidence}%`
+                                          : ''}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="mt-1 text-[11px] text-muted-foreground">
+                                    {outcome.reason}
+                                  </p>
+                                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                                    From: {outcome.from}
+                                    {outcome.job ? ` · Job: ${outcome.job.title} @ ${outcome.job.company}` : ''}
+                                    {outcome.match ? ` · Match: ${outcome.match.confidence}` : ''}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </details>
                       )}
                     </div>
                   )

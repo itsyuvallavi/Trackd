@@ -24,6 +24,13 @@ import { alignEmailSyncLowerBound } from '@/lib/email-sync-window'
 import { buildEmailSyncCursorUpdate } from '@/lib/email-sync-cursor'
 import { findExistingJobForExtractedEmail } from '@/lib/email-job-dedupe'
 import { runLimited } from '@/lib/run-limited'
+import {
+  baseEmailSyncOutcome,
+  orderedEmailSyncOutcomes,
+  summarizeClassification,
+  summarizeMatch,
+  type EmailSyncOutcome,
+} from '@/lib/email-sync-outcomes'
 
 /**
  * Check if an email has already been processed for a specific job
@@ -181,6 +188,7 @@ export async function syncEmails() {
     let noMatchesCount = 0
     let notificationsCreatedCount = 0
     let processingErrorsCount = 0
+    const emailOutcomes: EmailSyncOutcome[] = []
 
     const emailReviewConcurrency = Number.parseInt(
       process.env.EMAIL_SYNC_AI_CONCURRENCY ?? '6',
@@ -199,14 +207,21 @@ export async function syncEmails() {
       }
       try {
         const emailIdentifier = createEmailIdentifier(email)
+        const baseOutcome = baseEmailSyncOutcome(email, i, emailIdentifier)
         if (seenEmailIdentifiers.has(emailIdentifier)) {
           skippedCount++
           skippedOtherCount++
+          emailOutcomes.push({
+            ...baseOutcome,
+            outcome: 'skipped_already_recorded',
+            reason: 'Email identifier was already present in prior sync activity/notification history.',
+          })
           console.log(`Skipped email "${email.subject}" - already recorded in email sync history`)
           return
         }
 
         const classified = await classifier.classify(email)
+        const classification = summarizeClassification(classified)
 
         console.log(`Email "${email.subject}": type=${classified.type}, confidence=${classified.confidence}%, jobInfo=`, classified.jobInfo)
 
@@ -214,6 +229,12 @@ export async function syncEmails() {
         if ('shouldProcess' in classified.metadata && classified.metadata.shouldProcess === false) {
           skippedCount++
           skippedOtherCount++
+          emailOutcomes.push({
+            ...baseOutcome,
+            outcome: 'skipped_ai_not_job_related',
+            reason: 'AI classifier marked shouldProcess=false.',
+            classification,
+          })
           console.log(`Skipped email "${email.subject}" - AI determined it's not job-related (shouldProcess=false)`)
           return
         }
@@ -222,6 +243,12 @@ export async function syncEmails() {
         if (classified.type === EmailType.OTHER) {
           skippedCount++
           skippedOtherCount++
+          emailOutcomes.push({
+            ...baseOutcome,
+            outcome: 'skipped_other',
+            reason: 'AI classifier returned OTHER.',
+            classification,
+          })
           console.log(`Skipped email "${email.subject}" - classified as OTHER (confidence: ${classified.confidence})`)
           return
         }
@@ -229,6 +256,12 @@ export async function syncEmails() {
         if (classified.confidence < 20) {
           skippedCount++
           skippedLowConfidenceCount++
+          emailOutcomes.push({
+            ...baseOutcome,
+            outcome: 'skipped_low_confidence',
+            reason: `AI classification confidence ${classified.confidence}% was below the 20% processing threshold.`,
+            classification,
+          })
           console.log(`Skipped email "${email.subject}" - low confidence: ${classified.confidence}% (type: ${classified.type})`)
           return
         }
@@ -238,6 +271,7 @@ export async function syncEmails() {
 
         console.log('Starting job matching... (using AI matcher)')
         const matchResult = await matcher.matchToJob(classified, jobs, email)
+        const match = summarizeMatch(matchResult)
         const matchedJobId = matchResult.jobId
 
         // Track match type for logging
@@ -256,6 +290,22 @@ export async function syncEmails() {
             const alreadyProcessed = await isEmailAlreadyProcessed(syncUserId, matchedJobId, emailIdentifier)
             
             if (alreadyProcessed) {
+              emailOutcomes.push({
+                ...baseOutcome,
+                outcome: 'duplicate_email',
+                reason: 'Email identifier was already recorded for the matched job activity history.',
+                classification,
+                match,
+                job: job
+                  ? {
+                      id: job.id,
+                      title: job.title,
+                      company: job.company,
+                      previousStatus: job.status,
+                      newStatus: classified.suggestedStatus,
+                    }
+                  : undefined,
+              })
               console.log(`Skipped duplicate email "${email.subject}" for job ${matchedJobId} (already processed)`)
               return
             }
@@ -268,6 +318,13 @@ export async function syncEmails() {
               
               // Verify job still exists before updating (it might have been deleted)
               if (!job) {
+                emailOutcomes.push({
+                  ...baseOutcome,
+                  outcome: 'matched_missing_job',
+                  reason: 'AI matched a job id that was not present in the fetched job list.',
+                  classification,
+                  match,
+                })
                 console.log(`Warning: Job ${matchedJobId} no longer exists, skipping update`)
                 return
               }
@@ -305,6 +362,20 @@ export async function syncEmails() {
                   'code' in updateError &&
                   updateError.code === 'P2025'
                 ) {
+                  emailOutcomes.push({
+                    ...baseOutcome,
+                    outcome: 'matched_missing_job',
+                    reason: 'Matched job disappeared before the status update could be written.',
+                    classification,
+                    match,
+                    job: {
+                      id: job.id,
+                      title: job.title,
+                      company: job.company,
+                      previousStatus: oldStatus,
+                      newStatus: classified.suggestedStatus,
+                    },
+                  })
                   console.log(`Warning: Job ${matchedJobId} was deleted, skipping update`)
                   return
                 }
@@ -356,8 +427,38 @@ export async function syncEmails() {
               // Activity feed captures the change; no separate JOB_UPDATED notification for email sync
 
               updatedCount++
+              emailOutcomes.push({
+                ...baseOutcome,
+                outcome: 'updated_job',
+                reason: 'Matched email advanced the job status.',
+                classification,
+                match,
+                job: {
+                  id: job.id,
+                  title: job.title,
+                  company: job.company,
+                  previousStatus: oldStatus,
+                  newStatus: classified.suggestedStatus,
+                },
+              })
               console.log(`Updated job ${matchedJobId} to status ${classified.suggestedStatus}`)
             } else {
+              emailOutcomes.push({
+                ...baseOutcome,
+                outcome: 'matched_no_change',
+                reason: 'Matched email did not advance the existing job status.',
+                classification,
+                match,
+                job: job
+                  ? {
+                      id: job.id,
+                      title: job.title,
+                      company: job.company,
+                      previousStatus: job.status,
+                      newStatus: classified.suggestedStatus,
+                    }
+                  : undefined,
+              })
               console.log(`Skipped updating job ${matchedJobId} - status would go backwards`)
             }
           }
@@ -372,6 +473,14 @@ export async function syncEmails() {
             )
             ambiguousMatchesCount++
             notificationsCreatedCount++
+            emailOutcomes.push({
+              ...baseOutcome,
+              outcome: 'ambiguous_review',
+              reason: 'AI matcher found multiple plausible jobs and created a review notification.',
+              classification,
+              match,
+              notificationCreated: true,
+            })
             console.log(`Ambiguous match: ${matchResult.matchedJobs.length} jobs found for email "${email.subject}"`)
           }
         } else if (matchResult.confidence === 'none') {
@@ -394,8 +503,30 @@ export async function syncEmails() {
               )
               newJobsDetectedCount++
               notificationsCreatedCount++
+              emailOutcomes.push({
+                ...baseOutcome,
+                outcome: 'new_job_review',
+                reason: 'AI extracted a job not found in the existing application list and created a review notification.',
+                classification,
+                match,
+                notificationCreated: true,
+              })
               console.log(`New job detected: "${classified.jobInfo.title}" at ${classified.jobInfo.company}`)
             } else {
+              emailOutcomes.push({
+                ...baseOutcome,
+                outcome: 'existing_job_detected',
+                reason: 'AI extracted job details, but deterministic company/title dedupe found an existing job.',
+                classification,
+                match,
+                job: {
+                  id: existingJob.id,
+                  title: existingJob.title,
+                  company: existingJob.company,
+                  previousStatus: existingJob.status,
+                  newStatus: classified.suggestedStatus,
+                },
+              })
               console.log(`Job already exists (company+title match): "${classified.jobInfo.title}" at ${classified.jobInfo.company} matched "${existingJob.title}" at ${existingJob.company}`)
             }
           } else {
@@ -403,11 +534,26 @@ export async function syncEmails() {
             await notificationService.createNoMatchNotification(syncUserId, email, classified)
             noMatchesCount++
             notificationsCreatedCount++
+            emailOutcomes.push({
+              ...baseOutcome,
+              outcome: 'no_match_review',
+              reason: 'AI marked the email as job-related but did not extract enough job info to match or create a job.',
+              classification,
+              match,
+              notificationCreated: true,
+            })
             console.log(`No match found and insufficient info for email "${email.subject}"`)
           }
         }
       } catch (error) {
         processingErrorsCount++
+        const emailIdentifier = createEmailIdentifier(email)
+        emailOutcomes.push({
+          ...baseEmailSyncOutcome(email, i, emailIdentifier),
+          outcome: 'processing_error',
+          reason: 'Email processing threw an exception.',
+          error: error instanceof Error ? error.message : String(error),
+        })
         console.error(`Error processing email "${email.subject}":`, error)
         // Continue processing other emails
       }
@@ -504,14 +650,15 @@ export async function syncEmails() {
         notificationsCreated: notificationsCreatedCount,
         success: true,
         errorMessage: null,
-        details: {
+        details: JSON.parse(JSON.stringify({
           syncSince: syncSince.toISOString(),
           jobsCount: jobs.length,
           partial: !cursorUpdate.completedFullWindow,
           processingErrors: processingErrorsCount,
           reachedFetchCap: cursorUpdate.reachedFetchCap,
           state: 'completed',
-        },
+          emailOutcomes: orderedEmailSyncOutcomes(emailOutcomes),
+        })),
       }
 
       if (syncLogId) {
