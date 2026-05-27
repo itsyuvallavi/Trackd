@@ -27,6 +27,10 @@ export interface ClassificationResult {
   shouldProcess: boolean
 }
 
+export interface EmailReviewResult extends ClassificationResult {
+  extractedEntities: ExtractedEntities
+}
+
 export enum EmailType {
   APPLICATION_CONFIRMATION = 'APPLICATION_CONFIRMATION',
   INTERVIEW_INVITE = 'INTERVIEW_INVITE',
@@ -62,4 +66,3 @@ export interface AIError {
   code?: string
   retryable: boolean
 }
-

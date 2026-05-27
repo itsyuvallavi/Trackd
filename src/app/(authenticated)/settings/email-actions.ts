@@ -17,11 +17,13 @@ import { requireAuth } from '@/lib/auth'
 import { NotificationService, type SyncCompleteJobChange } from '@/lib/notification-service'
 import { ExtractedEntities } from '@/lib/ai/types'
 import { createEmailIdentifier } from '@/lib/email-identifiers'
+import { getSeenEmailIdentifiers } from '@/lib/email-sync-dedupe'
 import { parseInterviewDateTime } from '@/lib/utils/interview-date-parser'
 import { cacheTagsFor } from '@/lib/cache-tags'
 import { alignEmailSyncLowerBound } from '@/lib/email-sync-window'
 import { buildEmailSyncCursorUpdate } from '@/lib/email-sync-cursor'
 import { findExistingJobForExtractedEmail } from '@/lib/email-job-dedupe'
+import { runLimited } from '@/lib/run-limited'
 
 /**
  * Check if an email has already been processed for a specific job
@@ -164,6 +166,8 @@ export async function syncEmails() {
     const classifier = new AIClassifier()
     const matcher = new AIJobMatcher()
     const notificationService = new NotificationService()
+    const seenEmailIdentifiers = await getSeenEmailIdentifiers(prisma, userId)
+    const syncUserId = userId
     const jobChanges: SyncCompleteJobChange[] = []
     let updatedCount = 0
     let processedCount = 0
@@ -178,13 +182,30 @@ export async function syncEmails() {
     let notificationsCreatedCount = 0
     let processingErrorsCount = 0
 
-    console.log(`Processing ${emails.length} emails...`)
-    for (let i = 0; i < emails.length; i++) {
-      const email = emails[i]
+    const emailReviewConcurrency = Number.parseInt(
+      process.env.EMAIL_SYNC_AI_CONCURRENCY ?? '6',
+      10,
+    )
+    console.log(
+      `Processing ${emails.length} emails with concurrency=${Math.min(
+        Math.max(1, emailReviewConcurrency || 6),
+        emails.length || 1,
+      )}...`,
+    )
+    const processEmail = async (item: { email: (typeof emails)[number]; i: number }) => {
+      const { email, i } = item
       if (i % 10 === 0) {
         console.log(`Processing email ${i + 1}/${emails.length}...`)
       }
       try {
+        const emailIdentifier = createEmailIdentifier(email)
+        if (seenEmailIdentifiers.has(emailIdentifier)) {
+          skippedCount++
+          skippedOtherCount++
+          console.log(`Skipped email "${email.subject}" - already recorded in email sync history`)
+          return
+        }
+
         const classified = await classifier.classify(email)
 
         console.log(`Email "${email.subject}": type=${classified.type}, confidence=${classified.confidence}%, jobInfo=`, classified.jobInfo)
@@ -194,7 +215,7 @@ export async function syncEmails() {
           skippedCount++
           skippedOtherCount++
           console.log(`Skipped email "${email.subject}" - AI determined it's not job-related (shouldProcess=false)`)
-          continue
+          return
         }
 
         // Only process job-related emails
@@ -202,14 +223,14 @@ export async function syncEmails() {
           skippedCount++
           skippedOtherCount++
           console.log(`Skipped email "${email.subject}" - classified as OTHER (confidence: ${classified.confidence})`)
-          continue
+          return
         }
         
         if (classified.confidence < 20) {
           skippedCount++
           skippedLowConfidenceCount++
           console.log(`Skipped email "${email.subject}" - low confidence: ${classified.confidence}% (type: ${classified.type})`)
-          continue
+          return
         }
 
         processedCount++
@@ -231,15 +252,12 @@ export async function syncEmails() {
           if (matchedJobId && classified.suggestedStatus) {
             const job = jobsById.get(matchedJobId)
 
-            // Create unique identifier for this email
-            const emailIdentifier = createEmailIdentifier(email)
-            
             // Check if this email has already been processed for this job
-            const alreadyProcessed = await isEmailAlreadyProcessed(userId, matchedJobId, emailIdentifier)
+            const alreadyProcessed = await isEmailAlreadyProcessed(syncUserId, matchedJobId, emailIdentifier)
             
             if (alreadyProcessed) {
               console.log(`Skipped duplicate email "${email.subject}" for job ${matchedJobId} (already processed)`)
-              continue
+              return
             }
 
             // Only update if it's a status advancement (don't go backwards)
@@ -251,7 +269,7 @@ export async function syncEmails() {
               // Verify job still exists before updating (it might have been deleted)
               if (!job) {
                 console.log(`Warning: Job ${matchedJobId} no longer exists, skipping update`)
-                continue
+                return
               }
               
               // Parse interview date/time if this is an interview invite
@@ -288,7 +306,7 @@ export async function syncEmails() {
                   updateError.code === 'P2025'
                 ) {
                   console.log(`Warning: Job ${matchedJobId} was deleted, skipping update`)
-                  continue
+                  return
                 }
                 throw updateError // Re-throw other errors
               }
@@ -316,7 +334,7 @@ export async function syncEmails() {
               await prisma.activity.create({
                 data: {
                   jobId: matchedJobId,
-                  userId,
+                  userId: syncUserId,
                   type: getActivityType(classified.type),
                   fromStatus: oldStatus,
                   toStatus: classified.suggestedStatus,
@@ -347,7 +365,7 @@ export async function syncEmails() {
           // Multiple jobs match - create notification for user to choose
           if (matchResult.matchedJobs && matchResult.matchedJobs.length > 0) {
             await notificationService.createAmbiguousMatchNotification(
-              userId,
+              syncUserId,
               email,
               matchResult.matchedJobs,
               classified
@@ -365,7 +383,7 @@ export async function syncEmails() {
             if (!existingJob) {
               // New job detected - create notification
               await notificationService.createNewJobDetectedNotification(
-                userId,
+                syncUserId,
                 email,
                 classified,
                 {
@@ -382,7 +400,7 @@ export async function syncEmails() {
             }
           } else {
             // Insufficient info - create no-match notification
-            await notificationService.createNoMatchNotification(userId, email, classified)
+            await notificationService.createNoMatchNotification(syncUserId, email, classified)
             noMatchesCount++
             notificationsCreatedCount++
             console.log(`No match found and insufficient info for email "${email.subject}"`)
@@ -394,6 +412,11 @@ export async function syncEmails() {
         // Continue processing other emails
       }
     }
+    await runLimited(
+      emails.map((email, i) => ({ email, i })),
+      emailReviewConcurrency || 6,
+      processEmail,
+    )
 
     console.log(`Sync complete: ${processedCount} processed, ${updatedCount} updated, ${skippedCount} skipped`)
     console.log(`  - Updated jobs: ${updatedCount}`)

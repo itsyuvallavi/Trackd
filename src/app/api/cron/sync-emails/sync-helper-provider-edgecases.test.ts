@@ -18,6 +18,9 @@ const prismaMock = vi.hoisted(() => ({
     findMany: vi.fn(),
     create: vi.fn(),
   },
+  notification: {
+    findMany: vi.fn(),
+  },
   emailSyncLog: {
     create: vi.fn(),
   },
@@ -108,6 +111,7 @@ beforeEach(() => {
   prismaMock.job.findMany.mockResolvedValue([])
   prismaMock.job.update.mockResolvedValue({})
   prismaMock.activity.findMany.mockResolvedValue([])
+  prismaMock.notification.findMany.mockResolvedValue([])
   prismaMock.activity.create.mockResolvedValue({})
   prismaMock.emailSyncLog.create.mockResolvedValue({})
 
@@ -280,7 +284,7 @@ describe('syncEmailsForUser provider edge cases', () => {
       success: true,
       stats: {
         totalEmails: 1,
-        processedEmails: 1,
+        processedEmails: 0,
         updatedJobs: 0,
         partial: false,
         processingErrors: 0,

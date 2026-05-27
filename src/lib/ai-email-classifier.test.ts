@@ -41,17 +41,30 @@ function aiJson(value: unknown) {
   }
 }
 
-describe('AIClassifier deterministic rescue', () => {
+describe('AIClassifier email review', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    mocks.chatCompletion.mockReset()
+    mocks.getStats.mockReset()
   })
 
-  it('rescues direct application emails when AI says not to process', async () => {
+  it('classifies and extracts a direct application email in one model call', async () => {
     mocks.chatCompletion.mockResolvedValueOnce(aiJson({
-      type: 'OTHER',
-      confidence: 12,
-      reasoning: 'Mistakenly treated as generic company update',
-      shouldProcess: false,
+      type: 'REJECTION',
+      confidence: 95,
+      reasoning: 'The message rejects a specific application.',
+      shouldProcess: true,
+      extractedEntities: {
+        company: 'Reaktor',
+        title: 'Full-Stack Developer (Lisbon)',
+        location: 'Lisbon',
+        interviewDate: null,
+        interviewTime: null,
+        nextSteps: [],
+        contactName: null,
+        contactEmail: null,
+        salary: null,
+        rejectionReason: "Can't offer an interview right now",
+      },
     }))
 
     const classifier = new AIClassifier()
@@ -76,6 +89,18 @@ Unfortunately, we can't offer you an interview right now.`,
       confidence: 5,
       reasoning: 'General survey asking how an application went',
       shouldProcess: false,
+      extractedEntities: {
+        company: null,
+        title: null,
+        location: null,
+        interviewDate: null,
+        interviewTime: null,
+        nextSteps: [],
+        contactName: null,
+        contactEmail: null,
+        salary: null,
+        rejectionReason: null,
+      },
     }))
 
     const classifier = new AIClassifier()
@@ -89,15 +114,13 @@ Unfortunately, we can't offer you an interview right now.`,
     expect(result.metadata.shouldProcess).toBe(false)
   })
 
-  it('fills missing AI extraction entities from deterministic parsing', async () => {
-    mocks.chatCompletion
-      .mockResolvedValueOnce(aiJson({
-        type: 'INTERVIEW_INVITE',
-        confidence: 91,
-        reasoning: 'Recruiter asks for a call',
-        shouldProcess: true,
-      }))
-      .mockResolvedValueOnce(aiJson({
+  it('does not use deterministic extraction rescue when AI omits entities', async () => {
+    mocks.chatCompletion.mockResolvedValueOnce(aiJson({
+      type: 'INTERVIEW_INVITE',
+      confidence: 91,
+      reasoning: 'Recruiter asks for a call',
+      shouldProcess: true,
+      extractedEntities: {
         company: null,
         title: null,
         location: null,
@@ -108,7 +131,8 @@ Unfortunately, we can't offer you an interview right now.`,
         contactEmail: null,
         salary: null,
         rejectionReason: null,
-      }))
+      },
+    }))
 
     const classifier = new AIClassifier()
     const result = await classifier.classify(email({
@@ -118,9 +142,10 @@ Unfortunately, we can't offer you an interview right now.`,
     }))
 
     expect(result.type).toBe(EmailType.INTERVIEW_INVITE)
-    expect(result.jobInfo?.company).toBe('Restream')
-    expect(result.jobInfo?.title).toBe('Software Engineer - Backend')
-    expect(result.metadata.extractedEntities?.company).toBe('Restream')
-    expect(result.metadata.extractedEntities?.title).toBe('Software Engineer - Backend')
+    expect(result.jobInfo?.company).toBeUndefined()
+    expect(result.jobInfo?.title).toBeUndefined()
+    expect(result.metadata.extractedEntities?.company).toBeNull()
+    expect(result.metadata.extractedEntities?.title).toBeNull()
+    expect(mocks.chatCompletion).toHaveBeenCalledTimes(1)
   })
 })

@@ -8,9 +8,8 @@
 import { EmailMessage } from './email-service'
 import { JobStatus } from '@prisma/client'
 import { getAIClient } from './ai/client'
-import { getClassificationPrompt } from './ai/prompts/classification'
-import { getExtractionPrompt } from './ai/prompts/extraction'
-import { ClassificationResult, EmailType, ExtractedEntities } from './ai/types'
+import { getEmailReviewPrompt } from './ai/prompts/email-review'
+import { EmailReviewResult, EmailType, ExtractedEntities } from './ai/types'
 
 // Re-export types for compatibility with existing code
 export { EmailType } from './ai/types'
@@ -41,63 +40,44 @@ export class AIClassifier {
    */
   async classify(email: EmailMessage): Promise<ClassifiedEmail> {
     try {
-      // Step 1: Classify the email
-      const classificationPrompt = getClassificationPrompt(email)
-      const classificationResponse = await this.client.chatCompletion([
+      const reviewPrompt = getEmailReviewPrompt(email)
+      const reviewResponse = await this.client.chatCompletion([
         {
           role: 'user',
-          content: classificationPrompt,
+          content: reviewPrompt,
         },
       ])
 
-      const classificationContent =
-        classificationResponse.data.choices[0]?.message?.content
-      if (!classificationContent) {
-        throw new Error('No response from AI classification')
+      const reviewContent =
+        reviewResponse.data.choices[0]?.message?.content
+      if (!reviewContent) {
+        throw new Error('No response from AI email review')
       }
 
-      const classification: ClassificationResult = JSON.parse(
-        classificationContent
-      )
+      const review: EmailReviewResult = JSON.parse(reviewContent)
+      const extracted = normalizeExtractedEntities(review.extractedEntities)
 
-      // Step 2: If shouldProcess is false, return early (don't extract)
-      if (!classification.shouldProcess) {
+      if (!review.shouldProcess) {
         return {
-          type: classification.type as EmailType,
-          confidence: classification.confidence,
+          type: review.type as EmailType,
+          confidence: review.confidence,
+          jobInfo: undefined,
           metadata: {
-            keywords: [], // Empty for AI classifier
-            reasoning: classification.reasoning,
+            keywords: [],
+            reasoning: review.reasoning,
             shouldProcess: false,
+            extractedEntities: extracted,
           },
         }
       }
 
-      // Step 3: Extract entities if we should process
-      const extractionPrompt = getExtractionPrompt(email)
-      const extractionResponse = await this.client.chatCompletion([
-        {
-          role: 'user',
-          content: extractionPrompt,
-        },
-      ])
-
-      const extractionContent =
-        extractionResponse.data.choices[0]?.message?.content
-      if (!extractionContent) {
-        throw new Error('No response from AI extraction')
-      }
-
-      const extracted: ExtractedEntities = JSON.parse(extractionContent)
-
-      // Step 4: Map email type to suggested job status
       const suggestedStatus = this.mapEmailTypeToStatus(
-        classification.type as EmailType
+        review.type as EmailType
       )
 
       return {
-        type: classification.type as EmailType,
-        confidence: classification.confidence,
+        type: review.type as EmailType,
+        confidence: review.confidence,
         jobInfo: {
           company: extracted.company || undefined,
           title: extracted.title || undefined,
@@ -106,7 +86,7 @@ export class AIClassifier {
         suggestedStatus,
         metadata: {
           keywords: [], // Empty for AI classifier
-          reasoning: classification.reasoning,
+          reasoning: review.reasoning,
           shouldProcess: true,
           // Store full extracted entities for use in Activity metadata
           extractedEntities: extracted,
@@ -149,5 +129,20 @@ export class AIClassifier {
    */
   getStats() {
     return this.client.getStats()
+  }
+}
+
+function normalizeExtractedEntities(value: ExtractedEntities | null | undefined): ExtractedEntities {
+  return {
+    company: value?.company || null,
+    title: value?.title || null,
+    location: value?.location || null,
+    interviewDate: value?.interviewDate || null,
+    interviewTime: value?.interviewTime || null,
+    nextSteps: Array.isArray(value?.nextSteps) ? value.nextSteps : [],
+    contactName: value?.contactName || null,
+    contactEmail: value?.contactEmail || null,
+    salary: value?.salary || null,
+    rejectionReason: value?.rejectionReason || null,
   }
 }
