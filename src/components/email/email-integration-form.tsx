@@ -191,7 +191,7 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
       {(showIMAPForm || integration) && (
         <div>
           {integration && (
-            <div className="mb-5 rounded-xl border border-border/70 bg-background/35 p-4 md:p-5">
+            <div className="mb-5 rounded-xl border border-primary/20 bg-primary-lightest/20 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.18)] md:p-5">
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -210,17 +210,24 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
-                    variant="secondary"
                     onClick={handleSync}
                     disabled={isSyncing || isPending}
-                    className="gap-2"
+                    className={cn(
+                      'h-9 gap-2 rounded-full px-4 text-sm shadow-sm',
+                      'bg-primary text-primary-foreground hover:bg-primary/90',
+                      'transition-[transform,background-color] duration-150 ease-[var(--ease-ios)] active:scale-[0.98]',
+                      'disabled:opacity-60 disabled:hover:bg-primary disabled:active:scale-100'
+                    )}
                   >
                     <RefreshCw className={`size-4 ${isSyncing ? 'animate-spin' : ''}`} />
                     {isSyncing ? 'Syncing' : 'Sync now'}
                   </Button>
                   <Link
                     href="/settings/integrations/logs"
-                    className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-2')}
+                    className={cn(
+                      buttonVariants({ variant: 'outline', size: 'sm' }),
+                      'h-9 gap-2 bg-background/55 hover:bg-background/80'
+                    )}
                   >
                     <ListChecks className="size-4" />
                     Review log
@@ -230,7 +237,7 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
                     variant="outline"
                     size="sm"
                     onClick={() => setShowConfig(!showConfig)}
-                    className="gap-2 border-border hover:bg-accent hover:text-accent-foreground transition-colors"
+                    className="h-9 gap-2 border-border bg-background/55 hover:bg-background/80 hover:text-accent-foreground transition-colors"
                   >
                     <Settings2 className="size-4" />
                     {showConfig ? 'Hide config' : 'Configure'}
@@ -239,19 +246,19 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
               </div>
 
               <div className="mt-4 grid gap-2 text-sm md:grid-cols-3">
-                <div className="rounded-lg border border-border/50 bg-card/40 p-3">
+                <div className="rounded-lg border border-primary/15 bg-background/55 p-3">
                   <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Last synced</p>
                   <p className="mt-1 font-medium tabular-nums" suppressHydrationWarning>
                     {lastSyncedLabel}
                   </p>
                 </div>
-                <div className="rounded-lg border border-border/50 bg-card/40 p-3">
+                <div className="rounded-lg border border-primary/15 bg-background/55 p-3">
                   <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Auto-sync</p>
                   <p className="mt-1 font-medium">
                     {autoSyncEnabled ? `Every ${autoSyncFrequency} min` : 'Off'}
                   </p>
                 </div>
-                <div className="rounded-lg border border-border/50 bg-card/40 p-3">
+                <div className="rounded-lg border border-primary/15 bg-background/55 p-3">
                   <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Next run</p>
                   <p className="mt-1 font-medium tabular-nums" suppressHydrationWarning>
                     {autoSyncEnabled ? nextSyncLabel : 'Disabled'}
