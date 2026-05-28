@@ -172,14 +172,14 @@ export function GlobalBotRunProgress() {
   const running = run.status === 'RUNNING'
 
   return (
-    <div className="fixed right-4 top-24 z-[90] w-[min(100%-2rem,22rem)] md:right-5">
+    <div className="fixed right-4 top-24 z-[90] w-[min(100%-2rem,16rem)] md:right-5">
       <div
         className={cn(
-          'glass glass-subtle rounded-xl border px-3.5 py-3 shadow-lg',
+          'glass glass-subtle rounded-lg border px-3 py-2.5 shadow-lg',
           failed ? 'border-error/25' : 'border-border/70'
         )}
       >
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-2.5">
           <span
             className={cn(
               'mt-0.5 shrink-0',
@@ -197,21 +197,21 @@ export function GlobalBotRunProgress() {
             )}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">
+            <p className="truncate text-xs font-semibold">
               {running ? 'Job search running' : failed ? 'Job search failed' : 'Job search complete'}
             </p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
               {message}
               {elapsed && running ? ` · ${elapsed}` : ''}
             </p>
-            <div className="mt-2 flex items-center gap-1.5" aria-label="Job search progress">
+            <div className="mt-1.5 flex items-center gap-1" aria-label="Job search progress">
               {(['search', 'score', 'save'] as const).map((item) => {
                 const state = stepState(item, step)
                 return (
                   <span
                     key={item}
                     className={cn(
-                      'h-1.5 flex-1 rounded-full transition-colors',
+                      'h-1 flex-1 rounded-full transition-colors',
                       state === 'complete' && 'bg-success/75',
                       state === 'active' && 'bg-primary',
                       state === 'pending' && 'bg-muted',
@@ -221,7 +221,7 @@ export function GlobalBotRunProgress() {
                 )
               })}
             </div>
-            <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+            <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
               <span>{step === 'search' ? 'Searching' : step === 'score' ? 'Scoring' : step === 'save' ? 'Saving' : 'Done'}</span>
               {running && run.jobsFound > 0 && (
                 <span className="tabular-nums">{scoreProgress}% scored</span>
@@ -229,7 +229,7 @@ export function GlobalBotRunProgress() {
             </div>
             <Link
               href="/bot/runs"
-              className="mt-1.5 inline-flex text-xs font-medium text-foreground underline underline-offset-2"
+              className="mt-1 inline-flex text-[11px] font-medium text-foreground underline underline-offset-2"
             >
               View run log
             </Link>
