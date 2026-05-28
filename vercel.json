@@ -19,10 +19,6 @@
     {
       "path": "/api/cron/auto-archive",
       "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/cron/bot-search",
-      "schedule": "0 8 * * *"
     }
   ]
 }
