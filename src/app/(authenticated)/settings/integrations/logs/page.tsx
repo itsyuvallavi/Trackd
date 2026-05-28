@@ -100,6 +100,11 @@ export default async function EmailSyncLogPage() {
     const meta = metadataObject(notification.metadata)
     return notification.type === 'AMBIGUOUS_MATCH' || notification.type === 'NEW_JOB_DETECTED' || meta.hasInsufficientInfo
   }).length
+  const reviewFindings = notifications.filter((notification) => {
+    const meta = metadataObject(notification.metadata)
+    return notification.type === 'AMBIGUOUS_MATCH' || notification.type === 'NEW_JOB_DETECTED' || meta.hasInsufficientInfo
+  })
+  const syncNotifications = notifications.filter((notification) => !reviewFindings.some((finding) => finding.id === notification.id))
 
   return (
     <AppShell>
@@ -125,6 +130,121 @@ export default async function EmailSyncLogPage() {
             </div>
           </div>
         </header>
+
+        <section className="mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <h2 className="text-xl font-semibold tracking-tight">Needs review</h2>
+            <span className="text-xs text-muted-foreground">
+              Ambiguous matches, untracked jobs, and unmatched emails
+            </span>
+          </div>
+          <div className="glass glass-subtle rounded-2xl overflow-hidden">
+            {reviewFindings.length === 0 ? (
+              <p className="px-5 py-8 text-sm text-muted-foreground">No email findings need review.</p>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {reviewFindings.map((notification) => {
+                  const meta = metadataObject(notification.metadata)
+                  const label = findingLabel(notification.type, meta)
+                  const candidateCount = meta.matchedJobs?.length ?? 0
+                  return (
+                    <div key={notification.id} className="px-5 py-4 space-y-3">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${findingClass(notification.type, meta)}`}>
+                          {label}
+                        </span>
+                        <span className="text-xs text-muted-foreground flex-1 min-w-[10rem]">
+                          {formatDate(notification.createdAt)}
+                          {meta.emailType ? ` · ${meta.emailType.toLowerCase().replaceAll('_', ' ')}` : ''}
+                        </span>
+                        {notification.actionUrl && (
+                          <Link
+                            href={notification.actionUrl}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80"
+                          >
+                            {notification.type === 'AMBIGUOUS_MATCH' ? 'Resolve match' : 'Review'}
+                            <ExternalLink className="size-3" />
+                          </Link>
+                        )}
+                      </div>
+
+                      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.75fr)]">
+                        <div className="space-y-2">
+                          <div>
+                            <p className="text-sm font-semibold leading-tight">
+                              {meta.emailSubject || notification.title}
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              From: {meta.emailFrom || 'unknown sender'}
+                              {meta.emailDate ? ` · ${formatDate(meta.emailDate)}` : ''}
+                            </p>
+                          </div>
+                          <p className="text-sm text-foreground/85 whitespace-pre-line">
+                            {notification.message}
+                          </p>
+                          {(meta.title || meta.company || meta.suggestedStatus) && (
+                            <div className="grid gap-1 text-[11px] text-muted-foreground sm:grid-cols-2">
+                              {(meta.title || meta.company) && (
+                                <p>
+                                  AI extracted: {[meta.title, meta.company].filter(Boolean).join(' @ ')}
+                                </p>
+                              )}
+                              {meta.suggestedStatus && <p>Suggested status: {meta.suggestedStatus}</p>}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="rounded-lg border border-border/60 bg-background/35 p-3">
+                          {notification.type === 'AMBIGUOUS_MATCH' ? (
+                            <>
+                              <p className="text-xs font-medium text-foreground">
+                                Candidate jobs ({candidateCount})
+                              </p>
+                              {meta.matchedJobs && meta.matchedJobs.length > 0 ? (
+                                <ul className="mt-2 space-y-2">
+                                  {meta.matchedJobs.map((job, index) => (
+                                    <li key={job.id} className="rounded-md border border-border/50 bg-card/40 px-3 py-2">
+                                      <p className="text-xs font-medium">
+                                        {index + 1}. {job.title}
+                                      </p>
+                                      <p className="text-[11px] text-muted-foreground">@ {job.company}</p>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="mt-2 text-xs text-muted-foreground">No candidate jobs were stored.</p>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-xs font-medium text-foreground">Email context</p>
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                {meta.hasInsufficientInfo
+                                  ? 'The AI found a job-related email, but not enough company/title detail to safely update an existing application.'
+                                  : 'The AI found a job that does not appear to exist in your application list yet.'}
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {meta.emailTextBody && (
+                        <details className="text-xs group">
+                          <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
+                            Email excerpt
+                          </summary>
+                          <p className="mt-2 rounded-lg border border-border/60 bg-background/40 p-3 leading-relaxed text-muted-foreground whitespace-pre-wrap max-h-44 overflow-y-auto">
+                            {meta.emailTextBody}
+                          </p>
+                        </details>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </section>
 
         <section className="mb-6">
           <h2 className="text-xl font-semibold tracking-tight mb-3">Recent syncs</h2>
@@ -219,13 +339,13 @@ export default async function EmailSyncLogPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold tracking-tight mb-3">Findings</h2>
+          <h2 className="text-xl font-semibold tracking-tight mb-3">Sync summaries</h2>
           <div className="glass glass-subtle rounded-2xl overflow-hidden">
-            {notifications.length === 0 ? (
-              <p className="px-5 py-8 text-sm text-muted-foreground">No email findings yet.</p>
+            {syncNotifications.length === 0 ? (
+              <p className="px-5 py-8 text-sm text-muted-foreground">No sync summaries yet.</p>
             ) : (
               <div className="divide-y divide-border/60">
-                {notifications.map((notification) => {
+                {syncNotifications.map((notification) => {
                   const meta = metadataObject(notification.metadata)
                   const label = findingLabel(notification.type, meta)
                   return (

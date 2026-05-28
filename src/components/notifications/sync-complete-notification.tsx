@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { NotificationType } from '@prisma/client'
 import type { JobStatus } from '@prisma/client'
-import { Info, CheckCircle2, X, ArrowRight } from 'lucide-react'
+import { Info, CheckCircle2, X, ArrowRight, AlertTriangle, ListChecks } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -67,7 +67,14 @@ export function SyncCompleteNotification({
   const { jobChanges, stats } = parseSyncMetadata(notification.metadata)
   const updatedJobs = stats?.updatedJobs ?? 0
   const processedEmails = stats?.processedEmails ?? null
+  const ambiguousMatches = stats?.ambiguousMatches ?? 0
+  const newJobsDetected = stats?.newJobsDetected ?? 0
+  const noMatches = stats?.noMatches ?? 0
+  const reviewFindings = ambiguousMatches + newJobsDetected + noMatches
   const canOpenDetails = updatedJobs > 0
+  const actionHref = reviewFindings > 0
+    ? '/settings/integrations/logs'
+    : (notification.actionUrl || '/jobs')
 
   const handleActionClick = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -156,16 +163,48 @@ export function SyncCompleteNotification({
             <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-line">
               {notification.message}
             </p>
+            {reviewFindings > 0 && (
+              <div className="mt-2 space-y-1.5 rounded-md border border-warning/25 bg-warning-bg/60 p-2 text-[11px] text-warning-text">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <AlertTriangle className="size-3.5" />
+                  Needs review in Email sync log
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {ambiguousMatches > 0 && (
+                    <span className="rounded-full border border-warning/30 px-2 py-0.5">
+                      {ambiguousMatches} ambiguous
+                    </span>
+                  )}
+                  {newJobsDetected > 0 && (
+                    <span className="rounded-full border border-warning/30 px-2 py-0.5">
+                      {newJobsDetected} new job
+                    </span>
+                  )}
+                  {noMatches > 0 && (
+                    <span className="rounded-full border border-warning/30 px-2 py-0.5">
+                      {noMatches} unmatched
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
             {canOpenDetails && (
               <p className="text-[11px] text-primary mt-1 font-medium">Tap to see what changed</p>
             )}
           </div>
           <a
-            href={notification.actionUrl || '/jobs'}
+            href={actionHref}
             onClick={handleActionClick}
-            className="text-xs text-primary hover:underline mt-1 inline-block text-left cursor-pointer relative z-10"
+            className="text-xs text-primary hover:underline mt-1 inline-flex items-center gap-1 text-left cursor-pointer relative z-10"
           >
-            View jobs →
+            {reviewFindings > 0 ? (
+              <>
+                <ListChecks className="size-3" />
+                Review findings →
+              </>
+            ) : (
+              'View jobs →'
+            )}
           </a>
         </div>
         <div className="flex gap-1 shrink-0">

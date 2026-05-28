@@ -227,6 +227,11 @@ export class NotificationService {
       ? `Processed ${stats.processedEmails} email${stats.processedEmails > 1 ? 's' : ''}\n\n${parts.join('\n')}`
       : `Processed ${stats.processedEmails} email${stats.processedEmails > 1 ? 's' : ''}. No updates.`
 
+    const hasReviewFindings =
+      stats.ambiguousMatches > 0 ||
+      stats.newJobsDetected > 0 ||
+      stats.noMatches > 0
+
     await prisma.notification.create({
       data: {
         userId,
@@ -236,7 +241,7 @@ export class NotificationService {
         metadata: JSON.parse(
           JSON.stringify({ stats, jobChanges: jobChanges ?? [] })
         ),
-        actionUrl: '/jobs',
+        actionUrl: hasReviewFindings ? '/settings/integrations/logs' : '/jobs',
       },
     })
   }
