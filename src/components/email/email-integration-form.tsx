@@ -6,8 +6,7 @@ import Link from 'next/link'
 import type { EmailIntegration } from '@prisma/client'
 import { saveEmailIntegration, syncEmails, testEmailConnection, updateAutoSyncSettings } from '@/app/(authenticated)/settings/email-actions'
 import { Button, buttonVariants } from '@/components/ui/button'
-import { SyncResultToast, type SyncResultToastState } from './sync-result-toast'
-import { EMAIL_SYNC_COMPLETE_EVENT, NOTIFICATIONS_REFRESH_EVENT } from '@/lib/constants'
+import { EMAIL_SYNC_COMPLETE_EVENT, EMAIL_SYNC_STARTED_EVENT, NOTIFICATIONS_REFRESH_EVENT } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { ListChecks, MailCheck, RefreshCw, Settings2 } from 'lucide-react'
 
@@ -23,7 +22,6 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
   const [showIMAPForm, setShowIMAPForm] = useState(!!integration)
   const [showConfig, setShowConfig] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-  const [syncToast, setSyncToast] = useState<SyncResultToastState>(null)
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(integration?.autoSyncEnabled || false)
   const [autoSyncFrequency, setAutoSyncFrequency] = useState(integration?.autoSyncFrequency || 60)
   const [isUpdatingAutoSync, setIsUpdatingAutoSync] = useState(false)
@@ -85,44 +83,22 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
   const handleSync = async () => {
     setIsSyncing(true)
     setMessage(null)
-    setSyncToast({ phase: 'running' })
+    window.dispatchEvent(new CustomEvent(EMAIL_SYNC_STARTED_EVENT))
 
     try {
       const result = await syncEmails()
 
       if (result.success && 'stats' in result) {
-        // Store full stats for the toast to parse, but we'll simplify the display
-        let message = `Fetched ${result.stats.totalEmails} emails since ${new Date(result.stats.syncSince).toLocaleDateString()}\n`
-        message += `Processed ${result.stats.processedEmails} job-related emails\n`
-        if (result.stats.createdJobs > 0) {
-          message += `Created ${result.stats.createdJobs} new jobs\n`
-        }
-        if (result.stats.updatedJobs > 0) {
-          message += `Updated ${result.stats.updatedJobs} existing jobs\n`
-        }
-        if (result.stats.skippedEmails > 0) {
-          message += `Skipped ${result.stats.skippedEmails} emails\n`
-        }
-
-        setSyncToast({
-          phase: 'result',
-          type: 'success',
-          message,
-        })
+        setMessage({ type: 'success', text: 'Email sync complete. Review the sync log for details.' })
       } else {
-        setSyncToast({
-          phase: 'result',
+        setMessage({
           type: 'error',
-          message: ('error' in result ? result.error : 'Sync failed. Check console for details.') || 'Sync failed. Check console for details.',
+          text: ('error' in result ? result.error : 'Sync failed. Check console for details.') || 'Sync failed. Check console for details.',
         })
       }
     } catch (error) {
       console.error('Sync error:', error)
-      setSyncToast({
-        phase: 'result',
-        type: 'error',
-        message: error instanceof Error ? error.message : 'An unexpected error occurred',
-      })
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'An unexpected error occurred' })
     } finally {
       setIsSyncing(false)
     }
@@ -133,10 +109,6 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
 
   return (
     <>
-      <SyncResultToast
-        state={syncToast}
-        onClose={() => setSyncToast(null)}
-      />
       <div className="space-y-6">
       {/* OAuth Options (Primary - Recommended) */}
       {!integration && (

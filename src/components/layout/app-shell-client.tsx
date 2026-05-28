@@ -5,6 +5,7 @@ import { LeftSidebar } from './left-sidebar'
 import { FloatingFeedbackButton } from '@/components/feedback/floating-feedback-button'
 import { NotificationsBell } from './notifications-bell'
 import { GlobalBotRunProgress } from '@/components/bot/global-bot-run-progress'
+import { GlobalEmailSyncProgress } from '@/components/email/global-email-sync-progress'
 
 interface AppShellClientProps {
   children: React.ReactNode
@@ -40,6 +41,7 @@ export function AppShellClient({
       </div>
 
       <GlobalBotRunProgress />
+      <GlobalEmailSyncProgress />
       <FloatingFeedbackButton />
     </div>
   )

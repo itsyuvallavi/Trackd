@@ -189,6 +189,46 @@ export async function syncEmails() {
     let notificationsCreatedCount = 0
     let processingErrorsCount = 0
     const emailOutcomes: EmailSyncOutcome[] = []
+    let reviewedEmailsCount = 0
+    let lastProgressWrite = 0
+    const writeSyncProgress = async (
+      state: 'matching' | 'processing',
+      force = false,
+    ) => {
+      if (!syncLogId) return
+      const now = Date.now()
+      if (!force && now - lastProgressWrite < 2000) return
+      lastProgressWrite = now
+
+      await prisma.emailSyncLog.update({
+        where: { id: syncLogId },
+        data: {
+          totalEmails: emails.length,
+          processedEmails: processedCount,
+          skippedEmails: skippedCount,
+          skippedOther: skippedOtherCount,
+          skippedLowConfidence: skippedLowConfidenceCount,
+          exactMatches: exactMatchesCount,
+          fuzzyMatches: fuzzyMatchesCount,
+          ambiguousMatches: ambiguousMatchesCount,
+          newJobsDetected: newJobsDetectedCount,
+          noMatches: noMatchesCount,
+          jobsUpdated: updatedCount,
+          notificationsCreated: notificationsCreatedCount,
+          details: {
+            syncSince: syncSince.toISOString(),
+            jobsCount: jobs.length,
+            state,
+            reviewedEmails: reviewedEmailsCount,
+            totalEmails: emails.length,
+          },
+        },
+      }).catch((error) => {
+        console.warn('Failed to update email sync progress:', error)
+      })
+    }
+
+    await writeSyncProgress('matching', true)
 
     const emailReviewConcurrency = Number.parseInt(
       process.env.EMAIL_SYNC_AI_CONCURRENCY ?? '6',
@@ -556,8 +596,12 @@ export async function syncEmails() {
         })
         console.error(`Error processing email "${email.subject}":`, error)
         // Continue processing other emails
+      } finally {
+        reviewedEmailsCount++
+        await writeSyncProgress('processing')
       }
     }
+    await writeSyncProgress('processing', true)
     await runLimited(
       emails.map((email, i) => ({ email, i })),
       emailReviewConcurrency || 6,

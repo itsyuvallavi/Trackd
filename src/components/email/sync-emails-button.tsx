@@ -4,59 +4,20 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { syncEmails } from '@/app/(authenticated)/settings/email-actions'
-import { SyncResultToast, type SyncResultToastState } from './sync-result-toast'
-import { EMAIL_SYNC_COMPLETE_EVENT, NOTIFICATIONS_REFRESH_EVENT } from '@/lib/constants'
+import { EMAIL_SYNC_COMPLETE_EVENT, EMAIL_SYNC_STARTED_EVENT, NOTIFICATIONS_REFRESH_EVENT } from '@/lib/constants'
 
 export function SyncEmailsButton() {
   const router = useRouter()
   const [isSyncing, setIsSyncing] = useState(false)
-  const [syncToast, setSyncToast] = useState<SyncResultToastState>(null)
 
   const handleSync = async () => {
     setIsSyncing(true)
-    setSyncToast({ phase: 'running' })
+    window.dispatchEvent(new CustomEvent(EMAIL_SYNC_STARTED_EVENT))
 
     try {
-      const result = await syncEmails()
-
-      if (result.success && 'stats' in result) {
-        let message = `Fetched ${result.stats.totalEmails} emails since ${new Date(result.stats.syncSince).toLocaleDateString()}\n`
-        message += `Processed ${result.stats.processedEmails} job-related emails\n`
-        if (result.stats.updatedJobs > 0) {
-          message += `Updated ${result.stats.updatedJobs} existing jobs\n`
-        }
-        if (result.stats.newJobsDetected > 0) {
-          message += `Detected ${result.stats.newJobsDetected} new jobs (check notifications)\n`
-        }
-        if (result.stats.ambiguousMatches > 0) {
-          message += `${result.stats.ambiguousMatches} ambiguous matches (check notifications)\n`
-        }
-        if (result.stats.noMatches > 0) {
-          message += `${result.stats.noMatches} unmatched emails (check notifications)\n`
-        }
-        if (result.stats.skippedEmails > 0) {
-          message += `Skipped ${result.stats.skippedEmails} emails\n`
-        }
-
-        setSyncToast({
-          phase: 'result',
-          type: 'success',
-          message,
-        })
-      } else {
-        setSyncToast({
-          phase: 'result',
-          type: 'error',
-          message: ('error' in result ? result.error : 'Sync failed. Check console for details.') || 'Sync failed. Check console for details.',
-        })
-      }
+      await syncEmails()
     } catch (error) {
       console.error('Sync error:', error)
-      setSyncToast({
-        phase: 'result',
-        type: 'error',
-        message: error instanceof Error ? error.message : 'An unexpected error occurred',
-      })
     } finally {
       setIsSyncing(false)
     }
@@ -66,11 +27,6 @@ export function SyncEmailsButton() {
   }
 
   return (
-    <>
-      <SyncResultToast
-        state={syncToast}
-        onClose={() => setSyncToast(null)}
-      />
       <Button
         onClick={handleSync}
         disabled={isSyncing}
@@ -119,6 +75,5 @@ export function SyncEmailsButton() {
           </>
         )}
       </Button>
-    </>
   )
 }

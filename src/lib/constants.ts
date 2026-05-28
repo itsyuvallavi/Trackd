@@ -76,3 +76,6 @@ export const NOTIFICATIONS_REFRESH_EVENT = 'trackd:notifications-refresh' as con
 
 /** Fired after a manual email sync finishes so the sync history can refetch. */
 export const EMAIL_SYNC_COMPLETE_EVENT = 'trackd:email-sync-complete' as const
+
+/** Fired when a manual email sync starts so shell-level progress can follow it. */
+export const EMAIL_SYNC_STARTED_EVENT = 'trackd:email-sync-started' as const
