@@ -2,12 +2,14 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import type { EmailIntegration } from '@prisma/client'
 import { saveEmailIntegration, syncEmails, testEmailConnection, updateAutoSyncSettings } from '@/app/(authenticated)/settings/email-actions'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { SyncResultToast, type SyncResultToastState } from './sync-result-toast'
 import { EMAIL_SYNC_COMPLETE_EVENT, NOTIFICATIONS_REFRESH_EVENT } from '@/lib/constants'
-import { Clock, RefreshCw } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { ListChecks, MailCheck, RefreshCw, Settings2 } from 'lucide-react'
 
 interface EmailIntegrationFormProps {
   integration: EmailIntegration | null
@@ -25,6 +27,13 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(integration?.autoSyncEnabled || false)
   const [autoSyncFrequency, setAutoSyncFrequency] = useState(integration?.autoSyncFrequency || 60)
   const [isUpdatingAutoSync, setIsUpdatingAutoSync] = useState(false)
+
+  const lastSyncedLabel = integration?.lastSyncedAt
+    ? new Date(integration.lastSyncedAt).toLocaleString()
+    : 'Never'
+  const nextSyncLabel = integration?.nextSyncAt
+    ? new Date(integration.nextSyncAt).toLocaleString()
+    : 'Not scheduled'
 
   const handleOAuthConnect = async (provider: 'google' | 'microsoft') => {
     try {
@@ -210,31 +219,151 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
       {(showIMAPForm || integration) && (
         <div>
           {integration && (
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={handleSync}
-                  disabled={isSyncing || isPending}
-                >
-                  {isSyncing ? 'Syncing...' : 'Sync Now'}
-                </Button>
-                {integration.lastSyncedAt && (
-                  <span className="text-sm text-foreground/60" suppressHydrationWarning>
-                    Last synced: {new Date(integration.lastSyncedAt).toLocaleString()}
-                  </span>
-                )}
+            <div className="mb-5 rounded-xl border border-border/70 bg-background/35 p-4 md:p-5">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <MailCheck className="size-4 text-primary" />
+                    <h3 className="text-base font-semibold tracking-tight">Mailbox sync</h3>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-success/25 bg-success-bg px-2 py-0.5 text-[11px] font-medium text-success-text">
+                      <span className="size-1.5 rounded-full bg-success" aria-hidden />
+                      Connected
+                    </span>
+                  </div>
+                  <p className="mt-1 truncate text-sm text-muted-foreground">
+                    {integration.email}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleSync}
+                    disabled={isSyncing || isPending}
+                    className="gap-2"
+                  >
+                    <RefreshCw className={`size-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                    {isSyncing ? 'Syncing' : 'Sync now'}
+                  </Button>
+                  <Link
+                    href="/settings/integrations/logs"
+                    className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-2')}
+                  >
+                    <ListChecks className="size-4" />
+                    Review log
+                  </Link>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowConfig(!showConfig)}
+                    className="gap-2 border-border hover:bg-accent hover:text-accent-foreground transition-colors"
+                  >
+                    <Settings2 className="size-4" />
+                    {showConfig ? 'Hide config' : 'Configure'}
+                  </Button>
+                </div>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setShowConfig(!showConfig)}
-                className="border-border hover:bg-accent hover:text-accent-foreground transition-colors"
-              >
-                {showConfig ? 'Hide Configuration' : 'Show Configuration'}
-              </Button>
+
+              <div className="mt-4 grid gap-2 text-sm md:grid-cols-3">
+                <div className="rounded-lg border border-border/50 bg-card/40 p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Last synced</p>
+                  <p className="mt-1 font-medium tabular-nums" suppressHydrationWarning>
+                    {lastSyncedLabel}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/50 bg-card/40 p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Auto-sync</p>
+                  <p className="mt-1 font-medium">
+                    {autoSyncEnabled ? `Every ${autoSyncFrequency} min` : 'Off'}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/50 bg-card/40 p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Next run</p>
+                  <p className="mt-1 font-medium tabular-nums" suppressHydrationWarning>
+                    {autoSyncEnabled ? nextSyncLabel : 'Disabled'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-col gap-3 border-t border-border/60 pt-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Auto-sync</p>
+                  <p className="text-xs text-muted-foreground">
+                    Background scans use the same AI review pipeline as manual syncs.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  {autoSyncEnabled && (
+                    <select
+                      id="autoSyncFrequency"
+                      value={autoSyncFrequency}
+                      onChange={async (e) => {
+                        const newFrequency = parseInt(e.target.value)
+                        setAutoSyncFrequency(newFrequency)
+                        setIsUpdatingAutoSync(true)
+                        try {
+                          const result = await updateAutoSyncSettings(autoSyncEnabled, newFrequency)
+                          if (!result.success) {
+                            setMessage({ type: 'error', text: result.error || 'Failed to update frequency' })
+                          } else {
+                            setMessage({ type: 'success', text: 'Sync frequency updated' })
+                          }
+                        } catch (error) {
+                          setMessage({ type: 'error', text: 'Failed to update frequency' })
+                        } finally {
+                          setIsUpdatingAutoSync(false)
+                        }
+                      }}
+                      disabled={isUpdatingAutoSync}
+                      className="h-9 rounded-md border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1"
+                    >
+                      <option value={15}>Every 15 min</option>
+                      <option value={30}>Every 30 min</option>
+                      <option value={60}>Every hour</option>
+                      <option value={180}>Every 3 hours</option>
+                      <option value={360}>Every 6 hours</option>
+                      <option value={720}>Every 12 hours</option>
+                      <option value={1440}>Every 24 hours</option>
+                    </select>
+                  )}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const newValue = !autoSyncEnabled
+                      setAutoSyncEnabled(newValue)
+                      setIsUpdatingAutoSync(true)
+                      try {
+                        const result = await updateAutoSyncSettings(newValue, autoSyncFrequency)
+                        if (!result.success) {
+                          setAutoSyncEnabled(!newValue)
+                          setMessage({ type: 'error', text: result.error || 'Failed to update auto-sync' })
+                        } else {
+                          setMessage({ type: 'success', text: 'Auto-sync settings updated' })
+                        }
+                      } catch (error) {
+                        setAutoSyncEnabled(!newValue)
+                        setMessage({ type: 'error', text: 'Failed to update auto-sync' })
+                      } finally {
+                        setIsUpdatingAutoSync(false)
+                      }
+                    }}
+                    disabled={isUpdatingAutoSync}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      autoSyncEnabled ? 'bg-primary' : 'bg-muted'
+                    }`}
+                    aria-pressed={autoSyncEnabled}
+                    aria-label="Toggle auto-sync"
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        autoSyncEnabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -365,122 +494,6 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
         </div>
       )}
 
-      {/* Auto-Sync Settings */}
-      {integration && integration.isActive && (
-        <div className="border border-border rounded-lg p-6 bg-card">
-          <div className="flex items-center gap-2 mb-4">
-            <RefreshCw className="size-5 text-primary" />
-            <h3 className="text-lg font-semibold">Auto-Sync</h3>
-          </div>
-          <p className="text-sm text-muted-foreground mb-4">
-            Automatically sync your emails in the background at regular intervals.
-          </p>
-
-          <div className="space-y-4">
-            {/* Toggle */}
-            <div className="flex items-center justify-between">
-              <div>
-                <label htmlFor="autoSyncEnabled" className="text-sm font-medium text-foreground">
-                  Enable Auto-Sync
-                </label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Automatically check for new emails and update jobs
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={async () => {
-                  const newValue = !autoSyncEnabled
-                  setAutoSyncEnabled(newValue)
-                  setIsUpdatingAutoSync(true)
-                  try {
-                    const result = await updateAutoSyncSettings(newValue, autoSyncFrequency)
-                    if (!result.success) {
-                      setAutoSyncEnabled(!newValue) // Revert on error
-                      setMessage({ type: 'error', text: result.error || 'Failed to update auto-sync' })
-                    } else {
-                      setMessage({ type: 'success', text: 'Auto-sync settings updated' })
-                    }
-                  } catch (error) {
-                    setAutoSyncEnabled(!newValue)
-                    setMessage({ type: 'error', text: 'Failed to update auto-sync' })
-                  } finally {
-                    setIsUpdatingAutoSync(false)
-                  }
-                }}
-                disabled={isUpdatingAutoSync}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  autoSyncEnabled ? 'bg-primary' : 'bg-muted'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    autoSyncEnabled ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </div>
-
-            {/* Frequency Selector */}
-            {autoSyncEnabled && (
-              <div>
-                <label htmlFor="autoSyncFrequency" className="block text-sm font-medium mb-2">
-                  Sync Frequency
-                </label>
-                <select
-                  id="autoSyncFrequency"
-                  value={autoSyncFrequency}
-                  onChange={async (e) => {
-                    const newFrequency = parseInt(e.target.value)
-                    setAutoSyncFrequency(newFrequency)
-                    setIsUpdatingAutoSync(true)
-                    try {
-                      const result = await updateAutoSyncSettings(autoSyncEnabled, newFrequency)
-                      if (!result.success) {
-                        setMessage({ type: 'error', text: result.error || 'Failed to update frequency' })
-                      } else {
-                        setMessage({ type: 'success', text: 'Sync frequency updated' })
-                      }
-                    } catch (error) {
-                      setMessage({ type: 'error', text: 'Failed to update frequency' })
-                    } finally {
-                      setIsUpdatingAutoSync(false)
-                    }
-                  }}
-                  disabled={isUpdatingAutoSync}
-                  className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1"
-                >
-                  <option value={15}>Every 15 minutes</option>
-                  <option value={30}>Every 30 minutes</option>
-                  <option value={60}>Every hour</option>
-                  <option value={180}>Every 3 hours</option>
-                  <option value={360}>Every 6 hours</option>
-                  <option value={720}>Every 12 hours</option>
-                  <option value={1440}>Every 24 hours</option>
-                </select>
-              </div>
-            )}
-
-            {/* Status Info */}
-            {integration.lastSyncedAt && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground pt-2 border-t border-border">
-                <Clock className="size-4" />
-                <span suppressHydrationWarning>
-                  Last synced: {new Date(integration.lastSyncedAt).toLocaleString()}
-                </span>
-              </div>
-            )}
-            {autoSyncEnabled && integration.nextSyncAt && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="size-4" />
-                <span suppressHydrationWarning>
-                  Next sync: {new Date(integration.nextSyncAt).toLocaleString()}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
       </div>
     </>
   )
