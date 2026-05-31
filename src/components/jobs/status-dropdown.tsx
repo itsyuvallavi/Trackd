@@ -3,7 +3,6 @@
 import { useState, useTransition, useRef, useLayoutEffect, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
 import { JobStatus } from '@prisma/client'
 import { STATUS_LABELS, STATUS_COLORS, STATUS_DOT_COLOR } from '@/lib/constants'
 import { updateJobStatus } from '@/app/(authenticated)/jobs/actions'
@@ -190,66 +189,54 @@ export function StatusDropdown({
 
       {mounted
         ? createPortal(
-            <AnimatePresence>
-              {isOpen && (
-                <>
-                  <motion.div
-                    key="status-dropdown-backdrop"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.12 }}
-                    className="fixed inset-0 z-[100] touch-none bg-black/20 md:bg-transparent"
-                    aria-hidden
-                    onClick={() => setIsOpen(false)}
-                  />
-                  <motion.div
-                    key="status-dropdown-panel"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
-                    className="!fixed z-[110] w-44 rounded-2xl glass glass-strong overflow-y-auto overscroll-contain shadow-[var(--shadow-lg)]"
-                    style={{
-                      top: position.top,
-                      left: position.left,
-                      maxHeight: position.maxHeight,
-                    }}
-                  >
-                    <div className="p-1">
-                      {statusOptions.map((status) => (
-                        <button
-                          key={status}
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            void handleStatusChange(status)
-                          }}
+            isOpen ? (
+              <>
+                <div
+                  className="fixed inset-0 z-[100] touch-none bg-black/20 md:bg-transparent"
+                  aria-hidden
+                  onClick={() => setIsOpen(false)}
+                />
+                <div
+                  className="!fixed z-[110] w-44 rounded-2xl glass glass-strong overflow-y-auto overscroll-contain shadow-[var(--shadow-lg)] animate-in fade-in duration-100"
+                  style={{
+                    top: position.top,
+                    left: position.left,
+                    maxHeight: position.maxHeight,
+                  }}
+                >
+                  <div className="p-1">
+                    {statusOptions.map((status) => (
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          void handleStatusChange(status)
+                        }}
+                        className={cn(
+                          'flex items-center gap-2 w-full px-3 py-2 text-left text-sm rounded-xl',
+                          'transition-colors duration-150',
+                          'hover:bg-foreground/5 active:bg-foreground/10',
+                          status === currentStatus && 'bg-foreground/5'
+                        )}
+                      >
+                        <span
+                          aria-hidden
                           className={cn(
-                            'flex items-center gap-2 w-full px-3 py-2 text-left text-sm rounded-xl',
-                            'transition-colors duration-150',
-                            'hover:bg-foreground/5 active:bg-foreground/10',
-                            status === currentStatus && 'bg-foreground/5'
+                            'inline-block size-2 rounded-full shrink-0',
+                            STATUS_DOT_COLOR[status]
                           )}
-                        >
-                          <span
-                            aria-hidden
-                            className={cn(
-                              'inline-block size-2 rounded-full shrink-0',
-                              STATUS_DOT_COLOR[status]
-                            )}
-                          />
-                          <span className="text-foreground">
-                            {STATUS_LABELS[status]}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>,
+                        />
+                        <span className="text-foreground">
+                          {STATUS_LABELS[status]}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : null,
             document.body
           )
         : null}

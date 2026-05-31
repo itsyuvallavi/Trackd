@@ -17,7 +17,6 @@ import { ApplicationsHeader } from '@/components/jobs/applications-header'
 import { EmptyState } from '@/components/jobs/empty-state'
 import { ExtensionPopup } from '@/components/jobs/extension-popup'
 import { Tooltip } from '@/components/ui/tooltip'
-import { STATUS_LABELS } from '@/lib/constants'
 import type { JobSource, JobStatus } from '@prisma/client'
 import { jobSourceDisplayName } from '@/lib/job-source-display'
 import { JobCardMobile } from '@/components/jobs/job-card-mobile'
@@ -66,18 +65,12 @@ interface JobsPageContentProps {
   jobs: Job[]
 }
 
-interface DateRange {
-  from: Date | null
-  to: Date | null
-}
-
 export function JobsPageContent({ jobs }: JobsPageContentProps) {
   const [listJobs, setListJobs] = useState<Job[]>(jobs)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isAddUrlModalOpen, setIsAddUrlModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeStatus, setActiveStatus] = useState('all')
-  const [dateRange, setDateRange] = useState<DateRange>({ from: null, to: null })
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkMessage, setBulkMessage] = useState<string | null>(null)
@@ -136,39 +129,8 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
       })
     }
 
-    // Filter by date range
-    if (dateRange.from || dateRange.to) {
-      filtered = filtered.filter(job => {
-        if (!job.createdAt) return true // Include jobs without dates
-
-        const jobDate = new Date(job.createdAt)
-
-        if (dateRange.from && dateRange.to) {
-          const from = new Date(dateRange.from)
-          from.setHours(0, 0, 0, 0)
-          const to = new Date(dateRange.to)
-          to.setHours(23, 59, 59, 999)
-          return jobDate >= from && jobDate <= to
-        }
-
-        if (dateRange.from) {
-          const from = new Date(dateRange.from)
-          from.setHours(0, 0, 0, 0)
-          return jobDate >= from
-        }
-
-        if (dateRange.to) {
-          const to = new Date(dateRange.to)
-          to.setHours(23, 59, 59, 999)
-          return jobDate <= to
-        }
-
-        return true
-      })
-    }
-
     return filtered
-  }, [listJobs, searchQuery, activeStatus, dateRange])
+  }, [listJobs, searchQuery, activeStatus])
 
   const visibleJobIds = useMemo(
     () => filteredJobs.map((job) => job.id),
@@ -210,10 +172,6 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
 
   const handleStatusChange = useCallback((status: string) => {
     setActiveStatus(status)
-  }, [])
-
-  const handleDateRangeChange = useCallback((range: DateRange) => {
-    setDateRange(range)
   }, [])
 
   const applyStatusToJob = useCallback(
@@ -317,10 +275,8 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
             statusCounts={statusCounts}
             onSearchChange={handleSearchChange}
             onStatusChange={handleStatusChange}
-            onDateRangeChange={handleDateRangeChange}
             searchQuery={searchQuery}
             activeStatus={activeStatus}
-            dateRange={dateRange}
             onManualAdd={() => setIsAddModalOpen(true)}
             onUrlAdd={() => setIsAddUrlModalOpen(true)}
             visibleColumns={visibleColumns}

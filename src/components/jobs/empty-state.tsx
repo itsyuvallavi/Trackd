@@ -1,8 +1,6 @@
 'use client'
 
-import { motion } from 'framer-motion'
 import { Briefcase, Link as LinkIcon, Edit3 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 
 interface EmptyStateProps {
   onManualAdd: () => void
@@ -12,21 +10,11 @@ interface EmptyStateProps {
 export function EmptyState({ onManualAdd, onUrlAdd }: EmptyStateProps) {
   return (
     <div className="flex items-center justify-center min-h-[500px]">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="text-center max-w-md px-6"
-      >
+      <div className="text-center max-w-md px-6 animate-in fade-in slide-in-from-bottom-3 duration-300">
         {/* Icon */}
-        <motion.div
-          initial={{ scale: 0.8 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.1, type: 'spring', stiffness: 200 }}
-          className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-6"
-        >
+        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-6">
           <Briefcase className="size-10 text-primary" strokeWidth={1.5} />
-        </motion.div>
+        </div>
 
         {/* Heading */}
         <h2 className="text-2xl font-bold text-foreground mb-3">
@@ -42,14 +30,9 @@ export function EmptyState({ onManualAdd, onUrlAdd }: EmptyStateProps) {
         {/* Action Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           {/* From URL Card */}
-          <motion.button
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+          <button
             onClick={onUrlAdd}
-            className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-border hover:border-primary hover:bg-accent transition-all duration-200 group"
+            className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-border hover:border-primary hover:bg-accent transition-all duration-200 group hover:scale-[1.02] active:scale-[0.98]"
           >
             <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
               <LinkIcon className="size-6 text-primary" />
@@ -60,17 +43,12 @@ export function EmptyState({ onManualAdd, onUrlAdd }: EmptyStateProps) {
                 Paste a job link to auto-fill details
               </div>
             </div>
-          </motion.button>
+          </button>
 
           {/* Manual Entry Card */}
-          <motion.button
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+          <button
             onClick={onManualAdd}
-            className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-border hover:border-primary hover:bg-accent transition-all duration-200 group"
+            className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-border hover:border-primary hover:bg-accent transition-all duration-200 group hover:scale-[1.02] active:scale-[0.98]"
           >
             <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
               <Edit3 className="size-6 text-primary" />
@@ -81,19 +59,14 @@ export function EmptyState({ onManualAdd, onUrlAdd }: EmptyStateProps) {
                 Enter job details manually
               </div>
             </div>
-          </motion.button>
+          </button>
         </div>
 
         {/* Additional Help Text */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.4 }}
-          className="text-xs text-muted-foreground"
-        >
+        <p className="text-xs text-muted-foreground">
           You can also use our Chrome extension to save jobs while browsing
-        </motion.p>
-      </motion.div>
+        </p>
+      </div>
     </div>
   )
 }

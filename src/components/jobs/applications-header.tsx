@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { motion } from 'framer-motion'
 import { Search, Download, ChevronDown } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -16,11 +15,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
-interface DateRange {
-  from: Date | null
-  to: Date | null
-}
-
 interface ApplicationsHeaderProps {
   totalJobs: number
   totalApplications: number
@@ -34,10 +28,8 @@ interface ApplicationsHeaderProps {
   }
   onSearchChange: (query: string) => void
   onStatusChange: (status: string) => void
-  onDateRangeChange: (range: DateRange) => void
   searchQuery: string
   activeStatus: string
-  dateRange: DateRange
   onManualAdd: () => void
   onUrlAdd: () => void
   visibleColumns: Set<ColumnKey>
@@ -50,10 +42,8 @@ export function ApplicationsHeader({
   statusCounts,
   onSearchChange,
   onStatusChange,
-  onDateRangeChange,
   searchQuery,
   activeStatus,
-  dateRange,
   onManualAdd,
   onUrlAdd,
   visibleColumns,
@@ -137,15 +127,7 @@ export function ApplicationsHeader({
                       : "bg-muted text-muted-foreground"
                   )}>{tab.count}</span>
                   {activeStatus === tab.id && (
-                    <motion.div
-                      layoutId="activeTabIndicator"
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground"
-                      transition={{
-                        type: 'spring',
-                        stiffness: 400,
-                        damping: 25,
-                      }}
-                    />
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground" />
                   )}
                 </button>
               ))}
