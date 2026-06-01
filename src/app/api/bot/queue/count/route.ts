@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { countDedupedBotQueueJobs } from '@/lib/bot/queue-count'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -12,19 +11,19 @@ export async function GET() {
     return NextResponse.json({ count: 0, error: 'Unauthorized' }, { status: 401 })
   }
 
-  const jobs = await prisma.job.findMany({
-    where: {
-      userId: user.id,
-      status: 'SAVED',
-      tags: { has: 'bot-approved' },
-    },
-    select: {
-      company: true,
-      title: true,
-    },
-  })
+  const [row] = await prisma.$queryRaw<{ count: bigint }[]>`
+    SELECT COUNT(*)::bigint AS count
+    FROM (
+      SELECT lower(trim(company)) AS company_key, lower(trim(title)) AS title_key
+      FROM "Job"
+      WHERE "userId" = ${user.id}
+        AND status = 'SAVED'::"JobStatus"
+        AND tags @> ARRAY['bot-approved']::text[]
+      GROUP BY lower(trim(company)), lower(trim(title))
+    ) deduped_queue
+  `
 
   return NextResponse.json({
-    count: countDedupedBotQueueJobs(jobs),
+    count: Number(row?.count ?? 0),
   })
 }

@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { BotRun, BotRunStatus } from '@prisma/client'
 import { cn } from '@/lib/utils'
@@ -346,15 +345,9 @@ function StatusBadge({ status }: { status: BotRunStatus }) {
 }
 
 function LocalDateTime({ iso }: { iso: string | Date }) {
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
   return (
     <span suppressHydrationWarning>
-      {mounted ? new Date(iso).toLocaleString() : 'Recent run'}
+      {new Date(iso).toLocaleString()}
     </span>
   )
 }

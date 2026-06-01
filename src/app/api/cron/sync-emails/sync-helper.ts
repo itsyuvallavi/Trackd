@@ -23,41 +23,6 @@ import {
 export { createEmailIdentifier } from '@/lib/email-identifiers'
 
 /**
- * Check if an email has already been processed for a specific job
- */
-async function isEmailAlreadyProcessed(
-  userId: string,
-  jobId: string,
-  emailIdentifier: string
-): Promise<boolean> {
-  // Fetch recent activities for this job and check metadata in memory
-  // This is more reliable than Prisma JSON path queries
-  const recentActivities = await prisma.activity.findMany({
-    where: {
-      userId,
-      jobId,
-      // Only check activities from the last 90 days to limit query size
-      createdAt: {
-        gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
-      },
-    },
-    select: {
-      metadata: true,
-    },
-    take: 100, // Limit to most recent 100 activities
-  })
-  
-  // Check if any activity has the same emailIdentifier
-  return recentActivities.some(activity => {
-    if (!activity.metadata || typeof activity.metadata !== 'object') {
-      return false
-    }
-    const metadata = activity.metadata as { emailIdentifier?: string }
-    return metadata.emailIdentifier === emailIdentifier
-  })
-}
-
-/**
  * Sync emails for a specific user (used by cron, doesn't require auth)
  */
 export async function syncEmailsForUser(userId: string) {
@@ -174,11 +139,12 @@ export async function syncEmailsForUser(userId: string) {
           emailOutcomes.push({
             ...baseOutcome,
             outcome: 'skipped_already_recorded',
-            reason: 'Email identifier was already present in prior sync activity/notification history.',
+            reason: 'Email identifier was already present in prior sync history or the current batch.',
           })
           console.log(`Skipped email "${email.subject}" - already recorded in email sync history`)
           return
         }
+        seenEmailIdentifiers.add(emailIdentifier)
 
         const classified = await classifier.classify(email)
         const classification = summarizeClassification(classified)
@@ -246,30 +212,6 @@ export async function syncEmailsForUser(userId: string) {
           // We have a confident match - update the job
           if (matchedJobId && classified.suggestedStatus) {
             const job = jobsById.get(matchedJobId)
-
-            // Check if this email has already been processed for this job
-            const alreadyProcessed = await isEmailAlreadyProcessed(userId, matchedJobId, emailIdentifier)
-            
-            if (alreadyProcessed) {
-              emailOutcomes.push({
-                ...baseOutcome,
-                outcome: 'duplicate_email',
-                reason: 'Email identifier was already recorded for the matched job activity history.',
-                classification,
-                match,
-                job: job
-                  ? {
-                      id: job.id,
-                      title: job.title,
-                      company: job.company,
-                      previousStatus: job.status,
-                      newStatus: classified.suggestedStatus,
-                    }
-                  : undefined,
-              })
-              console.log(`Skipped duplicate email "${email.subject}" for job ${matchedJobId} (already processed)`)
-              return
-            }
 
             // Only update if it's a status advancement (don't go backwards)
             const shouldUpdate = shouldUpdateStatus(job?.status, classified.suggestedStatus)

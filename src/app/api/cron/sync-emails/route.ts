@@ -20,6 +20,12 @@ export async function GET(request: Request) {
         isActive: true,
         autoSyncEnabled: true,
       },
+      select: {
+        id: true,
+        userId: true,
+        nextSyncAt: true,
+        autoSyncFrequency: true,
+      },
     })
 
     if (integrations.length === 0) {

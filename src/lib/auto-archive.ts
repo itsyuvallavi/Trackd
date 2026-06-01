@@ -34,6 +34,10 @@ export async function archiveInactiveJobs(
         status: { in: ARCHIVABLE_STATUSES },
         updatedAt: { lt: cutoff },
       },
+      select: {
+        id: true,
+        status: true,
+      },
     })
 
     for (const job of jobsToArchive) {

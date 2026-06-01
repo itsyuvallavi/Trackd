@@ -35,6 +35,8 @@ const AddJobFromUrlModal = dynamic(() => import('@/components/jobs/add-job-from-
   ssr: false,
 })
 
+const JOB_RENDER_PAGE_SIZE = 80
+
 // Tokenized status accent bar (left of each row) — drives the redesign's
 // colored hairline. All values are OKLCH variables defined in globals.css.
 const statusColorIndicators: Record<string, string> = {
@@ -65,12 +67,18 @@ interface JobsPageContentProps {
   jobs: Job[]
 }
 
+type IndexedJob = {
+  job: Job
+  searchText: string
+}
+
 export function JobsPageContent({ jobs }: JobsPageContentProps) {
   const [listJobs, setListJobs] = useState<Job[]>(jobs)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isAddUrlModalOpen, setIsAddUrlModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeStatus, setActiveStatus] = useState('all')
+  const [visibleLimit, setVisibleLimit] = useState(JOB_RENDER_PAGE_SIZE)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkMessage, setBulkMessage] = useState<string | null>(null)
@@ -90,11 +98,64 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
     })
   }, [jobs])
 
-  // Filter jobs based on search query, status, and date range
+  const indexedJobs = useMemo<IndexedJob[]>(
+    () =>
+      listJobs.map((job) => {
+        const sourceLabel = jobSourceDisplayName(
+          job.importSource ?? null,
+          job.source as JobSource,
+          job.importJobBoard,
+          { tags: job.tags }
+        )
+
+        return {
+          job,
+          searchText: [
+            job.company,
+            job.title,
+            job.location,
+            job.source,
+            sourceLabel,
+            job.importSource,
+            job.notes,
+          ]
+            .filter(Boolean)
+            .join('\n')
+            .toLowerCase(),
+        }
+      }),
+    [listJobs]
+  )
+
+  const { statusCounts, totalActiveJobs } = useMemo(() => {
+    const counts = {
+      SAVED: 0,
+      APPLIED: 0,
+      INTERVIEW: 0,
+      OFFER: 0,
+      REJECTED: 0,
+      ARCHIVED: 0,
+    }
+    let active = 0
+
+    for (const job of listJobs) {
+      const status = job.status as keyof typeof counts
+      if (status in counts) {
+        counts[status]++
+      }
+      if (isActiveApplicationStatus(job.status)) {
+        active++
+      }
+    }
+
+    return { statusCounts: counts, totalActiveJobs: active }
+  }, [listJobs])
+
+  // Filter jobs based on search query and status.
   // By default, show only real active applications. SAVED jobs are review/queue
   // items and live in their own tab.
   const filteredJobs = useMemo(() => {
-    let filtered = listJobs.filter(job => {
+    let filtered = indexedJobs.filter(({ job }) => {
       if (activeStatus === 'all') {
         return isActiveApplicationStatus(job.status)
       }
@@ -104,37 +165,27 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
 
     // Filter by status
     if (activeStatus !== 'all') {
-      filtered = filtered.filter(job => job.status === activeStatus)
+      filtered = filtered.filter(({ job }) => job.status === activeStatus)
     }
 
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
-      filtered = filtered.filter((job) => {
-        const srcLabel = jobSourceDisplayName(
-          job.importSource ?? null,
-          job.source as JobSource,
-          job.importJobBoard,
-          { tags: job.tags }
-        )
-        return (
-          job.company.toLowerCase().includes(query) ||
-          job.title.toLowerCase().includes(query) ||
-          job.location?.toLowerCase().includes(query) ||
-          job.source.toLowerCase().includes(query) ||
-          srcLabel.toLowerCase().includes(query) ||
-          (job.importSource?.toLowerCase().includes(query) ?? false) ||
-          (job.notes?.toLowerCase().includes(query) ?? false)
-        )
-      })
+      filtered = filtered.filter(({ searchText }) => searchText.includes(query))
     }
 
-    return filtered
-  }, [listJobs, searchQuery, activeStatus])
+    return filtered.map(({ job }) => job)
+  }, [indexedJobs, searchQuery, activeStatus])
+
+  const visibleJobs = useMemo(
+    () => filteredJobs.slice(0, visibleLimit),
+    [filteredJobs, visibleLimit]
+  )
+  const hasMoreFilteredJobs = visibleJobs.length < filteredJobs.length
 
   const visibleJobIds = useMemo(
-    () => filteredJobs.map((job) => job.id),
-    [filteredJobs]
+    () => visibleJobs.map((job) => job.id),
+    [visibleJobs]
   )
   const selectedVisibleIds = useMemo(
     () => visibleJobIds.filter((id) => selectedIds.has(id)),
@@ -144,34 +195,17 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
   const allVisibleSelected =
     visibleJobIds.length > 0 && selectedVisibleCount === visibleJobIds.length
 
-  // Calculate status counts for each explicit tab.
-  const statusCounts = listJobs.reduce((acc, job) => {
-    const status = job.status as keyof typeof acc
-    if (status in acc) {
-      acc[status]++
-    }
-    return acc
-  }, {
-    SAVED: 0,
-    APPLIED: 0,
-    INTERVIEW: 0,
-    OFFER: 0,
-    REJECTED: 0,
-    ARCHIVED: 0,
-  })
-  
   const totalApplications = listJobs.length
-  const totalActiveJobs = listJobs.filter((job) =>
-    isActiveApplicationStatus(job.status)
-  ).length
 
   // Debounced search handler
   const handleSearchChange = useCallback((query: string) => {
     setSearchQuery(query)
+    setVisibleLimit(JOB_RENDER_PAGE_SIZE)
   }, [])
 
   const handleStatusChange = useCallback((status: string) => {
     setActiveStatus(status)
+    setVisibleLimit(JOB_RENDER_PAGE_SIZE)
   }, [])
 
   const applyStatusToJob = useCallback(
@@ -364,7 +398,7 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
             <>
               {/* Mobile: Card View */}
               <div className="md:hidden space-y-2">
-                {filteredJobs.map((job, index) => (
+                {visibleJobs.map((job, index) => (
                   <JobCardMobile
                     key={job.id}
                     job={job}
@@ -442,7 +476,7 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredJobs.map((job) => (
+                  {visibleJobs.map((job) => (
                     <TableRow
                       key={job.id}
                       className={cn(
@@ -558,6 +592,20 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
               </Table>
                 )}
               </div>
+              {hasMoreFilteredJobs && (
+                <div className="mt-4 flex flex-col items-center gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Showing {visibleJobs.length} of {filteredJobs.length} matching applications.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setVisibleLimit((limit) => limit + JOB_RENDER_PAGE_SIZE)}
+                    className="inline-flex items-center rounded-full border border-border/70 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+                  >
+                    Load more
+                  </button>
+                </div>
+              )}
             </>
           )}
       </div>
