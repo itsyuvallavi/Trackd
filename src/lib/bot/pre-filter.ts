@@ -128,7 +128,14 @@ const CITY_COUNTRY_HINTS: Record<string, string> = {
 }
 
 function normalizeRemoteScopeTokens(scope: string): string[] {
-  const tokens = countryTokensFromJobLocationLine(`Remote ${scope}`)
+  const scopeHead = scope.split(/\n|\.|;|:/)[0] ?? scope
+  const directTokens = scopeHead
+    .toLowerCase()
+    .split(/,|\/|\+|\bor\b|\band\b|&/i)
+    .map((token) => token.trim().replace(/^(?:the\s+)?/, ''))
+    .filter((token) => RECOGNIZED_REMOTE_COUNTRY_TOKENS.has(token))
+
+  const tokens = [...directTokens, ...countryTokensFromJobLocationLine(`Remote ${scopeHead}`)]
     .map((token) => token.toLowerCase().trim())
     .filter(Boolean)
     .filter((token) => !BROAD_REMOTE_SCOPE_TOKENS.has(token))
@@ -147,6 +154,8 @@ function countryLimitedRemoteSignals(job: SearchJobResult): string[] {
 
   const patterns = [
     /\bremote(?:ly)?\s*(?:[-–—:/()|]|\s)+(?:from|in|within|across|for|only)?\s*(?:the\s+)?([a-z][a-z\s.'&,/+]{1,80})/gi,
+    /\b(?:location|locations|work\s+location|role\s+location)\s*:?\s*(?:anywhere\s+)?(?:in|within|from|across)\s+([a-z][a-z\s.'&,/+]{2,100})/gi,
+    /\banywhere\s+(?:in|within|across)\s+([a-z][a-z\s.'&,/+]{2,100})/gi,
     /\b(?:candidates?|applicants?)\s+(?:must\s+)?(?:be\s+)?(?:based|located|resident|reside)\s+(?:in|within)\s+([a-z][a-z\s.'&,/+]{2,80})/gi,
   ]
 

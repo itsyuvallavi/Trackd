@@ -112,6 +112,32 @@ describe('preFilterJob', () => {
     expect(result.rejected && result.reason).toContain('Broad Europe/EU remote')
   })
 
+  it('rejects description-level country-limited anywhere roles when only broad Europe/EU remote is targeted', () => {
+    const result = preFilterJob(
+      job({
+        title: 'Fullstack Software Engineer (x/f/m) - Claims Management',
+        company: 'Alan',
+        location: 'Remote',
+        is_remote: true,
+        description:
+          'Location\nAnywhere in France, Belgium, Spain\n\nWork on claims management and refunds with product engineers across backend and frontend systems.',
+      }),
+      config({
+        keywords: ['Full Stack Engineer'],
+        locations: ['Remote', 'Lisbon', 'Europe', 'Porto', 'EU'],
+        remoteOnly: true,
+      })
+    )
+
+    expect(result).toMatchObject({
+      rejected: true,
+      flag: 'wrong_location',
+      score: 20,
+    })
+    expect(result.rejected && result.reason).toContain('france')
+    expect(result.rejected && result.reason).toContain('spain')
+  })
+
   it('allows country-limited remote roles when that country is explicitly targeted', () => {
     expect(
       preFilterJob(

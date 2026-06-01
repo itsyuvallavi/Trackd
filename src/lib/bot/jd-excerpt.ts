@@ -13,6 +13,8 @@
  * `BotConfig.locations` list to decide whether the JD is acceptable.
  */
 
+import { EUROPE_COUNTRIES } from './user-locations'
+
 const HEAD_CHARS = 1400
 /** Hard ceiling for the excerpt sent to the model. */
 const EXCERPT_MAX_CHARS = 3200
@@ -29,6 +31,10 @@ const SENTENCE_SPLIT_RE = /(?<=[.!?])\s+|\n+/
  */
 const REQUIRED_LOCATION_CAPTURE_RE =
   /\b(?:must\s+(?:be|reside|live|work)\s+(?:in|within|from)|(?:based|located)\s+in|require[ds]?\s+to\s+(?:be|live|work)\s+in|eligible\s+to\s+work\s+(?:in|from)|position\s+(?:is\s+)?(?:based\s+in|located\s+in))\s+(?:the\s+)?([a-z][a-z\s.,'-]{2,80})/gi
+const LOCATION_LIST_CAPTURE_RE =
+  /\b(?:location|locations|work\s+location|role\s+location)\s*:?\s*(?:anywhere\s+)?(?:in|within|from|across)\s+([a-z][a-z\s.,'&/+]{2,120})/gi
+const ANYWHERE_LOCATION_CAPTURE_RE =
+  /\banywhere\s+(?:in|within|across)\s+([a-z][a-z\s.,'&/+]{2,120})/gi
 
 const CITY_ONSITE_RE =
   /\b(?:on[-\s]?site|in[-\s]?office|in[-\s]?person|hybrid)\b[^.\n]{0,80}\b(?:required|mandatory|\d+\s*days?\s*(?:per|a)\s*week|every\s+week)\b/i
@@ -198,7 +204,62 @@ function extractRequiredLocations(scanned: string): string[] {
     if (!out.includes(cleaned) && cleaned.length <= 60) out.push(cleaned)
     if (out.length >= 8) break
   }
+
+  const locationCountries = extractCountriesFromLocationList(lower)
+  for (const country of locationCountries) {
+    if (!out.includes(country)) out.push(country)
+    if (out.length >= 8) break
+  }
   return out
+}
+
+function extractCountriesFromLocationList(lower: string): string[] {
+  const out = new Set<string>()
+  const knownCountries = new Set([
+    ...EUROPE_COUNTRIES,
+    'united states',
+    'usa',
+    'us',
+    'canada',
+    'mexico',
+    'brazil',
+    'argentina',
+    'india',
+    'china',
+    'japan',
+    'singapore',
+    'australia',
+    'new zealand',
+    'israel',
+    'united arab emirates',
+  ])
+  const aliases: Record<string, string> = {
+    us: 'united states',
+    usa: 'united states',
+    uk: 'united kingdom',
+    'u.k.': 'united kingdom',
+  }
+
+  const collect = (pattern: RegExp) => {
+    pattern.lastIndex = 0
+    let match: RegExpExecArray | null
+    while ((match = pattern.exec(lower))) {
+      const raw = (match[1] ?? '').split(/\n|\.|;|:/)[0] ?? ''
+      const parts = raw
+        .split(/,|\/|\+|\bor\b|\band\b|&/i)
+        .map((part) => part.trim().replace(/^(?:the\s+)?/, ''))
+        .filter(Boolean)
+      for (const part of parts) {
+        const canonical = aliases[part] ?? part
+        if (knownCountries.has(canonical)) out.add(canonical)
+        if (out.size >= 8) return
+      }
+    }
+  }
+
+  collect(LOCATION_LIST_CAPTURE_RE)
+  collect(ANYWHERE_LOCATION_CAPTURE_RE)
+  return [...out]
 }
 
 function extractOnsiteCityPhrases(scanned: string): string[] {
@@ -245,6 +306,8 @@ function collectSignalSentences(scanned: string): string[] {
 
   const signalPatterns: RegExp[] = [
     /\b(?:must\s+(?:be|reside|live|work)\s+(?:in|within|from)|(?:based|located)\s+in|eligible\s+to\s+work\s+(?:in|from))\b/i,
+    /\b(?:location|locations|work\s+location|role\s+location)\s*:?\s*(?:anywhere\s+)?(?:in|within|from|across)\s+[a-z][a-z\s.,'&/+]{2,120}/i,
+    /\banywhere\s+(?:in|within|across)\s+[a-z][a-z\s.,'&/+]{2,120}/i,
     CITY_ONSITE_RE,
     ONSITE_GENERIC_RE,
     REMOTE_FRIENDLY_RE,
