@@ -1198,6 +1198,55 @@ describe('evaluateJob minScore behavior', () => {
     })
   })
 
+  it('caps customer-facing German presentation requirements when the candidate does not list German', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 75,
+                reasoning:
+                  'The requirements role maps well to the candidate product-engineering background and software development experience.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'Product-engineering, full-stack delivery, and customer workflow experience',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Requirements Engineer - Remote - Customer-Facing - Software Development',
+        description:
+          'Several years of experience in Requirements Engineering, Business Analysis or a similar role within software development.\nStrong communication skills and the confidence to present to customers in German.\nTechnical understanding of software development, ideally with exposure to Java, Spring Boot, Docker and Kubernetes.\nKeywords: Requirements Engineering, Business Analysis, Technical Product Owner, Product Management, German',
+      }),
+      cfg({
+        minScore: 60,
+        keywords: ['Product Manager', 'Requirements Engineer'],
+        spokenLanguages: ['English', 'Hebrew'],
+      }),
+      candidateProfile({
+        summary: 'Product engineer focused on full-stack TypeScript, UX workflows, and AI-assisted tools.',
+        skills: ['React', 'Next.js', 'TypeScript', 'Prisma', 'PostgreSQL', 'Product Management'],
+        languages: ['English', 'Hebrew'],
+      })
+    )
+
+    expect(result.evaluation.score).toBe(28)
+    expect(result.evaluation.shouldApply).toBe(false)
+    expect(result.evaluation.flags).toContain('missing_required_language')
+    expect(result.scoringInputs.languageMismatchClamp).toMatchObject({
+      beforeScore: 75,
+      afterScore: 28,
+    })
+    expect(result.scoringInputs.languageMismatchClamp?.reasons.join(' ')).toContain('German')
+  })
+
   it('caps title-only Java full-stack roles when the resume lacks Java evidence', async () => {
     chatCompletionMock.mockResolvedValue({
       data: {

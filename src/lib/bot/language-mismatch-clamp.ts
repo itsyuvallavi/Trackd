@@ -207,6 +207,14 @@ const TOKEN_ALIASES: Record<string, string> = {
   hi: 'hi',
 }
 
+const LANGUAGE_REQUIREMENT_PATTERN =
+  '(?:english|anglais|hebrew|עברית|french|français|francais|german|deutsch|spanish|español|espanol|italian|italiano|portuguese|português|portugues|dutch|nederlands|polish|swedish|svenska|danish|dansk|norwegian|norsk|finnish|suomi|czech|čeština|cestina|romanian|română|romana|greek|ελληνικά|russian|русск|ukrainian|україн|turkish|türkçe|turkce|arabic|العربية|mandarin|cantonese|chinese|中文|japanese|日本語|korean|한국어|hindi)'
+
+const CUSTOMER_LANGUAGE_REQUIREMENT_RE = new RegExp(
+  `\\b(?:communicat(?:ion|e|ing)|present(?:ing|ation)?|customer-facing|client-facing|customers?|clients?|stakeholders?)\\b[^.\\n]{0,160}\\b(?:in|auf)\\s+${LANGUAGE_REQUIREMENT_PATTERN}\\b`,
+  'i'
+)
+
 /**
  * Maps free-form tags from bot settings ("English", "hebrew", "fr") to canonical codes.
  * Returns null when empty → caller should skip language clamping.
@@ -235,7 +243,8 @@ function requirementContext(text: string): boolean {
     /\b(?:english|anglais|hebrew|עברית|french|français|francais|german|deutsch|spanish|español|espanol|italian|italiano|portuguese|português|portugues|dutch|nederlands|polish|swedish|svenska|danish|dansk|norwegian|norsk|finnish|suomi|czech|čeština|cestina|romanian|română|romana|greek|ελληνικά|russian|русск|ukrainian|україн|turkish|türkçe|turkce|arabic|العربية|mandarin|cantonese|chinese|中文|japanese|日本語|korean|한국어|hindi)[-\s]+(?:speaker|speaking)\b/i.test(
       text
     ) ||
-    /\b(?:both\s+)?(?:written\s+and\s+)?verbal\s*\([^)]*\bmandatory\b/i.test(text)
+    /\b(?:both\s+)?(?:written\s+and\s+)?verbal\s*\([^)]*\bmandatory\b/i.test(text) ||
+    CUSTOMER_LANGUAGE_REQUIREMENT_RE.test(text)
   )
 }
 
