@@ -218,6 +218,10 @@ const LANGUAGE_SKILL_REQUIREMENT_RE = new RegExp(
   `\\b(?:excellent|strong|solid|good|working|professional|business|native|fluent|fluency|proficien(?:t|cy)|spoken|written|verbal|c1|c2|b2)\\b[^.\\n]{0,80}\\b${LANGUAGE_REQUIREMENT_PATTERN}\\b|\\b${LANGUAGE_REQUIREMENT_PATTERN}\\b[^.\\n]{0,80}\\b(?:required|mandatory|must|fluen(?:t|cy)|proficien(?:t|cy)|native|speaker|speaking|language\\s+skills?|written|spoken|verbal|c1|c2|b2)\\b`,
   'i'
 )
+const ROMANCE_LANGUAGE_REQUIREMENT_RE = new RegExp(
+  `\\b(?:exige-se|exigido|exigida|obrigat[oó]rio|obrigat[oó]ria|necess[aá]rio|necess[aá]ria|requisito|flu[eê]ncia|fluente|proficiente|profici[eê]ncia)\\b[^.\\n]{0,120}\\b${LANGUAGE_REQUIREMENT_PATTERN}\\b|\\b${LANGUAGE_REQUIREMENT_PATTERN}\\b[^.\\n]{0,80}\\b(?:falado|falada|escrito|escrita|fluente|obrigat[oó]rio|obrigat[oó]ria|exigido|exigida)\\b`,
+  'i'
+)
 
 /**
  * Maps free-form tags from bot settings ("English", "hebrew", "fr") to canonical codes.
@@ -249,7 +253,8 @@ function requirementContext(text: string): boolean {
     ) ||
     /\b(?:both\s+)?(?:written\s+and\s+)?verbal\s*\([^)]*\bmandatory\b/i.test(text) ||
     CUSTOMER_LANGUAGE_REQUIREMENT_RE.test(text) ||
-    LANGUAGE_SKILL_REQUIREMENT_RE.test(text)
+    LANGUAGE_SKILL_REQUIREMENT_RE.test(text) ||
+    ROMANCE_LANGUAGE_REQUIREMENT_RE.test(text)
   )
 }
 

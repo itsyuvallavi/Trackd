@@ -199,4 +199,30 @@ describe('preFilterJob', () => {
       )
     ).toEqual({ rejected: false })
   })
+
+  it('rejects Portuguese fluency requirements written in Portuguese', () => {
+    const result = preFilterJob(
+      job({
+        title: 'Javascript Developer (React + Node.js)',
+        company: 'Adentis Portugal',
+        location: 'Porto, Portugal',
+        is_remote: false,
+        description:
+          '2 a 4 anos de experiência profissional em desenvolvimento fullstack com React e Node.js. Exige-se fluência em português falado e escrito.',
+      }),
+      config({
+        keywords: ['Full Stack Engineer'],
+        locations: ['Remote', 'Lisbon', 'Europe', 'Porto', 'EU'],
+        spokenLanguages: ['English', 'Hebrew'],
+        remoteOnly: true,
+      })
+    )
+
+    expect(result).toMatchObject({
+      rejected: true,
+      flag: 'missing_required_language',
+      score: 20,
+    })
+    expect(result.rejected && result.reason).toContain('Portuguese')
+  })
 })
