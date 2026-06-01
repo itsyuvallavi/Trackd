@@ -154,4 +154,49 @@ describe('preFilterJob', () => {
       )
     ).toEqual({ rejected: false })
   })
+
+  it('rejects mandatory language requirements before AI scoring', () => {
+    const result = preFilterJob(
+      job({
+        title: 'Requirements Engineer - Customer Facing',
+        location: 'Remote',
+        is_remote: true,
+        description:
+          'Strong communication skills and the confidence to present to customers in German. Work with product and software teams on requirements.',
+      }),
+      config({
+        keywords: ['Requirements Engineer'],
+        locations: ['Remote', 'Europe'],
+        spokenLanguages: ['English', 'Hebrew'],
+        remoteOnly: true,
+      })
+    )
+
+    expect(result).toMatchObject({
+      rejected: true,
+      flag: 'missing_required_language',
+      score: 20,
+    })
+    expect(result.rejected && result.reason).toContain('German')
+  })
+
+  it('allows mandatory language requirements when the language is declared', () => {
+    expect(
+      preFilterJob(
+        job({
+          title: 'Customer-facing Engineer',
+          location: 'Remote',
+          is_remote: true,
+          description:
+            'Strong written and spoken English is required. Build customer-facing full-stack workflow tools.',
+        }),
+        config({
+          keywords: ['Engineer'],
+          locations: ['Remote'],
+          spokenLanguages: ['English', 'Hebrew'],
+          remoteOnly: true,
+        })
+      )
+    ).toEqual({ rejected: false })
+  })
 })

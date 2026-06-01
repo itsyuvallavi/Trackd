@@ -540,7 +540,9 @@ async function evaluateJobWithResolvedProfile(
     ? { ...scoringInputs, stackMismatchClamp: stackClamp.clampMeta }
     : scoringInputs
 
-  const allowedLang = normalizeSpokenLanguageAllowlist(config.spokenLanguages ?? [])
+  const declaredLanguages =
+    config.spokenLanguages?.length ? config.spokenLanguages : resume?.languages ?? []
+  const allowedLang = normalizeSpokenLanguageAllowlist(declaredLanguages)
   const langClamp = applyLanguageMismatchClamp(job, evaluation, threshold, allowedLang)
   evaluation = langClamp.evaluation
   if (langClamp.clampMeta) {

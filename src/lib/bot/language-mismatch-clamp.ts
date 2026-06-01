@@ -214,6 +214,10 @@ const CUSTOMER_LANGUAGE_REQUIREMENT_RE = new RegExp(
   `\\b(?:communicat(?:ion|e|ing)|present(?:ing|ation)?|customer-facing|client-facing|customers?|clients?|stakeholders?)\\b[^.\\n]{0,160}\\b(?:in|auf)\\s+${LANGUAGE_REQUIREMENT_PATTERN}\\b`,
   'i'
 )
+const LANGUAGE_SKILL_REQUIREMENT_RE = new RegExp(
+  `\\b(?:excellent|strong|solid|good|working|professional|business|native|fluent|fluency|proficien(?:t|cy)|spoken|written|verbal|c1|c2|b2)\\b[^.\\n]{0,80}\\b${LANGUAGE_REQUIREMENT_PATTERN}\\b|\\b${LANGUAGE_REQUIREMENT_PATTERN}\\b[^.\\n]{0,80}\\b(?:required|mandatory|must|fluen(?:t|cy)|proficien(?:t|cy)|native|speaker|speaking|language\\s+skills?|written|spoken|verbal|c1|c2|b2)\\b`,
+  'i'
+)
 
 /**
  * Maps free-form tags from bot settings ("English", "hebrew", "fr") to canonical codes.
@@ -244,7 +248,8 @@ function requirementContext(text: string): boolean {
       text
     ) ||
     /\b(?:both\s+)?(?:written\s+and\s+)?verbal\s*\([^)]*\bmandatory\b/i.test(text) ||
-    CUSTOMER_LANGUAGE_REQUIREMENT_RE.test(text)
+    CUSTOMER_LANGUAGE_REQUIREMENT_RE.test(text) ||
+    LANGUAGE_SKILL_REQUIREMENT_RE.test(text)
   )
 }
 
@@ -263,7 +268,7 @@ function requiredLanguagesInChunk(chunk: string, allowed: Set<string>): string[]
   return found
 }
 
-function findMandatoryLanguageGaps(jdRaw: string, allowed: Set<string>): string[] {
+export function findMandatoryLanguageGaps(jdRaw: string, allowed: Set<string>): string[] {
   const jd = jdRaw.slice(0, JD_WINDOW)
   const gaps = new Set<string>()
 

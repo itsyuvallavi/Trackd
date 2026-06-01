@@ -29,13 +29,22 @@ import {
   type UserLocationTokens,
 } from './user-locations'
 import { analyzeJd } from './jd-excerpt'
+import {
+  findMandatoryLanguageGaps,
+  normalizeSpokenLanguageAllowlist,
+} from './language-mismatch-clamp'
 
 export type PreFilterResult =
   | { rejected: false }
   | {
       rejected: true
       score: number
-      flag: 'wrong_location' | 'underqualified' | 'overqualified' | 'career_change'
+      flag:
+        | 'wrong_location'
+        | 'missing_required_language'
+        | 'underqualified'
+        | 'overqualified'
+        | 'career_change'
       reason: string
     }
 
@@ -344,6 +353,26 @@ function checkRemoteWorkPolicy(job: SearchJobResult, config: BotConfig): PreFilt
   return { rejected: false }
 }
 
+function checkLanguageRequirements(job: SearchJobResult, config: BotConfig): PreFilterResult {
+  const allowedLanguages = normalizeSpokenLanguageAllowlist(config.spokenLanguages ?? [])
+  if (!allowedLanguages) return { rejected: false }
+
+  const listingText = [job.title, job.description].filter(Boolean).join('\n')
+  if (!listingText.trim()) return { rejected: false }
+
+  const gaps = findMandatoryLanguageGaps(listingText, allowedLanguages)
+  if (gaps.length === 0) return { rejected: false }
+
+  return {
+    rejected: true,
+    score: 20,
+    flag: 'missing_required_language',
+    reason:
+      `Listing requires ${gaps.join(', ')} but your declared spoken languages are ` +
+      `${config.spokenLanguages.join(', ') || 'none'}.`,
+  }
+}
+
 // ── Public API ────────────────────────────────────────────────────────────
 
 /**
@@ -362,6 +391,9 @@ export function preFilterJob(job: SearchJobResult, config: BotConfig): PreFilter
 
   const remotePolicy = checkRemoteWorkPolicy(job, config)
   if (remotePolicy.rejected) return remotePolicy
+
+  const languageResult = checkLanguageRequirements(job, config)
+  if (languageResult.rejected) return languageResult
 
   return { rejected: false }
 }

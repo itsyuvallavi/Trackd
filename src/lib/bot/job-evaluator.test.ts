@@ -1189,13 +1189,11 @@ describe('evaluateJob minScore behavior', () => {
       })
     )
 
-    expect(result.evaluation.score).toBe(28)
+    expect(result.evaluation.score).toBe(20)
     expect(result.evaluation.shouldApply).toBe(false)
     expect(result.evaluation.flags).toContain('missing_required_language')
-    expect(result.scoringInputs.languageMismatchClamp).toMatchObject({
-      beforeScore: 76,
-      afterScore: 28,
-    })
+    expect(result.scoringInputs.model).toBe('pre-filter')
+    expect(result.evaluation.reasoning).toContain('French')
   })
 
   it('caps customer-facing German presentation requirements when the candidate does not list German', async () => {
@@ -1237,14 +1235,58 @@ describe('evaluateJob minScore behavior', () => {
       })
     )
 
+    expect(result.evaluation.score).toBe(20)
+    expect(result.evaluation.shouldApply).toBe(false)
+    expect(result.evaluation.flags).toContain('missing_required_language')
+    expect(result.scoringInputs.model).toBe('pre-filter')
+    expect(result.evaluation.reasoning).toContain('German')
+  })
+
+  it('uses parsed resume languages for mandatory-language clamps when bot settings are empty', async () => {
+    chatCompletionMock.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                score: 74,
+                reasoning: 'The role aligns with full-stack TypeScript product engineering.',
+                shouldApply: true,
+                flags: ['good_match'],
+                resumeMatch: 'React, TypeScript, backend APIs, and product workflows',
+              }),
+            },
+          },
+        ],
+      },
+    })
+
+    const { evaluateJobWithCandidateProfile } = await import('./job-evaluator')
+    const result = await evaluateJobWithCandidateProfile(
+      job({
+        title: 'Fullstack Product Engineer',
+        description:
+          'Build customer-facing workflows with React and backend APIs. German language skills are required for customer workshops.',
+      }),
+      cfg({
+        minScore: 60,
+        keywords: ['Fullstack Product Engineer'],
+        spokenLanguages: [],
+      }),
+      candidateProfile({
+        summary: 'Full-stack product engineer focused on React, TypeScript, APIs, and UX workflows.',
+        skills: ['React', 'Next.js', 'TypeScript', 'Prisma', 'PostgreSQL'],
+        languages: ['English', 'Hebrew'],
+      })
+    )
+
     expect(result.evaluation.score).toBe(28)
     expect(result.evaluation.shouldApply).toBe(false)
     expect(result.evaluation.flags).toContain('missing_required_language')
     expect(result.scoringInputs.languageMismatchClamp).toMatchObject({
-      beforeScore: 75,
+      beforeScore: 74,
       afterScore: 28,
     })
-    expect(result.scoringInputs.languageMismatchClamp?.reasons.join(' ')).toContain('German')
   })
 
   it('caps title-only Java full-stack roles when the resume lacks Java evidence', async () => {
