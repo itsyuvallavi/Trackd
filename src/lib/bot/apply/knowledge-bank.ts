@@ -6,6 +6,7 @@
 import type { ApplicationProfile } from '@prisma/client'
 import type { ResumeStructuredData } from '@/lib/bot/resume/types'
 import { isUnsafeFullAutomation } from '@/lib/bot/apply/automation-mode'
+import { decryptEmailCredential } from '@/lib/email-credential-crypto'
 
 export interface ApplicationJobContext {
   title: string
@@ -18,7 +19,7 @@ export interface ApplicationJobContext {
 }
 
 function resolvePortalSignupPassword(profile: ApplicationProfile | null): string {
-  const fromProfile = profile?.portalSignupPassword?.trim()
+  const fromProfile = decryptEmailCredential(profile?.portalSignupPassword)?.trim()
   if (fromProfile) return fromProfile
   return process.env.BROWSER_APPLY_PORTAL_PASSWORD?.trim() ?? ''
 }

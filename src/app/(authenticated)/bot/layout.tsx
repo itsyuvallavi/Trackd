@@ -5,6 +5,13 @@ import { BotStatusStrip } from '@/components/bot/bot-status-strip'
 import { BotTabs } from '@/components/bot/bot-tabs'
 import { botSearchHasQueryableBackend } from '@/lib/bot/bot-search-sources'
 import { resolveResumeReadinessSource } from '@/lib/bot/profile-source-labels'
+import { buildSetupReadiness } from '@/lib/bot/setup-readiness'
+import {
+  BOT_SEARCH_TERMS_REQUIRED_MSG,
+  buildSearchableTerms,
+  hasSearchableTerms,
+} from '@/lib/bot/bot-search-readiness'
+import { loadCandidateProfileForEvaluation } from '@/lib/bot/candidate-profile'
 import { prisma } from '@/lib/prisma'
 import { Prisma, type BotSearchFrequency } from '@prisma/client'
 
@@ -88,8 +95,20 @@ export default async function BotLayout({
   ])
 
   const searchServiceConfigured = botSearchHasQueryableBackend()
-  const hasKeywords = (botConfig?.keywords?.length ?? 0) > 0
-  const canRun = searchServiceConfigured && hasKeywords
+  const candidateProfile = botConfig
+    ? await loadCandidateProfileForEvaluation(
+        user.id,
+        botConfig.keywords[0] ?? 'Job Search',
+        botConfig
+      )
+    : null
+  const canRun =
+    searchServiceConfigured &&
+    !!botConfig &&
+    hasSearchableTerms(botConfig, candidateProfile)
+  const searchableTermCount = botConfig
+    ? buildSearchableTerms(botConfig, candidateProfile).length
+    : 0
   const hasIdentityFallback = Boolean(
     appProfile &&
       (appProfile.applicationFullName?.trim() ||
@@ -113,23 +132,31 @@ export default async function BotLayout({
     rawTextCount: resumeReadinessCounts.rawTextCount,
     hasIdentityFallback,
   })
+  const setupReadiness = buildSetupReadiness({
+    resumeCount: resumeReadinessCounts.totalCount,
+    parsedResumeCount: resumeReadinessCounts.parsedCount,
+    applicationProfile: appProfile,
+    keywordCount: botConfig?.keywords?.length ?? 0,
+    searchableTermCount,
+  })
+
   const runDisabledReason = !searchServiceConfigured
     ? 'No search backend configured.'
-    : !hasKeywords
-      ? 'Add at least one keyword in Settings to enable searches.'
+    : !canRun
+      ? BOT_SEARCH_TERMS_REQUIRED_MSG
       : undefined
 
   return (
     <AppShell>
       <div className="flex-1 overflow-auto">
-        <div className="max-w-5xl mx-auto w-full px-4 md:px-8 py-6 md:py-8">
-          <header className="mb-6">
-            <div className="mb-4 flex items-center gap-2.5">
+        <div className="max-w-5xl mx-auto w-full px-3 sm:px-4 md:px-8 py-4 md:py-8">
+          <header className="mb-4 md:mb-6">
+            <div className="mb-3 md:mb-4 flex items-center gap-2.5">
               <span className="relative inline-flex size-2 items-center justify-center">
                 <span className="absolute inset-0 rounded-full bg-primary/40 trackd-breath" />
                 <span className="relative size-2 rounded-full bg-primary" />
               </span>
-              <h1 className="text-3xl font-semibold tracking-tight">Job Search</h1>
+              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Job Search</h1>
             </div>
             <div className="glass glass-subtle rounded-2xl px-4 md:px-5 py-3">
               <BotStatusStrip
@@ -153,11 +180,12 @@ export default async function BotLayout({
                   totalCount: resumeReadinessCounts.totalCount,
                   source: resumeReadinessSource,
                 }}
+                setupReadiness={setupReadiness}
               />
             </div>
           </header>
 
-          <div className="mb-5 border-b border-border/60 pb-2">
+          <div className="mb-4 md:mb-5 border-b border-border/60 pb-2">
             <BotTabs />
           </div>
 

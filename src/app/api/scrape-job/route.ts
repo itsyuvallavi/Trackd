@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { withTimeout } from '@/lib/with-timeout'
 import { fetchPublicHttpText, validatePublicHttpUrl } from '@/lib/url-security'
 import { hashExtensionKey, isValidExtensionKeyFormat } from '@/lib/extension-jobs'
-import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { checkRateLimitAsync, RATE_LIMITS } from '@/lib/rate-limit'
 
 async function handleScrapeJob(request: NextRequest): Promise<NextResponse> {
   try {
@@ -20,7 +20,7 @@ async function handleScrapeJob(request: NextRequest): Promise<NextResponse> {
 
     const keyHash = hashExtensionKey(key)
 
-    const rateLimitResult = checkRateLimit(
+    const rateLimitResult = await checkRateLimitAsync(
       `extension:key:${keyHash.slice(0, 16)}`,
       RATE_LIMITS.extension.limit,
       RATE_LIMITS.extension.window

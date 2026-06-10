@@ -120,14 +120,14 @@ export default async function ProfilePage() {
             </Link>
 
             <Link
-              href="/bot/identity"
+              href="/bot/setup?section=profile"
               className="group glass glass-subtle rounded-2xl px-5 py-4 flex items-center gap-3 hover:bg-foreground/[0.02] transition-colors"
             >
               <Bot className="size-5 text-muted-foreground group-hover:text-foreground transition-colors" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">Application identity</p>
+                <p className="text-sm font-medium">Job Search setup</p>
                 <p className="text-xs text-muted-foreground">
-                  Legal name, work auth used by the apply bot
+                  Resume, profile, and search preferences
                 </p>
               </div>
               <ArrowRight className="size-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />

@@ -11,6 +11,7 @@ export function revalidateBotRunViews(userId: string) {
   revalidatePath('/dashboard')
   revalidatePath('/today')
   revalidatePath('/board')
+  revalidatePath('/bot/setup')
   revalidatePath('/bot/settings')
   revalidatePath('/bot')
   revalidatePath('/bot/runs')

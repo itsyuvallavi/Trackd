@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   verifyTelegramChatId: vi.fn(),
   executeBotRunForConfig: vi.fn(),
   botSearchHasQueryableBackend: vi.fn(),
+  loadCandidateProfileForEvaluation: vi.fn(),
 }))
 
 vi.mock('next/cache', () => ({
@@ -42,6 +43,10 @@ vi.mock('@/lib/bot/bot-search-sources', () => ({
   botSearchHasQueryableBackend: mocks.botSearchHasQueryableBackend,
 }))
 
+vi.mock('@/lib/bot/candidate-profile', () => ({
+  loadCandidateProfileForEvaluation: mocks.loadCandidateProfileForEvaluation,
+}))
+
 function form(overrides: Partial<import('./bot-actions').BotConfigFormData> = {}) {
   return {
     keywords: ['Frontend Engineer'],
@@ -65,6 +70,21 @@ describe('bot settings actions', () => {
     vi.clearAllMocks()
     mocks.requireAuth.mockResolvedValue({ id: 'user_1', email: 'user@example.com' })
     mocks.botConfigUpsert.mockResolvedValue({})
+    mocks.loadCandidateProfileForEvaluation.mockResolvedValue({
+      resume: null,
+      source: {
+        kind: 'none',
+        label: 'No profile source',
+        resumeId: null,
+        resumeLabel: null,
+        parsedResumeUsed: false,
+        rawResumeTextUsed: false,
+        applicationIdentitySupplemented: false,
+        settingsDerivedSignalsUsed: false,
+        settingsSignals: [],
+        limitations: [],
+      },
+    })
   })
 
   afterEach(() => {
@@ -104,6 +124,25 @@ describe('bot settings actions', () => {
         }),
         update: expect.objectContaining({
           telegramChatId: 'user-chat-123',
+        }),
+      }),
+    )
+  })
+
+  it('clears hidden setup fields when saving from the unified setup page', async () => {
+    const { saveBotConfig } = await import('./bot-actions')
+    await saveBotConfig(form({ remoteOnly: true, locations: ['Remote', 'Lisbon'] }), {
+      setupLayout: true,
+    })
+
+    expect(mocks.botConfigUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          excludeCompanies: [],
+          excludeKeywords: [],
+          spokenLanguages: [],
+          salaryMin: null,
+          remoteOnly: false,
         }),
       }),
     )

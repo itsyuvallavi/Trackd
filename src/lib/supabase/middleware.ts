@@ -5,7 +5,8 @@ export async function updateSession(
   request: NextRequest,
   options: { authenticate?: boolean } = {},
 ) {
-  let supabaseResponse = NextResponse.next({ request })
+  const requestHeaders = sanitizedRequestHeaders(request)
+  let supabaseResponse = NextResponse.next({ request: { headers: requestHeaders } })
   const shouldAuthenticate = options.authenticate ?? true
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
@@ -31,7 +32,7 @@ export async function updateSession(
         cookiesToSet.forEach(({ name, value }) => {
           request.cookies.set(name, value)
         })
-        supabaseResponse = NextResponse.next({ request })
+        supabaseResponse = NextResponse.next({ request: { headers: requestHeaders } })
         cookiesToSet.forEach(({ name, value, options }) => {
           supabaseResponse.cookies.set(name, value, options)
         })
@@ -46,3 +47,8 @@ export async function updateSession(
   return { supabaseResponse, user }
 }
 
+function sanitizedRequestHeaders(request: NextRequest): Headers {
+  const headers = new Headers(request.headers)
+  headers.delete('x-middleware-subrequest')
+  return headers
+}

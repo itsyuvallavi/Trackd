@@ -21,17 +21,12 @@ export function SignUpForm() {
     setIsLoading(true)
     setError(null)
 
-    console.log('Starting Google OAuth sign up...')
-    console.log('Redirect URL:', `${window.location.origin}/auth/callback`)
-
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
       },
     })
-
-    console.log('OAuth response:', { data, error })
 
     if (error) {
       console.error('OAuth error:', error)
@@ -46,7 +41,6 @@ export function SignUpForm() {
       // If successful, the browser should redirect automatically
       // If data.url exists, it means Supabase returned a redirect URL
       if (data?.url) {
-        console.log('Redirecting to:', data.url)
         window.location.href = data.url
       } else {
         console.warn('No redirect URL returned from OAuth')
@@ -173,4 +167,3 @@ export function SignUpForm() {
     </div>
   )
 }
-

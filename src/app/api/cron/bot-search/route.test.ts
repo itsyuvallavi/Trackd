@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   executeBotRunForConfig: vi.fn(),
   botSearchHasQueryableBackend: vi.fn(),
   isBotConfigDueForSearch: vi.fn(),
+  loadCandidateProfileForEvaluation: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -27,6 +28,10 @@ vi.mock('@/lib/bot/search-schedule', () => ({
   isBotConfigDueForSearch: mocks.isBotConfigDueForSearch,
 }))
 
+vi.mock('@/lib/bot/candidate-profile', () => ({
+  loadCandidateProfileForEvaluation: mocks.loadCandidateProfileForEvaluation,
+}))
+
 function request(headers: HeadersInit = {}) {
   return new Request('https://trackd.test/api/cron/bot-search', { headers })
 }
@@ -36,6 +41,9 @@ function botConfig(id: string) {
     id,
     userId: `user_${id}`,
     keywords: ['Engineer'],
+    locations: ['Remote'],
+    remoteOnly: false,
+    searchFrequency: 'DAILY',
   }
 }
 
@@ -46,6 +54,21 @@ describe('/api/cron/bot-search', () => {
     vi.stubEnv('CRON_SECRET', 'cron-secret')
     mocks.botSearchHasQueryableBackend.mockReturnValue(true)
     mocks.executeBotRunForConfig.mockResolvedValue({ jobsNew: 2, jobsApproved: 1 })
+    mocks.loadCandidateProfileForEvaluation.mockResolvedValue({
+      resume: null,
+      source: {
+        kind: 'none',
+        label: 'No profile source',
+        resumeId: null,
+        resumeLabel: null,
+        parsedResumeUsed: false,
+        rawResumeTextUsed: false,
+        applicationIdentitySupplemented: false,
+        settingsDerivedSignalsUsed: false,
+        settingsSignals: [],
+        limitations: [],
+      },
+    })
   })
 
   afterEach(() => {
@@ -75,10 +98,13 @@ describe('/api/cron/bot-search', () => {
 
     expect(response.status).toBe(200)
     expect(mocks.findMany).toHaveBeenCalledWith({
-      where: { isActive: true, keywords: { isEmpty: false } },
+      where: { isActive: true },
     })
     expect(mocks.executeBotRunForConfig).toHaveBeenCalledTimes(1)
-    expect(mocks.executeBotRunForConfig).toHaveBeenCalledWith(dueConfig, 'cron')
+    expect(mocks.executeBotRunForConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'due', userId: 'user_due' }),
+      'cron'
+    )
     await expect(response.json()).resolves.toEqual({
       usersProcessed: 1,
       results: {

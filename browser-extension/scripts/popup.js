@@ -78,6 +78,7 @@ const successView = document.getElementById('successView')
 const footer = document.getElementById('footer')
 const connectionStatus = document.getElementById('connectionStatus')
 const messageBox = document.getElementById('messageBox')
+const connectMessageBox = document.getElementById('connectMessageBox')
 
 // Inputs
 const keyInput = document.getElementById('keyInput')
@@ -95,6 +96,7 @@ const disconnectBtn = document.getElementById('disconnectBtn')
 const viewInTrackdBtn = document.getElementById('viewInTrackdBtn')
 const saveAnotherBtn = document.getElementById('saveAnotherBtn')
 const importUrlBtn = document.getElementById('importUrlBtn')
+const pasteKeyBtn = document.getElementById('pasteKeyBtn')
 
 // State
 let currentJobData = null
@@ -192,6 +194,16 @@ function hideMessage() {
   messageBox.classList.add('hidden')
 }
 
+function showConnectMessage(type, text) {
+  connectMessageBox.className = `message ${type}`
+  connectMessageBox.textContent = text
+  connectMessageBox.classList.remove('hidden')
+}
+
+function hideConnectMessage() {
+  connectMessageBox.classList.add('hidden')
+}
+
 // Button state helpers
 function setButtonLoading(button, loadingText) {
   button.disabled = true
@@ -203,12 +215,60 @@ function setButtonNormal(button, normalText) {
   button.innerHTML = normalText
 }
 
+function normalizeExtensionKey(value) {
+  return (value || '').trim().replace(/\s+/g, '')
+}
+
+function setExtensionKeyInput(value) {
+  keyInput.value = normalizeExtensionKey(value)
+  hideConnectMessage()
+}
+
+keyInput?.addEventListener('paste', (event) => {
+  const pasted = event.clipboardData?.getData('text')
+  if (!pasted) return
+  event.preventDefault()
+  setExtensionKeyInput(pasted)
+})
+
+keyInput?.addEventListener('input', () => {
+  const normalized = normalizeExtensionKey(keyInput.value)
+  if (normalized !== keyInput.value) {
+    keyInput.value = normalized
+  }
+})
+
+pasteKeyBtn?.addEventListener('click', async () => {
+  hideConnectMessage()
+
+  try {
+    if (!navigator.clipboard?.readText) {
+      throw new Error('Clipboard access is not available in this browser.')
+    }
+
+    const text = await navigator.clipboard.readText()
+    if (!text.trim()) {
+      showConnectMessage('warning', 'Clipboard is empty.')
+      return
+    }
+
+    setExtensionKeyInput(text)
+    keyInput.focus()
+  } catch (error) {
+    console.error('Clipboard read failed:', error)
+    showConnectMessage('warning', 'Atlas blocked clipboard access. Click the field and use Edit → Paste, or type the key manually.')
+    keyInput.focus()
+  }
+})
+
 // Connect
 connectBtn.addEventListener('click', async () => {
-  const key = keyInput.value.trim()
+  const key = normalizeExtensionKey(keyInput.value)
+  keyInput.value = key
+  hideConnectMessage()
 
   if (!key.startsWith('tk_')) {
-    showMessage('error', 'Invalid key format. Key should start with "tk_"')
+    showConnectMessage('error', 'Invalid key format. Key should start with "tk_".')
     return
   }
 
@@ -228,11 +288,11 @@ connectBtn.addEventListener('click', async () => {
       showConnectedState(data.email)
       await loadJobData()
     } else {
-      showMessage('error', data.error || 'Invalid key. Please check and try again.')
+      showConnectMessage('error', data.error || 'Invalid key. Please check and try again.')
     }
   } catch (err) {
     console.error('Connection error:', err)
-    showMessage('error', err.message || 'Unable to connect. Check your internet connection.')
+    showConnectMessage('error', err.message || 'Unable to connect. Check your internet connection.')
   } finally {
     setButtonNormal(connectBtn, 'Connect')
   }

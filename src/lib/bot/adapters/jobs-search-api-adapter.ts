@@ -14,7 +14,7 @@
  *   JOBS_SEARCH_LINKEDIN_DESC=1 — set linkedin_fetch_description true
  */
 
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 
 import type { SearchJobResult, SearchProviderPassMeta } from '../types'
 import { extractRapidApiJobRows, normalizeRapidApiJobFromUnknownRow } from './rapidapi-linkedin-job-json'
@@ -50,6 +50,19 @@ function cellStr(v: unknown): string | undefined {
   return undefined
 }
 
+function excelCellValue(value: ExcelJS.CellValue): unknown {
+  if (value == null) return null
+  if (value instanceof Date) return value.toISOString()
+  if (typeof value !== 'object') return value
+  if ('text' in value && typeof value.text === 'string') return value.text
+  if ('hyperlink' in value && typeof value.hyperlink === 'string') return value.hyperlink
+  if ('richText' in value && Array.isArray(value.richText)) {
+    return value.richText.map((part) => part.text).join('')
+  }
+  if ('result' in value) return value.result
+  return String(value)
+}
+
 /** Map heterogeneous Excel column headers onto fields `normalizeRapidApiJobRow` understands. */
 function augmentRowFromExcelHeaders(row: Record<string, unknown>): Record<string, unknown> {
   const lc = new Map<string, unknown>()
@@ -80,13 +93,33 @@ function augmentRowFromExcelHeaders(row: Record<string, unknown>): Record<string
   }
 }
 
-function jobRowsFromXlsx(buffer: ArrayBuffer): { rows: Record<string, unknown>[]; error?: string } {
+async function jobRowsFromXlsx(buffer: ArrayBuffer): Promise<{ rows: Record<string, unknown>[]; error?: string }> {
   try {
-    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true })
-    const name = wb.SheetNames[0]
-    if (!name) return { rows: [], error: 'Jobs Search API: empty Excel workbook' }
-    const sheet = wb.Sheets[name]
-    const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null })
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(buffer)
+    const sheet = wb.worksheets[0]
+    if (!sheet) return { rows: [], error: 'Jobs Search API: empty Excel workbook' }
+
+    const headers: string[] = []
+    sheet.getRow(1).eachCell({ includeEmpty: false }, (cell, colNumber) => {
+      const header = cellStr(excelCellValue(cell.value))
+      if (header) headers[colNumber] = header
+    })
+
+    const raw: Record<string, unknown>[] = []
+    sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      if (rowNumber === 1) return
+      const record: Record<string, unknown> = {}
+      for (let colNumber = 1; colNumber < headers.length; colNumber += 1) {
+        const header = headers[colNumber]
+        if (!header) continue
+        record[header] = excelCellValue(row.getCell(colNumber).value)
+      }
+      if (Object.values(record).some((value) => value != null && String(value).trim())) {
+        raw.push(record)
+      }
+    })
+
     const rows = raw.map((r) => augmentRowFromExcelHeaders(r))
     return { rows }
   } catch (e) {
@@ -200,7 +233,7 @@ export async function searchJobsSearchApiExcel(
     let rows: Record<string, unknown>[]
 
     if (isXlsxBuffer(bytes)) {
-      const parsed = jobRowsFromXlsx(buf)
+      const parsed = await jobRowsFromXlsx(buf)
       if (parsed.error) return { jobs: [], error: parsed.error }
       rows = parsed.rows
     } else {

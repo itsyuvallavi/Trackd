@@ -9,7 +9,7 @@ Complete testing checklist for the Trackd Chrome Extension.
    cd my-app
    bun run dev
    ```
-   Server should be running at `http://localhost:3000`
+   Server should be running at `http://localhost:3001`
 
 2. **Set local API URL** (if testing locally)
    - Open the extension service/popup console
@@ -32,7 +32,7 @@ Complete testing checklist for the Trackd Chrome Extension.
 ### 1. Initial Connection Flow
 
 #### Test 1.1: Generate Extension Key
-- [ ] Navigate to `http://localhost:3000/settings/integrations`
+- [ ] Navigate to `http://localhost:3001/settings/integrations`
 - [ ] Click "Generate Extension Key"
 - [ ] Verify key appears (format: `tk_...`)
 - [ ] Verify "Copy" button works

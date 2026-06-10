@@ -8,6 +8,106 @@
   // Attach to global namespace so content.js can call it
   window.TrackdExtractors = window.TrackdExtractors || {};
 
+  const WORK_ARRANGEMENTS = new Set(['remote', 'hybrid', 'on-site', 'onsite', 'on site'])
+  const LOCATION_SCAN_LIMIT = 12000
+
+  function isWorkArrangement(text) {
+    return WORK_ARRANGEMENTS.has((text || '').trim().toLowerCase())
+  }
+
+  function normalizeLocationText(text) {
+    const cleaned = (text || '')
+      .replace(/\s+/g, ' ')
+      .replace(/\s*[·•|]\s*.*/, '')
+      .trim()
+
+    if (!cleaned || isWorkArrangement(cleaned)) return ''
+
+    const parts = cleaned
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)
+
+    // LinkedIn often renders "Lisbon, Lisbon, Portugal"; keep the useful
+    // city/country value instead of persisting the duplicate district.
+    if (parts.length >= 3 && parts[0].toLowerCase() === parts[1].toLowerCase()) {
+      return [parts[0], ...parts.slice(2)].join(', ')
+    }
+
+    return cleaned
+  }
+
+  function looksLikeLocation(text) {
+    const normalized = normalizeLocationText(text)
+    if (!normalized || normalized.length > 120) return false
+
+    const lower = normalized.toLowerCase()
+    if (
+      lower.includes('applicants') ||
+      lower.includes('reposted') ||
+      lower.includes('promoted') ||
+      lower.includes('actively') ||
+      lower.includes('hours') ||
+      lower.includes('days') ||
+      lower.includes('week ago') ||
+      lower.includes('application submitted')
+    ) {
+      return false
+    }
+
+    // Real locations usually include comma-separated city/region/country. This
+    // accepts international locations like "Lisbon, Lisbon, Portugal" in
+    // addition to US-style "Denver, CO".
+    return /^[A-Za-zÀ-ÖØ-öø-ÿ' .-]+,\s*[A-Za-zÀ-ÖØ-öø-ÿ' .-]+(?:,\s*[A-Za-zÀ-ÖØ-öø-ÿ' .-]+)?$/.test(normalized)
+  }
+
+  function locationFromCandidate(text) {
+    const candidate = normalizeLocationText(text)
+    return looksLikeLocation(candidate) ? candidate : ''
+  }
+
+  function extractLocationFromText(text) {
+    const source = (text || '').slice(0, LOCATION_SCAN_LIMIT)
+    const chunks = source
+      .split(/[\n·•|]/)
+      .map((chunk) => chunk.trim())
+      .filter(Boolean)
+
+    for (const chunk of chunks) {
+      const explicitMatch = chunk.match(/location[:\s]+(.+)/i)
+      const explicit = explicitMatch ? locationFromCandidate(explicitMatch[1]) : ''
+      if (explicit) return explicit
+
+      const candidate = locationFromCandidate(chunk)
+      if (candidate) return candidate
+    }
+
+    return ''
+  }
+
+  function extractTopCardLocation(topCard) {
+    const selectors = [
+      '.job-details-jobs-unified-top-card__tertiary-description-container span.tvm__text',
+      '.job-details-jobs-unified-top-card__primary-description-container span.tvm__text',
+      '.job-details-jobs-unified-top-card__tertiary-description-container',
+      '.job-details-jobs-unified-top-card__primary-description-container',
+    ]
+
+    for (const selector of selectors) {
+      const elements = topCard.querySelectorAll(selector)
+      for (const element of elements) {
+        const text = element.textContent?.trim() || ''
+        const candidate = normalizeLocationText(text)
+        if (looksLikeLocation(candidate)) return candidate
+
+        const embedded = extractLocationFromText(text)
+        if (embedded) return embedded
+      }
+    }
+
+    return extractLocationFromText(topCard.textContent || '')
+  }
+
   // Helper function to wait for an element to appear
   function waitForElement(selectors, timeout = 3000) {
     return new Promise((resolve) => {
@@ -128,19 +228,11 @@
 
     // Look for location in page content
     if (!data.location) {
-      const locationPatterns = [
-        /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z]{2})\s*\(/,
-        /Location[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z]{2})/i,
-        /\b(Remote|Hybrid|On-site)\b/i
-      ]
       const pageText = document.body.textContent || ''
-      for (const pattern of locationPatterns) {
-        const match = pageText.match(pattern)
-        if (match) {
-          data.location = match[1]
-          console.log('[Trackd LinkedIn Debug] Fallback location:', data.location)
-          break
-        }
+      const location = extractLocationFromText(pageText)
+      if (location) {
+        data.location = location
+        console.log('[Trackd LinkedIn Debug] Fallback location:', data.location)
       }
     }
 
@@ -288,12 +380,18 @@
         console.log('[Trackd LinkedIn Debug] Found salary:', data.salary)
       }
       
-      // Quick scan for location (Remote, city names, etc.)
-      const locationMatch = pageText.match(/\b(Remote|Hybrid|On-site)\b/i) ||
-                           pageText.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z]{2})\b/)
-      if (locationMatch) {
-        data.location = locationMatch[1] || locationMatch[0]
-        console.log('[Trackd LinkedIn Debug] Found location:', data.location)
+      // Quick DOM-only location scan. Avoid full-page regex work here because
+      // LinkedIn pages can be very large and this path must return quickly.
+      const quickTopCard = document.querySelector('.job-details-jobs-unified-top-card__container--two-pane') ||
+                           document.querySelector('.jobs-unified-top-card') ||
+                           document.querySelector('.job-details-jobs-unified-top-card') ||
+                           document.querySelector('[class*="jobs-unified-top-card"]')
+      if (quickTopCard) {
+        const quickLocation = extractTopCardLocation(quickTopCard)
+        if (quickLocation) {
+          data.location = quickLocation
+          console.log('[Trackd LinkedIn Debug] Found location:', data.location)
+        }
       }
       
       console.log('[Trackd LinkedIn Debug] Returning early with data:', JSON.stringify(data))
@@ -435,63 +533,26 @@
       }
     }
 
-    // LOCATION - Look in tertiary description container
-    // LinkedIn shows location in: span.tvm__text.tvm__text--low-emphasis with "Denver, CO"
-    // It's in: div.job-details-jobs-unified-top-card__tertiary-description-container
-    const tertiaryDesc = topCard.querySelector('.job-details-jobs-unified-top-card__tertiary-description-container')
-    
-    if (tertiaryDesc) {
-      // Look for tvm__text spans that contain location patterns (city, state)
-      const tvmSpans = tertiaryDesc.querySelectorAll('span.tvm__text')
-      console.log('[Trackd LinkedIn Debug] Found', tvmSpans.length, 'tvm spans in tertiary description')
-      
-      for (const span of tvmSpans) {
-        const text = span.textContent?.trim() || ''
-        console.log('[Trackd LinkedIn Debug] TVM span text:', text)
-        
-        // Skip if it's empty or too long
-        if (!text || text.length === 0 || text.length > 100) continue
-        
-        // Skip if it's exactly the company name
-        if (data.company && text === data.company) {
-          console.log('[Trackd LinkedIn Debug] Skipping - matches company name')
-          continue
-        }
-        
-        // Look for location patterns: "City, ST" 
-        const cityStatePattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),\s*[A-Z]{2}/i
-        
-        // Check if this is a location (city, state pattern)
-        // Skip metadata text like "Reposted", "Over 100 applicants", etc.
-        if (cityStatePattern.test(text)) {
-          // Make sure it's not metadata text
-          if (!text.toLowerCase().includes('applicants') && 
-              !text.toLowerCase().includes('reposted') && 
-              !text.toLowerCase().includes('promoted') &&
-              !text.toLowerCase().includes('actively') &&
-              !text.toLowerCase().includes('hours') &&
-              !text.toLowerCase().includes('days')) {
-            data.location = text
-            console.log('[Trackd LinkedIn Debug] Location extracted from TVM:', data.location)
-            break
-          }
-        }
-      }
+    // LOCATION - Prefer LinkedIn's top-card city line. Do not persist
+    // work-arrangement badges like Hybrid/On-site as the Location field.
+    data.location = extractTopCardLocation(topCard)
+    if (data.location) {
+      console.log('[Trackd LinkedIn Debug] Location extracted from top card:', data.location)
     }
 
-    // Fallback: look for "Remote" in the fit-level-preferences buttons
+    // Fallback: only store "Remote" when LinkedIn does not expose a city.
+    // Hybrid/On-site are work arrangements, not locations.
     if (!data.location) {
       const fitPrefs = topCard.querySelector('.job-details-fit-level-preferences')
       if (fitPrefs) {
         const buttons = fitPrefs.querySelectorAll('button')
         for (const button of buttons) {
           const buttonText = button.textContent?.trim() || ''
-          if (buttonText && /Remote|Hybrid|On-site/i.test(buttonText)) {
-            // Extract just "Remote", "Hybrid", etc.
-            const remoteMatch = buttonText.match(/(Remote|Hybrid|On-site)/i)
+          if (buttonText && /\bRemote\b/i.test(buttonText)) {
+            const remoteMatch = buttonText.match(/\bRemote\b/i)
             if (remoteMatch) {
               data.location = remoteMatch[0]
-              console.log('[Trackd LinkedIn Debug] Location from button (remote):', data.location)
+              console.log('[Trackd LinkedIn Debug] Location from remote button:', data.location)
               break
             }
           }

@@ -34,7 +34,7 @@ export default async function BoardPage() {
 
   // Cached list (tag-invalidated); no per-row activities to avoid huge payloads.
   // Board cards show "last activity" when present — empty until we add lazy load.
-  const jobs = await getUserJobs(user.id, 200)
+  const jobs = await getUserJobs(user.id)
   const withActivities = jobs.map(
     (j) =>
       ({

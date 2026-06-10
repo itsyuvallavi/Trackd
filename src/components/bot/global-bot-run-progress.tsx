@@ -132,8 +132,17 @@ export function GlobalBotRunProgress() {
     let cancelled = false
     const runId = run.id
     const interval = window.setInterval(async () => {
-      const payload = await fetchJson<RunSnapshot>(`/api/bot/run/${encodeURIComponent(runId)}`)
-      if (cancelled || !payload) return
+      const response = await fetch(`/api/bot/run/${encodeURIComponent(runId)}`, { cache: 'no-store' })
+      if (cancelled) return
+      if (response.status === 404) {
+        setRun(null)
+        window.dispatchEvent(new CustomEvent(BOT_RUN_COMPLETE_EVENT))
+        window.dispatchEvent(new CustomEvent(NOTIFICATIONS_REFRESH_EVENT))
+        return
+      }
+      if (!response.ok) return
+      const payload = (await response.json().catch(() => null)) as RunSnapshot | null
+      if (!payload) return
 
       setRun(payload)
       if (payload.status !== 'RUNNING') {

@@ -9,6 +9,11 @@ import {
 } from '@/lib/bot/execute-bot-run'
 import { enqueueManualBotRun } from '@/lib/bot/manual-run-queue'
 import { revalidateBotRunViews } from '@/lib/bot/revalidate-bot-run-views'
+import {
+  BOT_SEARCH_TERMS_REQUIRED_MSG,
+  hasSearchableTerms,
+} from '@/lib/bot/bot-search-readiness'
+import { loadCandidateProfileForEvaluation } from '@/lib/bot/candidate-profile'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -31,9 +36,14 @@ export async function POST() {
     )
   }
 
-  if (config.keywords.length === 0) {
+  const candidateProfile = await loadCandidateProfileForEvaluation(
+    user.id,
+    config.keywords[0] ?? 'Job Search',
+    config
+  )
+  if (!hasSearchableTerms(config, candidateProfile)) {
     return NextResponse.json(
-      { success: false, error: 'Add at least one search keyword before running.' },
+      { success: false, error: BOT_SEARCH_TERMS_REQUIRED_MSG },
       { status: 400 }
     )
   }

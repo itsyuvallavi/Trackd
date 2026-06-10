@@ -1,6 +1,9 @@
 /**
- * In-memory rate limiting implementation
- * Uses sliding window algorithm with automatic cleanup
+ * Rate limiting helpers.
+ *
+ * `checkRateLimit` is intentionally in-memory for edge/proxy use only.
+ * API routes should use `checkRateLimitAsync`, which persists counters in Postgres
+ * so limits cannot be bypassed by landing on a different serverless instance.
  */
 
 interface RateLimitEntry {
@@ -93,6 +96,58 @@ export function checkRateLimit(
 }
 
 /**
+ * Durable fixed-window rate limit for server-side API routes.
+ * Falls back to the proxy in-memory limiter only if the database is unavailable,
+ * so user flows fail soft while still retaining a local throttle.
+ */
+export async function checkRateLimitAsync(
+  identifier: string,
+  limit: number,
+  windowSeconds: number
+): Promise<RateLimitResult> {
+  const now = new Date()
+  const nowMs = now.getTime()
+  const resetAt = new Date(nowMs + windowSeconds * 1000)
+  const key = `${identifier}:${limit}:${windowSeconds}`
+
+  try {
+    const { prisma } = await import('@/lib/prisma')
+
+    const counter = await prisma.$transaction(async (tx) => {
+      const existing = await tx.rateLimitCounter.findUnique({
+        where: { key },
+        select: { count: true, resetAt: true },
+      })
+
+      if (!existing || existing.resetAt.getTime() <= nowMs) {
+        return tx.rateLimitCounter.upsert({
+          where: { key },
+          create: { key, count: 1, resetAt },
+          update: { count: 1, resetAt },
+          select: { count: true, resetAt: true },
+        })
+      }
+
+      return tx.rateLimitCounter.update({
+        where: { key },
+        data: { count: { increment: 1 } },
+        select: { count: true, resetAt: true },
+      })
+    })
+
+    const remaining = Math.max(0, limit - counter.count)
+    return {
+      allowed: counter.count <= limit,
+      remaining,
+      resetAt: counter.resetAt.getTime(),
+    }
+  } catch (error) {
+    console.warn('[rate-limit] durable limiter unavailable:', error instanceof Error ? error.message : error)
+    return checkRateLimit(identifier, limit, windowSeconds)
+  }
+}
+
+/**
  * Get rate limit info without incrementing count
  * Useful for checking remaining requests
  */
@@ -130,4 +185,3 @@ export const RATE_LIMITS = {
   extension: { limit: 50, window: 60 }, // 50 req/min
   auth: { limit: 5, window: 60 }, // 5 req/min
 } as const
-

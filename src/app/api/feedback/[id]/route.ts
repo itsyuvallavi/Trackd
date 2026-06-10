@@ -1,8 +1,7 @@
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { FeedbackStatus } from '@prisma/client'
-
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'info@yuvallavi.com'
+import { isAdminEmail } from '@/lib/admin'
 
 export async function PATCH(
   request: Request,
@@ -12,7 +11,7 @@ export async function PATCH(
     const user = await requireAuth()
 
     // Check if user is admin
-    if (user.email !== ADMIN_EMAIL) {
+    if (!isAdminEmail(user.email)) {
       return Response.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
@@ -58,7 +57,7 @@ export async function DELETE(
     const user = await requireAuth()
 
     // Check if user is admin
-    if (user.email !== ADMIN_EMAIL) {
+    if (!isAdminEmail(user.email)) {
       return Response.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
@@ -81,4 +80,3 @@ export async function DELETE(
     )
   }
 }
-

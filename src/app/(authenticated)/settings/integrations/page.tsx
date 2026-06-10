@@ -5,7 +5,6 @@ import { SyncHistory } from '@/components/email/sync-history'
 import { AppShell } from '@/components/layout/app-shell'
 import { requireAuth } from '@/lib/auth'
 import { OAuthCallbackHandler } from '@/components/email/oauth-callback-handler'
-import { serializeForClient } from '@/lib/serialize-for-client'
 import Link from 'next/link'
 
 export const maxDuration = 300
@@ -16,6 +15,20 @@ export default async function IntegrationsPage() {
   const [integration, extensionKey] = await Promise.all([
     prisma.emailIntegration.findUnique({
       where: { userId: user.id },
+      select: {
+        id: true,
+        provider: true,
+        email: true,
+        imapHost: true,
+        imapPort: true,
+        imapUsername: true,
+        isActive: true,
+        lastSyncedAt: true,
+        lastError: true,
+        autoSyncEnabled: true,
+        autoSyncFrequency: true,
+        nextSyncAt: true,
+      },
     }),
     prisma.extensionKey.findUnique({
       where: { userId: user.id },
@@ -27,7 +40,11 @@ export default async function IntegrationsPage() {
   ])
 
   const integrationForClient = integration
-    ? serializeForClient(integration)
+    ? {
+        ...integration,
+        lastSyncedAt: integration.lastSyncedAt?.toISOString() ?? null,
+        nextSyncAt: integration.nextSyncAt?.toISOString() ?? null,
+      }
     : null
 
   return (

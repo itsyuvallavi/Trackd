@@ -141,7 +141,7 @@ export async function syncEmailsForUser(userId: string) {
             outcome: 'skipped_already_recorded',
             reason: 'Email identifier was already present in prior sync history or the current batch.',
           })
-          console.log(`Skipped email "${email.subject}" - already recorded in email sync history`)
+          console.log('Skipped already-recorded email during sync')
           return
         }
         seenEmailIdentifiers.add(emailIdentifier)
@@ -149,7 +149,9 @@ export async function syncEmailsForUser(userId: string) {
         const classified = await classifier.classify(email)
         const classification = summarizeClassification(classified)
         
-        console.log(`Email "${email.subject}": type=${classified.type}, confidence=${classified.confidence}%, jobInfo=`, classified.jobInfo)
+        console.log(
+          `Email classified: type=${classified.type}, confidence=${classified.confidence}%, hasJobInfo=${Boolean(classified.jobInfo)}`
+        )
 
         // Check if AI says we should process this email
         if ('shouldProcess' in classified.metadata && classified.metadata.shouldProcess === false) {
@@ -161,7 +163,7 @@ export async function syncEmailsForUser(userId: string) {
             reason: 'AI classifier marked shouldProcess=false.',
             classification,
           })
-          console.log(`Skipped email "${email.subject}" - AI determined it's not job-related (shouldProcess=false)`)
+          console.log('Skipped non-job email during sync')
           return
         }
 
@@ -175,7 +177,7 @@ export async function syncEmailsForUser(userId: string) {
             reason: 'AI classifier returned OTHER.',
             classification,
           })
-          console.log(`Skipped email "${email.subject}" - classified as OTHER (confidence: ${classified.confidence})`)
+          console.log(`Skipped OTHER email during sync (confidence: ${classified.confidence})`)
           return
         }
         
@@ -188,17 +190,19 @@ export async function syncEmailsForUser(userId: string) {
             reason: `AI classification confidence ${classified.confidence}% was below the 20% processing threshold.`,
             classification,
           })
-          console.log(`Skipped email "${email.subject}" - low confidence: ${classified.confidence}% (type: ${classified.type})`)
+          console.log(
+            `Skipped low-confidence email during sync (confidence: ${classified.confidence}%, type: ${classified.type})`
+          )
           return
         }
 
         processedCount++
-        console.log(`Processing email: ${email.subject} (type: ${classified.type}, confidence: ${classified.confidence}%)`)
+        console.log(`Processing classified email (type: ${classified.type}, confidence: ${classified.confidence}%)`)
 
         const matchResult = await aiMatcher.matchToJob(classified, jobs, email)
         const match = summarizeMatch(matchResult)
         
-        console.log(`Match result: ${matchResult.confidence} - ${matchResult.reason}`)
+        console.log(`Match result: ${matchResult.confidence}`)
         const matchedJobId = matchResult.jobId
 
         // Track match type for logging
@@ -396,7 +400,7 @@ export async function syncEmailsForUser(userId: string) {
               match,
               notificationCreated: true,
             })
-            console.log(`Ambiguous match: ${matchResult.matchedJobs.length} jobs found for email "${email.subject}"`)
+            console.log(`Ambiguous email match: ${matchResult.matchedJobs.length} candidate jobs`)
           }
         } else if (matchResult.confidence === 'none') {
           // No match found - check if we can detect a new job
@@ -425,7 +429,7 @@ export async function syncEmailsForUser(userId: string) {
                 match,
                 notificationCreated: true,
               })
-              console.log(`New job detected: "${classified.jobInfo.title}" at ${classified.jobInfo.company}`)
+              console.log('New job detected from email sync')
             } else {
               emailOutcomes.push({
                 ...baseOutcome,
@@ -441,7 +445,7 @@ export async function syncEmailsForUser(userId: string) {
                   newStatus: classified.suggestedStatus,
                 },
               })
-              console.log(`Job already exists (company+title match): "${classified.jobInfo.title}" at ${classified.jobInfo.company} matched "${existingJob.title}" at ${existingJob.company}`)
+              console.log('Email-detected job matched an existing job')
             }
           } else {
             // Insufficient info - create no-match notification
@@ -456,7 +460,7 @@ export async function syncEmailsForUser(userId: string) {
               match,
               notificationCreated: true,
             })
-            console.log(`No match found and insufficient info for email "${email.subject}"`)
+            console.log('No match found and insufficient job info extracted from email')
           }
         }
       } catch (error) {
@@ -468,7 +472,7 @@ export async function syncEmailsForUser(userId: string) {
           reason: 'Email processing threw an exception.',
           error: error instanceof Error ? error.message : String(error),
         })
-        console.error(`Error processing email "${email.subject}":`, error)
+        console.error('Error processing email during sync:', error)
         // Continue processing other emails
       }
     }

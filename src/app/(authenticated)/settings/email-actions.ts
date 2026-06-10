@@ -31,6 +31,10 @@ import {
   summarizeMatch,
   type EmailSyncOutcome,
 } from '@/lib/email-sync-outcomes'
+import {
+  decryptEmailCredential,
+  encryptEmailCredential,
+} from '@/lib/email-credential-crypto'
 
 /**
  * Sync emails and update jobs based on email content
@@ -108,7 +112,6 @@ export async function syncEmails() {
     console.log('Starting email fetch...')
     const emails = await fetchEmailsSinceForIntegration(integration, syncSince)
     console.log(`✓ Fetched ${emails.length} emails since ${syncSince}`)
-    console.log('Emails array:', emails.slice(0, 2).map(e => ({ subject: e.subject, from: e.from }))) // Log first 2 for debugging
 
     // Get all user's jobs for matching (include contact info for better matching)
     console.log('Fetching jobs from database...')
@@ -221,7 +224,7 @@ export async function syncEmails() {
             outcome: 'skipped_already_recorded',
             reason: 'Email identifier was already present in prior sync history or the current batch.',
           })
-          console.log(`Skipped email "${email.subject}" - already recorded in email sync history`)
+          console.log('Skipped already-recorded email during sync')
           return
         }
         seenEmailIdentifiers.add(emailIdentifier)
@@ -229,7 +232,9 @@ export async function syncEmails() {
         const classified = await classifier.classify(email)
         const classification = summarizeClassification(classified)
 
-        console.log(`Email "${email.subject}": type=${classified.type}, confidence=${classified.confidence}%, jobInfo=`, classified.jobInfo)
+        console.log(
+          `Email classified: type=${classified.type}, confidence=${classified.confidence}%, hasJobInfo=${Boolean(classified.jobInfo)}`
+        )
 
         // Check if AI determined email should not be processed
         if ('shouldProcess' in classified.metadata && classified.metadata.shouldProcess === false) {
@@ -241,7 +246,7 @@ export async function syncEmails() {
             reason: 'AI classifier marked shouldProcess=false.',
             classification,
           })
-          console.log(`Skipped email "${email.subject}" - AI determined it's not job-related (shouldProcess=false)`)
+          console.log('Skipped non-job email during sync')
           return
         }
 
@@ -255,7 +260,7 @@ export async function syncEmails() {
             reason: 'AI classifier returned OTHER.',
             classification,
           })
-          console.log(`Skipped email "${email.subject}" - classified as OTHER (confidence: ${classified.confidence})`)
+          console.log(`Skipped OTHER email during sync (confidence: ${classified.confidence})`)
           return
         }
         
@@ -268,12 +273,14 @@ export async function syncEmails() {
             reason: `AI classification confidence ${classified.confidence}% was below the 20% processing threshold.`,
             classification,
           })
-          console.log(`Skipped email "${email.subject}" - low confidence: ${classified.confidence}% (type: ${classified.type})`)
+          console.log(
+            `Skipped low-confidence email during sync (confidence: ${classified.confidence}%, type: ${classified.type})`
+          )
           return
         }
 
         processedCount++
-        console.log(`Processing email: ${email.subject} (type: ${classified.type}, confidence: ${classified.confidence}%)`)
+        console.log(`Processing classified email (type: ${classified.type}, confidence: ${classified.confidence}%)`)
 
         console.log('Starting job matching... (using AI matcher)')
         const matchResult = await matcher.matchToJob(classified, jobs, email)
@@ -463,7 +470,7 @@ export async function syncEmails() {
               match,
               notificationCreated: true,
             })
-            console.log(`Ambiguous match: ${matchResult.matchedJobs.length} jobs found for email "${email.subject}"`)
+            console.log(`Ambiguous email match: ${matchResult.matchedJobs.length} candidate jobs`)
           }
         } else if (matchResult.confidence === 'none') {
           // No match found - check if we can detect a new job
@@ -493,7 +500,7 @@ export async function syncEmails() {
                 match,
                 notificationCreated: true,
               })
-              console.log(`New job detected: "${classified.jobInfo.title}" at ${classified.jobInfo.company}`)
+              console.log('New job detected from email sync')
             } else {
               emailOutcomes.push({
                 ...baseOutcome,
@@ -509,7 +516,7 @@ export async function syncEmails() {
                   newStatus: classified.suggestedStatus,
                 },
               })
-              console.log(`Job already exists (company+title match): "${classified.jobInfo.title}" at ${classified.jobInfo.company} matched "${existingJob.title}" at ${existingJob.company}`)
+              console.log('Email-detected job matched an existing job')
             }
           } else {
             // Insufficient info - create no-match notification
@@ -524,7 +531,7 @@ export async function syncEmails() {
               match,
               notificationCreated: true,
             })
-            console.log(`No match found and insufficient info for email "${email.subject}"`)
+            console.log('No match found and insufficient job info extracted from email')
           }
         }
       } catch (error) {
@@ -536,7 +543,7 @@ export async function syncEmails() {
           reason: 'Email processing threw an exception.',
           error: error instanceof Error ? error.message : String(error),
         })
-        console.error(`Error processing email "${email.subject}":`, error)
+        console.error('Error processing email during sync:', error)
         // Continue processing other emails
       } finally {
         reviewedEmailsCount++
@@ -670,7 +677,12 @@ export async function syncEmails() {
       success: true,
       stats: { ...stats, jobChanges },
     }
-    console.log('Returning result:', result)
+    console.log('Returning email sync result:', {
+      processed: stats.processedEmails,
+      updated: stats.updatedJobs,
+      newJobs: stats.newJobsDetected,
+      notifications: notificationsCreatedCount,
+    })
     return result
   } catch (error) {
     console.error('Email sync error:', error)
@@ -753,15 +765,29 @@ export async function saveEmailIntegration(formData: FormData) {
   const imapHost = formData.get('imapHost') as string
   const imapPort = parseInt(formData.get('imapPort') as string)
   const imapUsername = formData.get('imapUsername') as string
-  const imapPassword = formData.get('imapPassword') as string
+  const imapPassword = (formData.get('imapPassword') as string | null)?.trim() ?? ''
 
   try {
+    const existing = await prisma.emailIntegration.findUnique({
+      where: { userId },
+      select: { imapPassword: true },
+    })
+    const resolvedImapPassword =
+      imapPassword || decryptEmailCredential(existing?.imapPassword)
+
+    if (!resolvedImapPassword) {
+      return {
+        success: false,
+        error: 'IMAP password is required.',
+      }
+    }
+
     // Test connection first using the provided settings
     const emailService = createEmailService({
       host: imapHost,
       port: imapPort,
       user: imapUsername,
-      password: imapPassword,
+      password: resolvedImapPassword,
     })
     await emailService.testConnection()
 
@@ -775,7 +801,7 @@ export async function saveEmailIntegration(formData: FormData) {
         imapHost,
         imapPort,
         imapUsername,
-        imapPassword,
+        imapPassword: encryptEmailCredential(resolvedImapPassword),
         isActive: true,
       },
       update: {
@@ -783,7 +809,7 @@ export async function saveEmailIntegration(formData: FormData) {
         imapHost,
         imapPort,
         imapUsername,
-        imapPassword,
+        imapPassword: encryptEmailCredential(resolvedImapPassword),
         isActive: true,
         lastError: null,
       },
@@ -832,7 +858,7 @@ export async function testEmailConnection() {
         host: integration.imapHost,
         port: integration.imapPort,
         user: integration.imapUsername,
-        password: integration.imapPassword,
+        password: decryptEmailCredential(integration.imapPassword) ?? '',
       })
       await emailService.testConnection()
     } else if (integration.provider === EmailProvider.GMAIL_OAUTH) {

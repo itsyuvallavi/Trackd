@@ -1,7 +1,19 @@
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { JobStatus, ActivityType } from '@prisma/client'
-import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { checkRateLimitAsync, RATE_LIMITS } from '@/lib/rate-limit'
+import { cacheTagsFor } from '@/lib/cache-tags'
 import { hashExtensionKey, isValidExtensionKeyFormat, sanitizeExtensionJobPayload } from '@/lib/extension-jobs'
+
+function invalidateExtensionJobCaches(userId: string) {
+  const tags = cacheTagsFor(userId)
+  revalidateTag(tags.jobs, { expire: 0 })
+  revalidateTag(tags.activity, { expire: 0 })
+  revalidatePath('/jobs')
+  revalidatePath('/board')
+  revalidatePath('/today')
+  revalidatePath('/dashboard')
+}
 
 export async function POST(request: Request) {
   try {
@@ -18,7 +30,7 @@ export async function POST(request: Request) {
 
     const keyHash = hashExtensionKey(key)
     // Check extension rate limit (defense in depth - middleware also checks)
-    const rateLimitResult = checkRateLimit(
+    const rateLimitResult = await checkRateLimitAsync(
       `extension:key:${keyHash.slice(0, 16)}`,
       RATE_LIMITS.extension.limit,
       RATE_LIMITS.extension.window
@@ -115,6 +127,8 @@ export async function POST(request: Request) {
       where: { id: extensionKey.id },
       data: { lastUsedAt: new Date() }
     })
+
+    invalidateExtensionJobCaches(userId)
 
     return Response.json({
       success: true,

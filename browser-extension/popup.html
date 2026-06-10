@@ -98,6 +98,17 @@
       cursor: not-allowed;
     }
 
+    .btn-secondary {
+      margin-top: 8px;
+      border: 1px solid #262626;
+      background: #171717;
+      color: #ededed;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: #262626;
+    }
+
     .footer {
       padding: 12px 16px;
       border-top: 1px solid #262626;
@@ -223,9 +234,19 @@
   <!-- Connect Form - hidden by default -->
   <div id="connectView" class="content hidden">
     <h3 style="margin-bottom: 12px;">🔗 Connect to Trackd</h3>
+    <div id="connectMessageBox" class="message hidden"></div>
     <div class="field">
       <label>Paste your extension key:</label>
-      <input type="text" id="keyInput" placeholder="tk_..." />
+      <input
+        type="text"
+        id="keyInput"
+        placeholder="tk_..."
+        autocomplete="off"
+        autocapitalize="none"
+        spellcheck="false"
+        inputmode="text"
+      />
+      <button id="pasteKeyBtn" type="button" class="btn btn-secondary">Paste from clipboard</button>
     </div>
     <button id="connectBtn" class="btn btn-primary">Connect</button>
     <p class="help-text">

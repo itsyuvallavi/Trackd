@@ -3,14 +3,13 @@ import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { FeedbackList } from '@/components/admin/feedback-list'
 import { serializeForClient } from '@/lib/serialize-for-client'
-
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'info@yuvallavi.com'
+import { isAdminEmail } from '@/lib/admin'
 
 export default async function AdminFeedbackPage() {
   const user = await requireAuth()
 
   // Check if user is admin
-  if (user.email !== ADMIN_EMAIL) {
+  if (!isAdminEmail(user.email)) {
     redirect('/jobs')
   }
 
@@ -61,4 +60,3 @@ export default async function AdminFeedbackPage() {
     </div>
   )
 }
-

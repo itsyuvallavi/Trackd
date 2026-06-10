@@ -8,6 +8,7 @@ function readRepoFile(relativePath: string): string {
 
 const validateKeyRoute = readRepoFile('src/app/api/extension/validate-key/route.ts')
 const saveJobRoute = readRepoFile('src/app/api/extension/save-job/route.ts')
+const downloadExtensionRoute = readRepoFile('src/app/api/download-extension/route.ts')
 const extensionJobs = readRepoFile('src/lib/extension-jobs.ts')
 const nextConfig = readRepoFile('next.config.ts')
 
@@ -74,6 +75,19 @@ describe('extension API route contract', () => {
     expect(saveJobRoute).toContain('data: { lastUsedAt: new Date() }')
   })
 
+  it('invalidates cached job surfaces after extension-created jobs', () => {
+    expect(saveJobRoute).toContain("import { revalidatePath, revalidateTag } from 'next/cache'")
+    expect(saveJobRoute).toContain("import { cacheTagsFor } from '@/lib/cache-tags'")
+    expect(saveJobRoute).toContain('const tags = cacheTagsFor(userId)')
+    expect(saveJobRoute).toContain('revalidateTag(tags.jobs, { expire: 0 })')
+    expect(saveJobRoute).toContain('revalidateTag(tags.activity, { expire: 0 })')
+    expect(saveJobRoute).toContain("revalidatePath('/jobs')")
+    expect(saveJobRoute).toContain("revalidatePath('/board')")
+    expect(saveJobRoute).toContain("revalidatePath('/today')")
+    expect(saveJobRoute).toContain("revalidatePath('/dashboard')")
+    expect(saveJobRoute).toContain('invalidateExtensionJobCaches(userId)')
+  })
+
   it('declares CORS headers expected by extension API requests', () => {
     expect(nextConfig).toContain("source: '/api/extension/:path*'")
     expect(nextConfig).toContain("'Access-Control-Allow-Origin'")
@@ -81,5 +95,15 @@ describe('extension API route contract', () => {
     expect(nextConfig).toContain("'GET, POST, OPTIONS'")
     expect(nextConfig).toContain("'Access-Control-Allow-Headers'")
     expect(nextConfig).toContain("'Content-Type, X-Extension-Key'")
+  })
+
+  it('packages only runtime extension assets for public download', () => {
+    expect(downloadExtensionRoute).toContain('EXTENSION_ROOT_FILES')
+    expect(downloadExtensionRoute).toContain("'manifest.json'")
+    expect(downloadExtensionRoute).toContain("'popup.html'")
+    expect(downloadExtensionRoute).toContain("['icons/', 'scripts/']")
+    expect(downloadExtensionRoute).toContain('shouldIncludeExtensionFile(zipEntryPath)')
+    expect(downloadExtensionRoute).toContain("part.startsWith('.')")
+    expect(downloadExtensionRoute).toContain('} else if (shouldIncludeExtensionFile(zipEntryPath)) {')
   })
 })

@@ -234,6 +234,20 @@ export const getEmailIntegration = (userId: string) =>
     async () =>
       prisma.emailIntegration.findUnique({
         where: { userId },
+        select: {
+          id: true,
+          userId: true,
+          provider: true,
+          email: true,
+          isActive: true,
+          lastSyncedAt: true,
+          lastError: true,
+          autoSyncEnabled: true,
+          autoSyncFrequency: true,
+          nextSyncAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       }),
     ['getEmailIntegration', userId],
     {
@@ -708,10 +722,14 @@ export const getTodayPageData = (userId: string) => {
 /** Full bot config row — shared by bot layout + /bot/settings. */
 export const getBotConfigByUserId = (userId: string) =>
   unstable_cache(
-    async () =>
-      prisma.botConfig.findUnique({
+    async () => {
+      const config = await prisma.botConfig.findUnique({
         where: { userId },
-      }),
+      })
+      if (!config) return null
+      const { normalizeStoredBotConfig } = await import('@/lib/bot/bot-config-sanitize')
+      return normalizeStoredBotConfig(config)
+    },
     ['getBotConfig', userId],
     {
       tags: [cacheTagsFor(userId).bot],

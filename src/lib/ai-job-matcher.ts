@@ -23,22 +23,63 @@ function normalizeString(str: string): string {
 }
 
 const GENERIC_SENDER_ROOTS = new Set([
+  'email',
+  'emails',
+  'mail',
+  'mailer',
+  'notification',
+  'notifications',
   'ashbyhq',
   'greenhouse',
+  'greenhousemail',
+  'greenhouse-mail',
   'lever',
   'workday',
   'myworkday',
+  'homerun',
   'smartrecruiters',
   'recruitee',
   'teamtailor',
   'zohocalendar',
   'noreply',
   'no-reply',
+  'reply',
+  'contact',
+  'support',
+  'talent',
+  'careers',
+  'jobs',
 ])
 
-function senderDomainRoot(from: string | undefined): string | null {
-  const domain = from?.match(/@([^>\s]+)/)?.[1]?.toLowerCase()
-  return domain?.split('.')[0] ?? null
+function normalizeSenderHint(value: string): string {
+  return normalizeString(value).replace(/\s+/g, '')
+}
+
+function senderAddressParts(from: string | undefined): { local: string; domain: string } | null {
+  const match = from?.match(/<?([^<>\s@]+)@([^>\s>]+)>?/)
+  if (!match) return null
+
+  return {
+    local: match[1].toLowerCase(),
+    domain: match[2].toLowerCase(),
+  }
+}
+
+function senderCompanyHints(from: string | undefined): string[] {
+  const address = senderAddressParts(from)
+  if (!address) return []
+
+  const localRoot = address.local.split('+')[0].split(/[._-]/)[0]
+  const localHint = normalizeSenderHint(localRoot)
+  const domainHints = address.domain
+    .split('.')
+    .map(normalizeSenderHint)
+    .filter((part) => part.length > 2 && !GENERIC_SENDER_ROOTS.has(part))
+
+  return [...new Set([
+    ...(localHint.length > 2 && !GENERIC_SENDER_ROOTS.has(localHint) ? [localHint] : []),
+    ...domainHints,
+  ])]
 }
 
 function companyTokens(value: string): string[] {
@@ -72,15 +113,17 @@ function senderDomainSupportsMatch(
   from: string | undefined,
   job: { company: string; contactEmail?: string | null },
 ): boolean {
-  const root = senderDomainRoot(from)
-  if (!root) return false
-  if (GENERIC_SENDER_ROOTS.has(root)) return false
+  const hints = senderCompanyHints(from)
+  if (hints.length === 0) return false
 
-  const companyRoot = normalizeString(job.company).replace(/\s+/g, '')
-  if (companyRoot.includes(root) || root.includes(companyRoot)) return true
+  const companyRoot = normalizeSenderHint(job.company)
+  if (hints.some((hint) => companyRoot.includes(hint) || hint.includes(companyRoot))) return true
 
   const contactDomain = job.contactEmail?.match(/@([^>\s]+)/)?.[1]?.toLowerCase()
-  return Boolean(contactDomain && contactDomain.split('.')[0] === root)
+  if (!contactDomain) return false
+
+  const contactHints = senderCompanyHints(`contact@${contactDomain}`)
+  return contactHints.some((hint) => hints.includes(hint))
 }
 
 function shortlistCandidates(

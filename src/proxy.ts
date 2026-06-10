@@ -1,20 +1,43 @@
-import { type NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 // Routes that require authentication
-const protectedRoutes = ['/jobs', '/board', '/today', '/settings', '/onboarding', '/profile', '/notifications']
+const protectedRoutes = [
+  '/admin',
+  '/board',
+  '/bot',
+  '/calendar',
+  '/dashboard',
+  '/interview-prep',
+  '/jobs',
+  '/notifications',
+  '/onboarding',
+  '/profile',
+  '/resume-advisor',
+  '/settings',
+  '/today',
+]
 
 // Routes that should redirect to /jobs if already logged in
 const authRoutes = ['/login', '/signup']
 
+const securityHeaders = [
+  ['X-Content-Type-Options', 'nosniff'],
+  ['X-Frame-Options', 'DENY'],
+  ['X-XSS-Protection', '1; mode=block'],
+  ['Referrer-Policy', 'strict-origin-when-cross-origin'],
+  ['Permissions-Policy', 'camera=(), microphone=(), geolocation=()'],
+] as const
+
 export async function proxy(request: NextRequest) {
+  const sanitizedRequest = sanitizeProxyRequest(request)
   const path = request.nextUrl.pathname
   const isApiRoute = path.startsWith('/api/')
   const isProtectedRoute = isRouteMatch(path, protectedRoutes)
   const isAuthRoute = isRouteMatch(path, authRoutes)
   const shouldAuthenticate = shouldAuthenticateInProxy(path)
-  const { supabaseResponse, user } = await updateSession(request, {
+  const { supabaseResponse, user } = await updateSession(sanitizedRequest, {
     authenticate: shouldAuthenticate,
   })
 
@@ -26,7 +49,7 @@ export async function proxy(request: NextRequest) {
     if (path.startsWith('/api/')) {
       return applyRateLimiting(request, supabaseResponse, null, path)
     }
-    return supabaseResponse
+    return withSecurityHeaders(supabaseResponse)
   }
 
   // Handle route protection and redirects for non-API routes
@@ -34,7 +57,7 @@ export async function proxy(request: NextRequest) {
     if (isProtectedRoute && !user) {
       const redirectUrl = new URL('/login', request.url)
       redirectUrl.searchParams.set('next', path)
-      return NextResponse.redirect(redirectUrl)
+      return withSecurityHeaders(NextResponse.redirect(redirectUrl))
     }
 
     // If user is logged in but hasn't completed onboarding, redirect to onboarding
@@ -46,18 +69,18 @@ export async function proxy(request: NextRequest) {
 
     if (user && !hasCompletedOnboarding && !isOnboardingRoute && !isApiRoute) {
       const onboardingUrl = new URL('/onboarding', request.url)
-      return NextResponse.redirect(onboardingUrl)
+      return withSecurityHeaders(NextResponse.redirect(onboardingUrl))
     }
 
     if (isAuthRoute && user) {
-      return NextResponse.redirect(new URL('/jobs', request.url))
+      return withSecurityHeaders(NextResponse.redirect(new URL('/jobs', request.url)))
     }
 
-    return supabaseResponse
+    return withSecurityHeaders(supabaseResponse)
   }
 
   // API route handling - apply rate limiting
-  return applyRateLimiting(request, supabaseResponse, user, path)
+  return applyRateLimiting(sanitizedRequest, supabaseResponse, user, path)
 }
 
 export function shouldAuthenticateInProxy(pathname: string): boolean {
@@ -74,6 +97,35 @@ export function shouldAuthenticateInProxy(pathname: string): boolean {
 
 function isRouteMatch(pathname: string, routes: string[]): boolean {
   return routes.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+}
+
+function sanitizeProxyRequest(request: NextRequest): NextRequest {
+  if (!request.headers.has('x-middleware-subrequest')) {
+    return request
+  }
+
+  const headers = new Headers(request.headers)
+  headers.delete('x-middleware-subrequest')
+
+  return new NextRequest(request.url, {
+    headers,
+    method: request.method,
+  })
+}
+
+function withSecurityHeaders(response: NextResponse): NextResponse {
+  for (const [key, value] of securityHeaders) {
+    response.headers.set(key, value)
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    response.headers.set(
+      'Strict-Transport-Security',
+      'max-age=31536000; includeSubDomains; preload',
+    )
+  }
+
+  return response
 }
 
 /**
@@ -99,10 +151,10 @@ function applyRateLimiting(
   // File upload endpoints - per user
   if (pathname.startsWith('/api/resume/upload')) {
     if (!user) {
-      return NextResponse.json(
+      return withSecurityHeaders(NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
-      )
+      ))
     }
     identifier = `upload:${user.id}`
     limitConfig = RATE_LIMITS.upload
@@ -141,7 +193,7 @@ function applyRateLimiting(
   if (!rateLimitResult.allowed) {
     const resetTime = new Date(rateLimitResult.resetAt).toISOString()
     
-    return NextResponse.json(
+    return withSecurityHeaders(NextResponse.json(
       { 
         error: 'Rate limit exceeded',
         message: `Too many requests. Please try again after ${resetTime}`,
@@ -155,7 +207,7 @@ function applyRateLimiting(
           'Retry-After': Math.ceil((rateLimitResult.resetAt - Date.now()) / 1000).toString(),
         },
       }
-    )
+    ))
   }
   
   // Add rate limit headers to response
@@ -170,7 +222,7 @@ function applyRateLimiting(
   response.headers.set('X-RateLimit-Remaining', rateLimitResult.remaining.toString())
   response.headers.set('X-RateLimit-Reset', rateLimitResult.resetAt.toString())
   
-  return response
+  return withSecurityHeaders(response)
 }
 
 export function sessionRateLimitIdentifier(request: NextRequest): string | null {

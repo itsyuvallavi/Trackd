@@ -32,13 +32,16 @@ function refetchSharedCount() {
 }
 
 export function useBotQueueCount(): number {
-  const [count, setCount] = useState(sharedCount)
+  // Always start at 0 so SSR and the first client paint match. Module-level
+  // `sharedCount` can already be populated from a prior client navigation.
+  const [count, setCount] = useState(0)
 
   const refetch = useCallback(() => {
     void refetchSharedCount()
   }, [])
 
   useEffect(() => {
+    setCount(sharedCount)
     subscribers.add(setCount)
     refetch()
     return () => {

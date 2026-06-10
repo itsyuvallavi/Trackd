@@ -236,15 +236,24 @@ function profileLocation(profile: ApplicationProfile): string | null {
 
 function identitySummaryLine(profile: ApplicationProfile): string | null {
   const parts = [
+    profile.yearsExperience != null
+      ? `Years of experience: ${profile.yearsExperience}`
+      : null,
     profileLocation(profile) ? `Location: ${profileLocation(profile)}` : null,
     cleanString(profile.workAuthorization)
       ? `Work authorization: ${cleanString(profile.workAuthorization)}`
       : null,
     profile.requiresSponsorship ? 'Requires visa sponsorship' : null,
+    profile.salaryExpectation != null
+      ? `Salary expectation (annual gross): ${profile.salaryExpectation}`
+      : null,
+    cleanString(profile.noticePeriod)
+      ? `Notice period: ${cleanString(profile.noticePeriod)}`
+      : null,
   ].filter(Boolean)
 
   if (parts.length === 0) return null
-  return `Application Identity supplemental info: ${parts.join('; ')}.`
+  return `Application profile: ${parts.join('; ')}.`
 }
 
 function mergeApplicationIdentity(

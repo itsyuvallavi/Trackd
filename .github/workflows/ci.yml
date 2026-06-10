@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run test
+
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    needs: unit
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install chromium --with-deps
+
+      - name: Build app
+        run: npm run build
+        env:
+          # Minimal placeholders so Next.js build succeeds without real secrets.
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-anon-key
+
+      - name: Run Playwright smoke tests
+        run: npm run test:e2e:smoke
+        env:
+          CI: true
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-anon-key

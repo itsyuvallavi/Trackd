@@ -19,7 +19,12 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams
-    const limit = parseInt(searchParams.get('limit') || '100')
+    const rawLimit = searchParams.get('limit')
+    const parsedLimit = rawLimit ? parseInt(rawLimit, 10) : null
+    const limit =
+      parsedLimit && Number.isFinite(parsedLimit) && parsedLimit > 0
+        ? parsedLimit
+        : null
 
     const jobs = await prisma.job.findMany({
       where: { userId: user.id },
@@ -57,7 +62,7 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: { savedAt: 'desc' },
-      take: limit,
+      ...(limit ? { take: limit } : {}),
     })
 
     return NextResponse.json({ jobs })
@@ -69,4 +74,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-

@@ -18,7 +18,7 @@ vi.mock('@/lib/rate-limit', () => ({
   RATE_LIMITS: {
     extension: { limit: 100, window: 60_000 },
   },
-  checkRateLimit: vi.fn(() => ({
+  checkRateLimitAsync: vi.fn(async () => ({
     allowed: true,
     remaining: 99,
     resetAt: Date.now() + 60_000,

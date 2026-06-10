@@ -9,6 +9,12 @@ import { executeBotRunForConfig } from '@/lib/bot/execute-bot-run'
 import { botSearchHasQueryableBackend } from '@/lib/bot/bot-search-sources'
 import { revalidateBotRunViews } from '@/lib/bot/revalidate-bot-run-views'
 import { BotSearchFrequency } from '@prisma/client'
+import { sanitizeBotConfigFormData } from '@/lib/bot/bot-config-sanitize'
+import {
+  BOT_SEARCH_TERMS_REQUIRED_MSG,
+  hasSearchableTerms,
+} from '@/lib/bot/bot-search-readiness'
+import { loadCandidateProfileForEvaluation } from '@/lib/bot/candidate-profile'
 
 export interface BotConfigFormData {
   keywords: string[]
@@ -26,35 +32,28 @@ export interface BotConfigFormData {
   minScore: number
 }
 
-export async function saveBotConfig(data: BotConfigFormData) {
+export async function saveBotConfig(
+  data: BotConfigFormData,
+  options?: { setupLayout?: boolean }
+) {
   const user = await requireAuth()
 
-  const resolvedChatId = data.telegramChatId.trim() || null
-
-  const salaryMin =
-    data.salaryMin != null && Number.isFinite(data.salaryMin)
-      ? Math.floor(data.salaryMin)
-      : null
-  const minScoreRaw = Number.isFinite(data.minScore) ? data.minScore : 60
-  const minScore = Math.max(0, Math.min(100, Math.floor(minScoreRaw)))
-  const searchFrequency =
-    data.searchFrequency === BotSearchFrequency.TWICE_DAILY
-      ? BotSearchFrequency.DAILY
-      : data.searchFrequency
+  const sanitized = sanitizeBotConfigFormData(data, options)
+  const resolvedChatId = sanitized.telegramChatId || null
 
   const cleaned = {
-    keywords: data.keywords.filter(Boolean),
-    locations: data.locations.filter(Boolean),
-    excludeCompanies: data.excludeCompanies.filter(Boolean),
-    excludeKeywords: data.excludeKeywords.filter(Boolean),
-    spokenLanguages: data.spokenLanguages.filter(Boolean),
-    remoteOnly: data.remoteOnly,
-    experienceLevel: data.experienceLevel || null,
-    salaryMin,
-    isActive: data.isActive,
-    searchFrequency,
+    keywords: sanitized.keywords,
+    locations: sanitized.locations,
+    excludeCompanies: sanitized.excludeCompanies,
+    excludeKeywords: sanitized.excludeKeywords,
+    spokenLanguages: sanitized.spokenLanguages,
+    remoteOnly: sanitized.remoteOnly,
+    experienceLevel: sanitized.experienceLevel || null,
+    salaryMin: sanitized.salaryMin,
+    isActive: sanitized.isActive,
+    searchFrequency: sanitized.searchFrequency,
     telegramChatId: resolvedChatId,
-    minScore,
+    minScore: sanitized.minScore,
   }
 
   await prisma.botConfig.upsert({
@@ -65,6 +64,7 @@ export async function saveBotConfig(data: BotConfigFormData) {
 
   const tags = cacheTagsFor(user.id)
   revalidateTag(tags.bot, { expire: 0 })
+  revalidatePath('/bot/setup')
   revalidatePath('/bot/settings')
   revalidatePath('/bot')
   return { success: true }
@@ -81,8 +81,13 @@ export async function triggerBotSearch() {
     return { success: false, error: 'No bot config found. Save your settings first.' }
   }
 
-  if (config.keywords.length === 0) {
-    return { success: false, error: 'Add at least one search keyword before running.' }
+  const candidateProfile = await loadCandidateProfileForEvaluation(
+    user.id,
+    config.keywords[0] ?? 'Job Search',
+    config
+  )
+  if (!hasSearchableTerms(config, candidateProfile)) {
+    return { success: false, error: BOT_SEARCH_TERMS_REQUIRED_MSG }
   }
 
   if (!botSearchHasQueryableBackend()) {

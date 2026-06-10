@@ -3,6 +3,20 @@ import AdmZip from 'adm-zip'
 import { readdir, readFile } from 'fs/promises'
 import { join } from 'path'
 
+const EXTENSION_ROOT_FILES = new Set(['manifest.json', 'popup.html'])
+const EXTENSION_ALLOWED_DIRS = ['icons/', 'scripts/'] as const
+
+function shouldIncludeExtensionFile(zipEntryPath: string) {
+  if (zipEntryPath.split('/').some((part) => part.startsWith('.'))) {
+    return false
+  }
+
+  return (
+    EXTENSION_ROOT_FILES.has(zipEntryPath) ||
+    EXTENSION_ALLOWED_DIRS.some((dir) => zipEntryPath.startsWith(dir))
+  )
+}
+
 export async function GET() {
   try {
     const extensionPath = join(process.cwd(), 'browser-extension')
@@ -21,7 +35,7 @@ export async function GET() {
         if (entry.isDirectory()) {
           // Recursively add subdirectories
           await addDirectoryToZip(fullPath, zipEntryPath)
-        } else {
+        } else if (shouldIncludeExtensionFile(zipEntryPath)) {
           // Add file to zip
           const fileContent = await readFile(fullPath)
           zip.addFile(zipEntryPath, fileContent)

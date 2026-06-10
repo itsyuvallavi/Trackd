@@ -560,7 +560,7 @@ model ApplicationAttempt {
   status       String   // "filling" | "awaiting_review" | "submitting" | "submitted" | "failed" | "cancelled"
 
   formData     Json?    // fields that were filled in
-  screenshots  String[] @default([])  // Supabase Storage URLs
+  screenshots  String[] @default([])  // Supabase Storage object paths
   errorMessage String?
   submittedAt  DateTime?
 
@@ -569,6 +569,16 @@ model ApplicationAttempt {
 
   @@index([userId, jobId])
   @@index([userId, status])
+}
+
+model RateLimitCounter {
+  key       String   @id
+  count     Int
+  resetAt   DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
 }
 
 enum FeedbackType {

@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentUser } from '@/lib/auth'
+import { isAdminEmail } from '@/lib/admin'
 
 /**
  * Debug endpoint to check what redirect URI would be used
  * Visit: /api/auth/email/oauth/debug
  */
 export async function GET(request: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    const user = await getCurrentUser()
+    if (!user || !isAdminEmail(user.email)) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+  }
+
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
   const callbackUrl = `${baseUrl}/api/auth/email/oauth/callback`
   
@@ -18,7 +27,6 @@ export async function GET(request: NextRequest) {
       NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || '(not set)',
       NODE_ENV: process.env.NODE_ENV,
       GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ? '✓ Set' : '✗ Not set',
-      GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? '✓ Set' : '✗ Not set',
     },
     instructions: {
       google: `Add this EXACT redirect URI to your Google OAuth app: ${callbackUrl}`,
@@ -26,4 +34,3 @@ export async function GET(request: NextRequest) {
     }
   }, { status: 200 })
 }
-

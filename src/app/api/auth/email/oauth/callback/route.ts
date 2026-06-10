@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { EmailProvider } from '@prisma/client'
 import { requireAuth } from '@/lib/auth'
 import { safeEmailOAuthRedirectPath, verifyEmailOAuthState } from '@/lib/email-oauth-state'
+import { encryptEmailCredential } from '@/lib/email-credential-crypto'
 
 /**
  * OAuth callback handler for email integration
@@ -28,7 +29,9 @@ export async function GET(request: NextRequest) {
   // Ensure baseUrl has a protocol (add https:// if missing)
   if (baseUrl && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
     baseUrl = `https://${baseUrl}`
-    console.log('[OAuth Callback] Added https:// protocol to baseUrl:', baseUrl)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[OAuth Callback] Added https:// protocol to baseUrl')
+    }
   }
   
   const callbackUrl = `${baseUrl}/api/auth/email/oauth/callback`
@@ -76,7 +79,7 @@ export async function GET(request: NextRequest) {
   // Verify that the userId in state matches the authenticated user
   // This prevents users from connecting OAuth to other users' accounts
   if (stateUserId !== user.id) {
-    console.error('OAuth state userId mismatch:', { stateUserId, authenticatedUserId: user.id })
+    console.error('OAuth state userId mismatch')
     return NextResponse.redirect(
       createRedirectUrl('/settings/integrations', { error: 'Authentication mismatch' })
     )
@@ -120,14 +123,16 @@ export async function GET(request: NextRequest) {
       })
 
       if (!tokenResponse.ok) {
-        const errorText = await tokenResponse.text()
         let errorMessage = 'Failed to exchange authorization code'
         try {
-          const errorJson = JSON.parse(errorText)
+          const errorJson = await tokenResponse.json()
           errorMessage = errorJson.error_description || errorJson.error || errorMessage
-          console.error('Google token exchange failed:', errorJson)
+          console.error('Google token exchange failed:', {
+            status: tokenResponse.status,
+            error: errorJson.error,
+          })
         } catch {
-          console.error('Google token exchange failed:', errorText)
+          console.error('Google token exchange failed:', { status: tokenResponse.status })
         }
         return NextResponse.redirect(
           createRedirectUrl('/settings/integrations', { error: errorMessage })
@@ -137,7 +142,7 @@ export async function GET(request: NextRequest) {
       const tokens = await tokenResponse.json()
 
       if (!tokens.access_token) {
-        console.error('No access token in Google OAuth response:', tokens)
+        console.error('No access token in Google OAuth response')
         return NextResponse.redirect(
           createRedirectUrl('/settings/integrations', { error: 'Failed to obtain access token' })
         )
@@ -149,8 +154,7 @@ export async function GET(request: NextRequest) {
       })
 
       if (!userInfoResponse.ok) {
-        const errorText = await userInfoResponse.text()
-        console.error('Failed to fetch user info from Google:', errorText)
+        console.error('Failed to fetch user info from Google:', { status: userInfoResponse.status })
         return NextResponse.redirect(
           createRedirectUrl('/settings/integrations', { error: 'Failed to fetch user information' })
         )
@@ -159,7 +163,7 @@ export async function GET(request: NextRequest) {
       const userInfo = await userInfoResponse.json()
 
       if (!userInfo.email) {
-        console.error('No email in Google user info:', userInfo)
+        console.error('No email in Google user info response')
         return NextResponse.redirect(
           createRedirectUrl('/settings/integrations', { error: 'Failed to get email address from Google' })
         )
@@ -173,8 +177,8 @@ export async function GET(request: NextRequest) {
             userId,
             provider: EmailProvider.GMAIL_OAUTH,
             email: userInfo.email,
-            accessToken: tokens.access_token,
-            refreshToken: tokens.refresh_token || null,
+            accessToken: encryptEmailCredential(tokens.access_token),
+            refreshToken: encryptEmailCredential(tokens.refresh_token),
             tokenExpiry: tokens.expires_in
               ? new Date(Date.now() + tokens.expires_in * 1000)
               : null,
@@ -183,8 +187,8 @@ export async function GET(request: NextRequest) {
           update: {
             provider: EmailProvider.GMAIL_OAUTH,
             email: userInfo.email,
-            accessToken: tokens.access_token,
-            refreshToken: tokens.refresh_token || null,
+            accessToken: encryptEmailCredential(tokens.access_token),
+            refreshToken: encryptEmailCredential(tokens.refresh_token),
             tokenExpiry: tokens.expires_in
               ? new Date(Date.now() + tokens.expires_in * 1000)
               : null,
@@ -238,8 +242,7 @@ export async function GET(request: NextRequest) {
       })
 
       if (!tokenResponse.ok) {
-        const error = await tokenResponse.text()
-        console.error('Microsoft token exchange failed:', error)
+        console.error('Microsoft token exchange failed:', { status: tokenResponse.status })
         return NextResponse.redirect(
           createRedirectUrl('/settings/integrations', { error: 'Failed to exchange authorization code' })
         )
@@ -260,8 +263,8 @@ export async function GET(request: NextRequest) {
           userId,
           provider: EmailProvider.MICROSOFT_OAUTH,
           email: userInfo.mail || userInfo.userPrincipalName,
-          accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
+          accessToken: encryptEmailCredential(tokens.access_token),
+          refreshToken: encryptEmailCredential(tokens.refresh_token),
           tokenExpiry: tokens.expires_in
             ? new Date(Date.now() + tokens.expires_in * 1000)
             : null,
@@ -270,8 +273,8 @@ export async function GET(request: NextRequest) {
         update: {
           provider: EmailProvider.MICROSOFT_OAUTH,
           email: userInfo.mail || userInfo.userPrincipalName,
-          accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
+          accessToken: encryptEmailCredential(tokens.access_token),
+          refreshToken: encryptEmailCredential(tokens.refresh_token),
           tokenExpiry: tokens.expires_in
             ? new Date(Date.now() + tokens.expires_in * 1000)
             : null,

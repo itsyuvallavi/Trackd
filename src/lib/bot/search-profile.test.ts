@@ -99,13 +99,11 @@ describe('search profile', () => {
       resumeId: 'resume_1',
       resumeLabel: 'Job Search resume',
     })
-    expect(profile.terms).toEqual([
-      'React TypeScript Developer',
-      'Next.js Frontend Engineer',
-      'Frontend Engineer',
-      'Full Stack Engineer',
-      'Backend TypeScript Engineer',
-    ])
+    expect(profile.terms).toHaveLength(5)
+    expect(profile.terms).toEqual(
+      expect.arrayContaining(['LLM Engineer', 'AI Product Engineer'])
+    )
+    expect(profile.terms).not.toContain('Backend TypeScript Engineer')
   })
 
   it('does not leak raw resume, identity, or contact fields into safe search terms', () => {
@@ -122,6 +120,27 @@ describe('search profile', () => {
     expect(text).not.toContain('raw confidential workflow')
     expect(terms.every((term) => !/[@\n]|\bhttps?:/i.test(term))).toBe(true)
     expect(terms.every((term) => term.split(/\s+/).length <= 4)).toBe(true)
+  })
+
+  it('prioritizes AI-aligned resume terms when settings include AI and fullstack', () => {
+    const terms = buildSafeSearchTerms({
+      settingsKeywords: ['AI Engineer', 'Fullstack Engineer', 'Frontend Engineer'],
+      resumeSearchTerms: [
+        'React TypeScript Developer',
+        'Next.js Frontend Engineer',
+        'Frontend Engineer',
+        'Full Stack Engineer',
+        'Backend TypeScript Engineer',
+        'LLM Engineer',
+        'AI Product Engineer',
+      ],
+    })
+
+    expect(terms).toHaveLength(5)
+    expect(terms).toEqual(
+      expect.arrayContaining(['LLM Engineer', 'AI Product Engineer'])
+    )
+    expect(terms).not.toContain('Backend TypeScript Engineer')
   })
 
   it('constrains resume-derived terms to the saved settings direction', () => {
@@ -218,13 +237,13 @@ describe('search profile', () => {
     })
 
     expect(profile.terms).toEqual([
-      'B2B SaaS Product Manager',
       'Platform Product Manager',
+      'B2B SaaS Product Manager',
       'Product Manager',
     ])
     expect(profile.terms.map(refineSearchKeywordForProvider)).toEqual([
-      'B2B SaaS Product Manager',
       'Platform Product Manager',
+      'B2B SaaS Product Manager',
       'Product Manager',
     ])
     expect(profile.derivedFromResume).toBe(true)

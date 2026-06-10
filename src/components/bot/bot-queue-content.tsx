@@ -245,12 +245,12 @@ function JobCard({
   return (
     <>
     <div className={cn(
-      'glass glass-subtle rounded-2xl p-5 flex flex-col gap-4 transition-[box-shadow] duration-200 ease-[var(--ease-ios)]',
+      'glass glass-subtle rounded-2xl p-3 sm:p-5 flex flex-col gap-3 sm:gap-4 transition-[box-shadow] duration-200 ease-[var(--ease-ios)]',
       job.duplicate && 'ring-1 ring-warning/30 bg-warning-bg/30',
       selected && 'ring-2 ring-primary/45',
     )}>
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
         <button
           type="button"
           onClick={() => onSelectedChange(job.id, !selected)}
@@ -268,8 +268,10 @@ function JobCard({
         </button>
 
         <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2 mb-1">
-            <h3 className="font-semibold text-base truncate">{job.title}</h3>
+          <div className="flex flex-col items-start gap-1.5 mb-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+            <h3 className="min-w-0 text-sm font-semibold leading-snug text-foreground line-clamp-2 sm:text-base sm:truncate">
+              {job.title}
+            </h3>
             {job.botScore !== null && <ScoreBadge score={job.botScore} />}
             {job.duplicate && (
               <span className="inline-flex items-center gap-1 text-[11px] font-medium text-warning-text bg-warning-bg border border-warning/25 px-2 py-0.5 rounded-full">
@@ -279,24 +281,24 @@ function JobCard({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Building2 className="size-3.5" />
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground sm:text-sm">
+            <span className="flex min-w-0 items-center gap-1">
+              <Building2 className="size-3.5 shrink-0" />
               {job.company}
             </span>
             {job.location && (
-              <span className="flex items-center gap-1">
-                <MapPin className="size-3.5" />
+              <span className="flex min-w-0 items-center gap-1">
+                <MapPin className="size-3.5 shrink-0" />
                 {job.location}
               </span>
             )}
             {job.salary && (
-              <span className="flex items-center gap-1">
-                <DollarSign className="size-3.5" />
+              <span className="flex min-w-0 items-center gap-1">
+                <DollarSign className="size-3.5 shrink-0" />
                 {job.salary}
               </span>
             )}
-            <span className="text-xs text-muted-foreground/90" title="Search provider">
+            <span className="max-w-full truncate text-[11px] text-muted-foreground/90 sm:text-xs" title="Search provider">
               {job.sourceDisplayName}
             </span>
           </div>
@@ -317,7 +319,7 @@ function JobCard({
 
       {/* Duplicate warning */}
       {job.duplicate && (
-        <div className="flex items-start gap-2 rounded-xl bg-warning-bg border border-warning/25 px-3 py-2 text-sm text-warning-text">
+        <div className="flex items-start gap-2 rounded-xl bg-warning-bg border border-warning/25 px-3 py-2 text-xs text-warning-text sm:text-sm">
           <AlertTriangle className="size-4 mt-0.5 shrink-0" />
           <span>
             You already applied to this position on{' '}
@@ -333,7 +335,7 @@ function JobCard({
 
       {/* AI Reasoning */}
       {job.botReasoning && (
-        <div className="rounded-xl bg-foreground/[0.03] px-3 py-2.5 text-sm text-muted-foreground leading-relaxed border border-border/40">
+        <div className="rounded-xl bg-foreground/[0.03] px-3 py-2.5 text-xs leading-relaxed text-muted-foreground border border-border/40 sm:text-sm">
           <span className="inline-flex items-center gap-1 text-[11px] font-medium text-foreground/70 uppercase tracking-wider mb-1.5">
             <Bot className="size-3" />
             AI Assessment
@@ -376,7 +378,7 @@ function JobCard({
               </button>
             </div>
           </div>
-          <pre className="text-sm leading-relaxed whitespace-pre-wrap font-sans text-foreground/90">
+          <pre className="max-h-[50vh] overflow-auto text-xs leading-relaxed whitespace-pre-wrap font-sans text-foreground/90 sm:max-h-none sm:text-sm">
             {coverLetter}
           </pre>
         </div>
@@ -388,12 +390,12 @@ function JobCard({
       )}
 
       {/* Actions */}
-      <div className="flex w-full flex-wrap items-center gap-2">
+      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
         <button
           onClick={handleApply}
           disabled={applying || skipping || deleting}
           className={cn(
-            'flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border border-border/60 hover:bg-foreground/[0.05] transition-colors',
+            'flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium border border-border/60 hover:bg-foreground/[0.05] transition-colors sm:px-4 sm:text-sm',
             job.duplicate && 'border-warning/30 text-warning-text',
             (applying || skipping || deleting) && 'opacity-50 cursor-not-allowed'
           )}
@@ -409,7 +411,7 @@ function JobCard({
         <button
           onClick={generateLetter}
           disabled={generating || regeneratingLetter || applying || skipping || deleting}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border border-border/60 hover:bg-foreground/[0.05] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium border border-border/60 hover:bg-foreground/[0.05] transition-colors disabled:opacity-50 disabled:cursor-not-allowed sm:px-4 sm:text-sm"
         >
           {generating ? (
             <Loader2 className="size-4 animate-spin" />
@@ -432,7 +434,7 @@ function JobCard({
         <button
           onClick={handleSkip}
           disabled={applying || skipping || deleting}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50 disabled:cursor-not-allowed sm:px-4 sm:text-sm"
         >
           {skipping ? (
             <Loader2 className="size-4 animate-spin" />
@@ -447,7 +449,7 @@ function JobCard({
           onClick={() => setRemoveDialogOpen(true)}
           disabled={applying || skipping || deleting}
           className={cn(
-            'ml-auto shrink-0 inline-flex items-center justify-center rounded-full border border-error/30 bg-error-bg/50 p-2 text-error-text hover:bg-error-bg transition-colors',
+            'shrink-0 inline-flex items-center justify-center rounded-full border border-error/30 bg-error-bg/50 p-2 text-error-text hover:bg-error-bg transition-colors sm:ml-auto',
             'disabled:opacity-40 disabled:pointer-events-none'
           )}
           title="Remove from Trackd"
@@ -680,7 +682,7 @@ export function BotQueueContent() {
 
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           Jobs the bot found and approved for you to review.
         </p>
@@ -688,7 +690,7 @@ export function BotQueueContent() {
         <button
           onClick={() => load()}
           disabled={loading || bulkBusy}
-          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50"
+          className="inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50"
         >
           <RefreshCw className={cn('size-4', loading && 'animate-spin')} />
           Refresh
@@ -703,7 +705,7 @@ export function BotQueueContent() {
             <strong>Your application profile is incomplete.</strong> The bot
             needs your phone, location, and work authorization to fill forms
             automatically.{' '}
-            <Link href="/bot/identity" className="underline hover:text-foreground">
+            <Link href="/bot/setup?section=profile" className="underline hover:text-foreground">
               Complete your profile →
             </Link>
           </span>
@@ -728,13 +730,13 @@ export function BotQueueContent() {
       )}
 
       {jobs.length > 0 && !loading && (
-        <div className="sticky top-3 z-10 mb-4 rounded-2xl border border-border/60 bg-background/90 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/75">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="sticky top-2 z-10 mb-4 rounded-2xl border border-border/60 bg-background/90 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/75 md:top-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <button
               type="button"
               onClick={handleSelectVisible}
               disabled={bulkBusy}
-              className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50"
+              className="inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50"
               aria-pressed={allVisibleSelected}
             >
               {allVisibleSelected ? (
@@ -749,12 +751,12 @@ export function BotQueueContent() {
               {selectedCount} selected
             </span>
 
-            <div className="ml-auto flex flex-wrap items-center gap-2">
+            <div className="grid w-full grid-cols-3 gap-2 sm:ml-auto sm:w-auto sm:flex sm:flex-wrap sm:items-center">
               <button
                 type="button"
                 onClick={() => void handleBulkAction('apply')}
                 disabled={bulkBusy || selectedCount === 0}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border/60 px-3 py-1.5 text-sm font-medium hover:bg-foreground/[0.05] transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border/60 px-2.5 py-1.5 text-xs font-medium hover:bg-foreground/[0.05] transition-colors disabled:opacity-50 disabled:pointer-events-none sm:px-3 sm:text-sm"
               >
                 {bulkBusy ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -767,7 +769,7 @@ export function BotQueueContent() {
                 type="button"
                 onClick={() => void handleBulkAction('skip')}
                 disabled={bulkBusy || selectedCount === 0}
-                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                className="inline-flex items-center justify-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50 disabled:pointer-events-none sm:px-3 sm:text-sm"
               >
                 <XCircle className="size-4" aria-hidden />
                 Skip
@@ -776,7 +778,7 @@ export function BotQueueContent() {
                 type="button"
                 onClick={() => setSelectedIds(new Set())}
                 disabled={bulkBusy || selectedCount === 0}
-                className="rounded-full px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                className="rounded-full px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors disabled:opacity-50 disabled:pointer-events-none sm:px-3 sm:text-sm"
               >
                 Clear
               </button>
@@ -814,8 +816,8 @@ export function BotQueueContent() {
             <p className="font-medium text-foreground">Queue is empty</p>
             <p className="text-sm mt-1">
               Use <strong>Run now</strong> above, or tune matchers in{' '}
-              <Link href="/bot/settings" className="underline hover:text-foreground">
-                Settings
+              <Link href="/bot/setup?section=search" className="underline hover:text-foreground">
+                Setup
               </Link>
               .
             </p>

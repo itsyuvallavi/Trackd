@@ -4,8 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { runBotSearch } from '@/lib/bot/search-orchestrator'
 import { sendBotRunSummary } from '@/lib/bot/telegram'
 import type { BotRunSummary } from '@/lib/bot/telegram'
-
-const STALE_RUNNING_BOT_RUN_MS = 10 * 60 * 1000
+import { STALE_RUNNING_BOT_RUN_MS } from '@/lib/bot/run-staleness'
 
 export type BotRunExecutionResult = {
   runId: string

@@ -3,7 +3,6 @@
  * Coordinates: ATS detection → resume fetch → browser session → form fill → screenshot upload.
  */
 
-import { createClient } from '@supabase/supabase-js'
 import { detectATS } from '@/lib/bot/ats-detector'
 import { withBrowser } from './browser'
 import { fillGreenhouseApplication, submitGreenhouseApplication } from './adapters/greenhouse'
@@ -13,7 +12,7 @@ import { logApply } from '@/lib/bot/apply/apply-log'
 import { isUnsafeFullAutomation } from '@/lib/bot/apply/automation-mode'
 import { prisma } from '@/lib/prisma'
 import { pickResumeForJob } from '@/lib/bot/resume/parser'
-import type { ApplicationProfile } from '@prisma/client'
+import { downloadStorageObject, getSupabaseStorageAdmin, RESUME_BUCKET, storageObjectPath } from '@/lib/supabase/private-storage'
 import type { ResumeStructuredData } from '@/lib/bot/resume/types'
 import type { ApplicationJobContext } from '@/lib/bot/apply/knowledge-bank'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -24,10 +23,7 @@ const os = require('os') as typeof import('os')
 const path = require('path') as typeof import('path')
 
 function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  return getSupabaseStorageAdmin()
 }
 
 async function uploadScreenshot(
@@ -45,21 +41,30 @@ async function uploadScreenshot(
 
   if (error) throw new Error(`Screenshot upload failed: ${error.message}`)
 
-  const { data } = supabase.storage.from('resume').getPublicUrl(filePath)
-  return data.publicUrl
+  return filePath
 }
 
 async function downloadResumeToDisk(fileUrl: string): Promise<string | null> {
   try {
-    const res = await fetch(fileUrl)
-    if (!res.ok) return null
-    const buffer = Buffer.from(await res.arrayBuffer())
+    const objectPath = storageObjectPath(fileUrl, RESUME_BUCKET)
+    const buffer = objectPath
+      ? await downloadStorageObject(objectPath)
+      : await downloadExternalResume(fileUrl)
+
+    if (!buffer) return null
     const tmpPath = path.join(os.tmpdir(), `resume-${Date.now()}.pdf`)
     fs.writeFileSync(tmpPath, buffer)
     return tmpPath
   } catch {
     return null
   }
+}
+
+async function downloadExternalResume(fileUrl: string): Promise<Buffer | null> {
+  if (!/^https?:\/\//i.test(fileUrl)) return null
+  const res = await fetch(fileUrl)
+  if (!res.ok) return null
+  return Buffer.from(await res.arrayBuffer())
 }
 
 export interface ApplyResult {
@@ -164,7 +169,7 @@ export async function runApplicationFill(
       bytes: screenshot.length,
       atsType,
       fieldsFilledCount,
-      url: screenshotUrl,
+      storagePath: screenshotUrl,
     })
 
     const applySummary = buildApplySummary(atsType, fieldsFilledCount, skippedFields)

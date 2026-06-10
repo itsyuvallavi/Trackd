@@ -23,6 +23,7 @@ import { AIJobMatcher } from '../lib/ai-job-matcher'
 import { NotificationService } from '../lib/notification-service'
 import { EmailSyncLogger, SyncPhase } from '../lib/email-sync-logger'
 import { findExistingJobForExtractedEmail } from '../lib/email-job-dedupe'
+import { decryptEmailCredential } from '../lib/email-credential-crypto'
 import { JobStatus, ActivityType } from '@prisma/client'
 
 // Feature flag: Use AI classifier if enabled
@@ -256,7 +257,8 @@ async function runLiveTest(config: TestConfig) {
     console.log(colorize(`Last Error: ${integration.lastError}`, 'red'))
   }
 
-  if (!integration.imapHost || !integration.imapPort || !integration.imapUsername || !integration.imapPassword) {
+  const imapPassword = decryptEmailCredential(integration.imapPassword)
+  if (!integration.imapHost || !integration.imapPort || !integration.imapUsername || !imapPassword) {
     console.log(colorize('❌ Missing IMAP configuration', 'red'))
     process.exit(1)
   }
@@ -315,7 +317,7 @@ async function runLiveTest(config: TestConfig) {
     host: integration.imapHost,
     port: integration.imapPort,
     user: integration.imapUsername,
-    password: integration.imapPassword,
+    password: imapPassword,
   })
 
   let emails

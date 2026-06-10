@@ -196,6 +196,118 @@ function settingsIntents(settingsKeywords: string[]): Set<string> {
   return intents
 }
 
+function countMatchingIntents(term: string, intents: Set<string>): number {
+  if (intents.size === 0) return 1
+  const text = normalizeSearchTermKey(term)
+  let count = 0
+
+  if (
+    intents.has('frontend') &&
+    hasAny(text, [/\breact\b/, /\bnext js\b/, /\bfront(?:end| end)\b/, /\bui\b/, /\bweb\b/])
+  ) {
+    count++
+  }
+  if (
+    intents.has('fullstack') &&
+    hasAny(text, [
+      /\bfull[-\s]*stack\b/,
+      /\bfullstack\b/,
+      /\bapi\b/,
+      /\bnode js\b/,
+      /\bproduct engineer\b/,
+      /\bprisma\b/,
+      /\bpostgresql\b/,
+    ])
+  ) {
+    count++
+  }
+  if (
+    intents.has('ai') &&
+    hasAny(text, [/\bllm\b/, /\bai\b/, /\bdeveloper tooling\b/, /\bproduct\b/])
+  ) {
+    count++
+  }
+  if (
+    intents.has('data') &&
+    hasAny(text, [/\bdata scientist\b/, /\bmachine learning\b/, /\bml\b/, /\bpython\b/])
+  ) {
+    count++
+  }
+  if (
+    intents.has('product') &&
+    hasAny(text, [/\bproduct manager\b/, /\bproduct management\b/, /\bproduct\b/])
+  ) {
+    count++
+  }
+  if (
+    intents.has('qa') &&
+    hasAny(text, [
+      /\bqa\b/,
+      /\bquality assurance\b/,
+      /\btest automation\b/,
+      /\bsoftware engineer in test\b/,
+      /\btest engineer\b/,
+      /\bautomation\b/,
+      /\bsdet\b/,
+      /\bplaywright\b/,
+    ])
+  ) {
+    count++
+  }
+  if (
+    intents.has('devops') &&
+    hasAny(text, [
+      /\bdevops\b/,
+      /\bsite reliability\b/,
+      /\bsre\b/,
+      /\bplatform\b/,
+      /\binfrastructure\b/,
+      /\bcloud\b/,
+      /\bkubernetes\b/,
+      /\bterraform\b/,
+    ])
+  ) {
+    count++
+  }
+  if (
+    intents.has('design') &&
+    hasAny(text, [/\bux\b/, /\bproduct designer\b/, /\buser experience\b/, /\bdesigner\b/])
+  ) {
+    count++
+  }
+  if (
+    intents.has('software') &&
+    hasAny(text, [/\bsoftware engineer\b/, /\bjunior\b/, /\bentry level\b/, /\bgraduate\b/])
+  ) {
+    count++
+  }
+
+  return count
+}
+
+function resumeTermRankingScore(
+  term: string,
+  intents: Set<string>,
+  settingsKeywords: string[]
+): number {
+  const text = normalizeSearchTermKey(term)
+  const settingsText = normalizeSearchTermKey(settingsKeywords.join(' '))
+  let score = countMatchingIntents(term, intents) * 10
+
+  if (
+    intents.has('ai') &&
+    hasAny(text, [/\bllm\b/, /\bai product\b/, /\bdeveloper tooling\b/])
+  ) {
+    score += 15
+  }
+
+  if (/\bbackend\b/.test(text) && !hasAny(settingsText, [/\bbackend\b/])) {
+    score -= 25
+  }
+
+  return score
+}
+
 function termMatchesIntent(term: string, intents: Set<string>): boolean {
   if (intents.size === 0) return true
   const text = normalizeSearchTermKey(term)
@@ -514,8 +626,18 @@ export function buildSafeSearchTerms(input: {
   const alignedResumeTerms = resumeSearchTerms.filter((term) => termMatchesIntent(term, intents))
 
   if (resumeSearchTerms.length > 0) {
-    const constrainedResumeTerms = alignedResumeTerms.length > 0 ? alignedResumeTerms : resumeSearchTerms
-    return constrainedResumeTerms.slice(0, maxTerms)
+    const constrainedResumeTerms =
+      alignedResumeTerms.length > 0 ? alignedResumeTerms : resumeSearchTerms
+    const ranked = constrainedResumeTerms
+      .map((term, index) => ({ term, index }))
+      .sort((a, b) => {
+        const scoreDiff =
+          resumeTermRankingScore(b.term, intents, settingsKeywords) -
+          resumeTermRankingScore(a.term, intents, settingsKeywords)
+        return scoreDiff !== 0 ? scoreDiff : a.index - b.index
+      })
+      .map(({ term }) => term)
+    return ranked.slice(0, maxTerms)
   }
 
   const refinedSettingsTerms = settingsKeywords.map(refineSearchKeywordForProvider)

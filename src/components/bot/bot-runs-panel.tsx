@@ -314,7 +314,7 @@ function ProfileSourceSummary({
       })}
       {limited && (
         <Link
-          href="/bot/resumes"
+          href="/bot/setup?section=resume"
           className="font-medium underline underline-offset-2 hover:text-foreground"
         >
           Review resumes

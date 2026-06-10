@@ -1,6 +1,9 @@
 import { prisma } from '@/lib/prisma'
 import { executeBotRunForConfig } from '@/lib/bot/execute-bot-run'
 import { botSearchHasQueryableBackend } from '@/lib/bot/bot-search-sources'
+import { normalizeStoredBotConfig } from '@/lib/bot/bot-config-sanitize'
+import { hasSearchableTerms } from '@/lib/bot/bot-search-readiness'
+import { loadCandidateProfileForEvaluation } from '@/lib/bot/candidate-profile'
 import { isBotConfigDueForSearch } from '@/lib/bot/search-schedule'
 
 type BotSearchCronResponse = {
@@ -22,12 +25,27 @@ export async function runScheduledBotSearch(): Promise<BotSearchCronResponse> {
     }
   }
 
-  const configuredActiveConfigs = await prisma.botConfig.findMany({
-    where: { isActive: true, keywords: { isEmpty: false } },
-  })
-  const activeConfigs = configuredActiveConfigs.filter((config) =>
-    isBotConfigDueForSearch(config),
+  const configuredActiveConfigs = (
+    await prisma.botConfig.findMany({
+      where: { isActive: true },
+    })
+  ).map(normalizeStoredBotConfig)
+
+  const dueConfigs = configuredActiveConfigs.filter((config) =>
+    isBotConfigDueForSearch(config)
   )
+
+  const activeConfigs = []
+  for (const config of dueConfigs) {
+    const candidateProfile = await loadCandidateProfileForEvaluation(
+      config.userId,
+      config.keywords[0] ?? 'Job Search',
+      config
+    )
+    if (hasSearchableTerms(config, candidateProfile)) {
+      activeConfigs.push(config)
+    }
+  }
 
   if (activeConfigs.length === 0) {
     return {

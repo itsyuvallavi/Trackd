@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
   createClient: vi.fn(),
   storageFrom: vi.fn(),
   upload: vi.fn(),
-  getPublicUrl: vi.fn(),
   remove: vi.fn(),
   findMany: vi.fn(),
   transaction: vi.fn(),
@@ -88,7 +87,6 @@ function requestWithResume(input: {
 function setupStorage() {
   mocks.storageFrom.mockReturnValue({
     upload: mocks.upload,
-    getPublicUrl: mocks.getPublicUrl,
     remove: mocks.remove,
   })
   mocks.createClient.mockReturnValue({
@@ -107,9 +105,6 @@ describe('POST /api/bot/resumes', () => {
 
     mocks.requireAuth.mockResolvedValue({ id: 'user_1' })
     mocks.upload.mockResolvedValue({ error: null })
-    mocks.getPublicUrl.mockReturnValue({
-      data: { publicUrl: 'https://trackd.supabase.co/storage/v1/object/public/resume/bot-resumes/user_1/file.pdf' },
-    })
     mocks.remove.mockResolvedValue({ error: null })
     mocks.findMany.mockResolvedValue([])
     mocks.updateMany.mockResolvedValue({ count: 1 })
@@ -118,7 +113,7 @@ describe('POST /api/bot/resumes', () => {
       label: 'Software Engineer',
       matchKeywords: ['engineer', 'frontend'],
       isDefault: true,
-      fileUrl: 'https://trackd.supabase.co/storage/v1/object/public/resume/bot-resumes/user_1/file.pdf',
+      fileUrl: 'bot-resumes/user_1/file.pdf',
       fileName: 'My Resume.pdf',
       structuredData: null,
       createdAt: new Date('2026-05-16T00:00:00.000Z'),
@@ -190,6 +185,7 @@ describe('POST /api/bot/resumes', () => {
         label: 'Software Engineer',
         fileName: 'My Resume (Final).pdf',
         isDefault: true,
+        fileUrl: expect.stringMatching(/^bot-resumes\/user_1\/\d+-My_Resume_Final_.pdf$/),
       }),
       select: expect.not.objectContaining({ rawText: true }),
     })
@@ -198,9 +194,6 @@ describe('POST /api/bot/resumes', () => {
   it('persists parsed structured data and raw text for the authenticated user without returning raw text', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'test-openai-key')
     mocks.requireAuth.mockResolvedValue({ id: 'user_2' })
-    mocks.getPublicUrl.mockReturnValue({
-      data: { publicUrl: 'https://trackd.supabase.co/storage/v1/object/public/resume/bot-resumes/user_2/file.pdf' },
-    })
 
     const structuredData = {
       name: 'Ada Candidate',

@@ -47,6 +47,24 @@ function classified(company: string, title: string): ClassifiedEmail {
   }
 }
 
+function classifiedWithoutCompany(title: string): ClassifiedEmail {
+  return {
+    type: EmailType.REJECTION,
+    confidence: 95,
+    suggestedStatus: JobStatus.REJECTED,
+    jobInfo: { title },
+    metadata: {
+      keywords: [],
+      shouldProcess: true,
+      extractedEntities: {
+        company: null,
+        title,
+        location: null,
+      },
+    },
+  }
+}
+
 describe('AIJobMatcher safety gates', () => {
   beforeEach(() => {
     mocks.chatCompletion.mockReset()
@@ -337,5 +355,43 @@ describe('AIJobMatcher safety gates', () => {
     expect(prompt).toContain('ID: restream')
     expect(prompt).not.toContain('ID: primeit')
     expect(result.jobId).toBe('restream')
+  })
+
+  it('uses non-generic ATS mailbox local part as company context when the email omits company', async () => {
+    mocks.chatCompletion.mockResolvedValueOnce(aiJson({
+      jobId: 'cocoroco',
+      confidence: 95,
+      reasoning: 'Sender local part matches Cocoroco and the title matches the application',
+      requiresUserInput: false,
+      alternativeMatches: [],
+    }))
+
+    const matcher = new AIJobMatcher()
+    const result = await matcher.matchToJob(
+      classifiedWithoutCompany('AI engineer'),
+      [
+        {
+          id: 'comply',
+          title: 'Junior Frontend Engineer',
+          company: 'ComplyAdvantage',
+          location: null,
+          contactEmail: null,
+        },
+        {
+          id: 'cocoroco',
+          title: 'AI Engineer',
+          company: 'Cocoroco.com',
+          location: 'Amsterdam',
+          contactEmail: null,
+        },
+      ],
+      { from: 'cocoroco@emails.homerun.co', subject: 'Reply on your job application' },
+    )
+
+    const prompt = mocks.chatCompletion.mock.calls[0][0][0].content as string
+    expect(prompt).toContain('ID: cocoroco')
+    expect(prompt).not.toContain('ID: comply')
+    expect(result.confidence).toBe('exact')
+    expect(result.jobId).toBe('cocoroco')
   })
 })

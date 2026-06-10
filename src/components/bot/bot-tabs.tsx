@@ -7,10 +7,8 @@ import { useBotQueueCount } from '@/lib/bot/use-bot-queue-count'
 
 const tabs = [
   { href: '/bot', label: 'Queue', exact: true },
-  { href: '/bot/settings', label: 'Settings' },
-  { href: '/bot/resumes', label: 'Resumes' },
-  { href: '/bot/identity', label: 'Identity' },
-  { href: '/bot/runs', label: 'Runs' },
+  { href: '/bot/setup', label: 'Setup' },
+  { href: '/bot/runs', label: 'Activity' },
 ]
 
 export function BotTabs() {

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { checkRateLimitAsync, RATE_LIMITS } from '@/lib/rate-limit'
 import { hashExtensionKey, isValidExtensionKeyFormat } from '@/lib/extension-jobs'
 
 export async function POST(request: Request) {
@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     const keyHash = hashExtensionKey(key)
 
     // Check extension rate limit (defense in depth - middleware also checks)
-    const rateLimitResult = checkRateLimit(
+    const rateLimitResult = await checkRateLimitAsync(
       `extension:key:${keyHash.slice(0, 16)}`,
       RATE_LIMITS.extension.limit,
       RATE_LIMITS.extension.window

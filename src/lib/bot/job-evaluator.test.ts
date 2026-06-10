@@ -564,22 +564,18 @@ describe('evaluateJob minScore behavior', () => {
       }),
     )
 
-    expect(result.evaluation.score).toBe(74)
+    expect(result.evaluation.score).toBe(73)
     expect(result.evaluation.shouldApply).toBe(false)
     expect(result.evaluation.flags).toContain('underqualified')
     expect(result.evaluation.reasoning).toContain('Seniority preference adjustment')
-    expect(result.evaluation.reasoning).toContain('Underqualified approval adjustment')
-    expect(result.scoringInputs.underqualifiedApprovalClamp).toMatchObject({
-      beforeScore: 77,
-      afterScore: 74,
-      threshold: 75,
-      margin: 5,
-      requiredScore: 80,
-      severity: 'title_only_seniority_stretch',
+    expect(result.scoringInputs.seniorityClamp).toMatchObject({
+      beforeScore: 82,
+      afterScore: 73,
     })
+    expect(result.scoringInputs.underqualifiedApprovalClamp).toBeUndefined()
   })
 
-  it('auto-approves strong title-only seniority stretches above the smaller margin', async () => {
+  it('blocks strong title-only seniority stretches that clear seniority but not approval margin', async () => {
     chatCompletionMock.mockResolvedValue({
       data: {
         choices: [
@@ -627,15 +623,22 @@ describe('evaluateJob minScore behavior', () => {
       })
     )
 
-    expect(result.evaluation.score).toBe(81)
-    expect(result.evaluation.shouldApply).toBe(true)
+    expect(result.evaluation.score).toBe(74)
+    expect(result.evaluation.shouldApply).toBe(false)
     expect(result.evaluation.flags).toContain('underqualified')
     expect(result.scoringInputs.seniorityClamp).toMatchObject({
       direction: 'underqualified',
       beforeScore: 86,
-      afterScore: 81,
+      afterScore: 77,
     })
-    expect(result.scoringInputs.underqualifiedApprovalClamp).toBeUndefined()
+    expect(result.scoringInputs.underqualifiedApprovalClamp).toMatchObject({
+      beforeScore: 77,
+      afterScore: 74,
+      threshold: 75,
+      margin: 5,
+      requiredScore: 80,
+      severity: 'title_only_seniority_stretch',
+    })
   })
 
   it('keeps the strict approval margin for explicit high-years stretch matches', async () => {
@@ -692,10 +695,10 @@ describe('evaluateJob minScore behavior', () => {
     expect(result.scoringInputs.seniorityClamp).toMatchObject({
       direction: 'underqualified',
       beforeScore: 98,
-      afterScore: 85,
+      afterScore: 81,
     })
     expect(result.scoringInputs.underqualifiedApprovalClamp).toMatchObject({
-      beforeScore: 85,
+      beforeScore: 81,
       afterScore: 74,
       threshold: 75,
       margin: 15,
@@ -770,13 +773,13 @@ describe('evaluateJob minScore behavior', () => {
       }),
     )
 
-    expect(result.evaluation.score).toBe(93)
+    expect(result.evaluation.score).toBe(89)
     expect(result.evaluation.shouldApply).toBe(true)
     expect(result.evaluation.flags).toContain('underqualified')
     expect(result.scoringInputs.seniorityClamp).toMatchObject({
       direction: 'underqualified',
       beforeScore: 98,
-      afterScore: 93,
+      afterScore: 89,
     })
     expect(result.scoringInputs.underqualifiedApprovalClamp).toBeUndefined()
   })
@@ -1473,15 +1476,9 @@ describe('evaluateJob minScore behavior', () => {
     expect(result.scoringInputs.seniorityClamp).toMatchObject({
       direction: 'underqualified',
       beforeScore: 68,
-      afterScore: 63,
-    })
-    expect(result.scoringInputs.underqualifiedApprovalClamp).toMatchObject({
-      beforeScore: 63,
       afterScore: 59,
-      threshold: 60,
-      margin: 5,
-      requiredScore: 65,
     })
+    expect(result.scoringInputs.underqualifiedApprovalClamp).toBeUndefined()
   })
 
   it('retries once when the evaluator returns malformed JSON', async () => {

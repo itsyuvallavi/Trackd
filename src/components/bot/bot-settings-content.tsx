@@ -16,7 +16,21 @@ import type {
   BotSearchUiCaps,
 } from '@/lib/bot/search-preview'
 import { cn } from '@/lib/utils'
-import { AlertCircle, CheckCircle2, HelpCircle, Loader2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
+import { SetupSelect } from '@/components/bot/setup-field-select'
+import { TelegramHelpPanel } from '@/components/bot/telegram-help-panel'
+import {
+  setupBtnSecondaryClass,
+  setupFieldClass,
+  setupFieldGroupClass,
+  setupGridClass,
+  setupLabelClass,
+  setupRowClass,
+  setupSectionTitleClass,
+  setupPanelBodyClass,
+  setupStackClass,
+  setupTagClass,
+} from '@/components/bot/setup-ui'
 
 const FREQUENCY_ORDER = [
   'DAILY',
@@ -48,7 +62,13 @@ interface BotSettingsContentProps {
   searchServiceConfigured: boolean
   searchBackends: BotSearchBackends
   safeResumeSearchTerms?: string[]
+  allResumeSearchTerms?: string[]
   searchUiCaps?: BotSearchUiCaps | null
+  /** `setup` splits search vs automation sections for the unified Setup page. */
+  layout?: 'standalone' | 'setup'
+  /** Setup grid: left column slots (profile top, resume bottom). */
+  profileSection?: React.ReactNode
+  resumeSection?: React.ReactNode
 }
 
 export function BotSettingsContent({
@@ -57,8 +77,15 @@ export function BotSettingsContent({
   searchServiceConfigured,
   searchBackends,
   safeResumeSearchTerms = [],
+  allResumeSearchTerms = [],
   searchUiCaps,
+  layout = 'standalone',
+  profileSection,
+  resumeSection,
 }: BotSettingsContentProps) {
+  const isSetupLayout = layout === 'setup'
+  const isSetupGridLayout =
+    isSetupLayout && profileSection != null && resumeSection != null
   const caps = searchUiCaps ?? defaultSearchUiCaps()
 
   const [isPending, startTransition] = useTransition()
@@ -67,6 +94,7 @@ export function BotSettingsContent({
     { ok: boolean; msg: string } | null
   >(null)
   const [verifyMessage, setVerifyMessage] = useState('')
+  const [telegramHelpOpen, setTelegramHelpOpen] = useState(false)
 
   const [keywords, setKeywords] = useState<string[]>(
     initialConfig?.keywords ?? []
@@ -178,25 +206,28 @@ export function BotSettingsContent({
   function handleSave() {
     setSaveStatus(null)
     startTransition(async () => {
-      const result = await saveBotConfig({
-        keywords,
-        locations,
-        excludeCompanies,
-        excludeKeywords,
-        spokenLanguages,
-        remoteOnly,
-        experienceLevel,
-        salaryMin: (() => {
-          const s = salaryMin.trim()
-          if (!s) return null
-          const n = parseInt(s, 10)
-          return Number.isFinite(n) ? n : null
-        })(),
-        isActive,
-        searchFrequency: frequency,
-        telegramChatId,
-        minScore,
-      })
+      const result = await saveBotConfig(
+        {
+          keywords,
+          locations,
+          excludeCompanies,
+          excludeKeywords,
+          spokenLanguages,
+          remoteOnly,
+          experienceLevel,
+          salaryMin: (() => {
+            const s = salaryMin.trim()
+            if (!s) return null
+            const n = parseInt(s, 10)
+            return Number.isFinite(n) ? n : null
+          })(),
+          isActive,
+          searchFrequency: frequency,
+          telegramChatId,
+          minScore,
+        },
+        { setupLayout: isSetupLayout }
+      )
       setSaveStatus(
         result.success
           ? { ok: true, msg: 'Settings saved.' }
@@ -217,117 +248,160 @@ export function BotSettingsContent({
     })
   }
 
-  const inputClass =
-    'w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-colors'
-  const labelClass = 'block text-sm font-medium mb-1.5'
+  const inputClass = isSetupLayout
+    ? setupFieldClass
+    : 'w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-colors'
+  const labelClass = isSetupLayout
+    ? setupLabelClass
+    : 'block text-sm font-medium mb-1.5'
 
-  return (
-    <div className="relative pb-24">
-      {!searchServiceConfigured && (
-        <div className="mb-5 p-3 bg-warning-bg border border-warning/30 rounded-xl text-sm text-warning-text">
-          <strong>No search backends available.</strong> Add{' '}
-          <code className="font-mono text-xs">JOBS_SEARCH_API_KEY</code>.
-        </div>
-      )}
+  const droppedResumeTerms = allResumeSearchTerms.filter(
+    (term) => !safeResumeSearchTerms.includes(term)
+  )
 
-      {/* Activation card — full-width, always on top */}
-      <div className="mb-5 glass glass-subtle rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
-        <div>
-          <p className="font-medium text-sm">Bot active</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {isActive
-              ? `Runs ${FREQUENCY_LABELS[frequency].toLowerCase()}`
-              : 'Bot is paused — no automatic searches'}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setIsActive(!isActive)}
-          className={cn(
-            'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30',
-            isActive ? 'bg-primary' : 'bg-muted-foreground/30'
-          )}
-          role="switch"
-          aria-checked={isActive}
-          aria-label="Toggle bot active"
-        >
-          <span
-            className={cn(
-              'inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow',
-              isActive ? 'translate-x-6' : 'translate-x-1'
-            )}
-          />
-        </button>
+  const activationCard = (
+    <div className="glass glass-subtle rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
+      <div>
+        <p className="font-medium text-sm">Automatic searches</p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {isActive
+            ? `Runs ${FREQUENCY_LABELS[frequency].toLowerCase()}`
+            : 'Paused — use Run now on the Queue for manual searches'}
+        </p>
       </div>
+      <button
+        type="button"
+        onClick={() => setIsActive(!isActive)}
+        className={cn(
+          'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30',
+          isActive ? 'bg-primary' : 'bg-muted-foreground/30'
+        )}
+        role="switch"
+        aria-checked={isActive}
+        aria-label="Toggle automatic searches"
+      >
+        <span
+          className={cn(
+            'inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow',
+            isActive ? 'translate-x-6' : 'translate-x-1'
+          )}
+        />
+      </button>
+    </div>
+  )
 
-      {/* 2-column grid for the 4 setting groups */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Search preferences */}
-        <section className="glass glass-subtle rounded-2xl px-5 py-5 space-y-4">
-          <h2 className="font-semibold text-sm">Search preferences</h2>
+  const searchPreferencesSection = (
+    <section className={cn(isSetupLayout ? setupStackClass : 'space-y-4', !isSetupLayout && 'glass glass-subtle rounded-2xl px-5 py-5')}>
+      {!isSetupLayout && <h2 className="font-semibold text-sm">Search preferences</h2>}
 
-          <TagInput
-            label="Job keywords *"
-            placeholder='e.g. "Frontend Engineer"'
-            values={keywords}
-            onChange={setKeywords}
-          />
+      <TagInput
+        label={isSetupLayout ? 'Job keywords' : 'Job keywords *'}
+        placeholder='e.g. "Frontend Engineer"'
+        hint={
+          isSetupLayout
+            ? undefined
+            : 'We also derive up to five search terms from your resume. Resume terms take priority over extra keywords you add here.'
+        }
+        compact={isSetupLayout}
+        values={keywords}
+        onChange={setKeywords}
+      />
 
-          <TagInput
-            label="Locations"
-            placeholder='e.g. "Lisbon", "Europe", "Remote"'
-            hint={`Up to ${caps.locationPassesMax} used as separate searches. Prefer regions over cities that imply hybrid.`}
-            values={locations}
-            onChange={setLocations}
-          />
+      <TagInput
+        label="Locations"
+        placeholder='e.g. "Lisbon", "Europe", "Remote"'
+        hint={isSetupLayout ? undefined : `Up to ${caps.locationPassesMax} used as separate searches. Prefer regions over cities that imply hybrid.`}
+        values={locations}
+        onChange={setLocations}
+        compact={isSetupLayout}
+      />
 
-          <div className="flex items-center gap-2">
-            <input
-              id="remoteOnly"
-              type="checkbox"
-              checked={remoteOnly}
-              onChange={(e) => setRemoteOnly(e.target.checked)}
-              className="rounded border-border"
-            />
-            <label htmlFor="remoteOnly" className="text-sm">
-              Remote only
+      <div className={isSetupLayout ? setupGridClass : 'grid grid-cols-1 sm:grid-cols-2 gap-3'}>
+        <div className={isSetupLayout ? setupFieldGroupClass : undefined}>
+          <label className={labelClass}>Seniority</label>
+          {isSetupLayout ? (
+            <SetupSelect
+              value={experienceLevel}
+              onChange={(e) => setExperienceLevel(e.target.value)}
+            >
+              {EXPERIENCE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </SetupSelect>
+          ) : (
+            <select
+              value={experienceLevel}
+              onChange={(e) => setExperienceLevel(e.target.value)}
+              className={inputClass}
+            >
+              {EXPERIENCE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        {isSetupLayout ? (
+          <div className={setupFieldGroupClass}>
+            <label className={labelClass}>
+              Min score <strong className="tabular-nums">{minScore}</strong>
             </label>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className={labelClass}>Experience level</label>
-              <select
-                value={experienceLevel}
-                onChange={(e) => setExperienceLevel(e.target.value)}
-                className={inputClass}
-              >
-                {EXPERIENCE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Min salary (USD/yr)</label>
+            <div className="flex h-9 items-center">
               <input
-                type="number"
-                value={salaryMin}
-                onChange={(e) => setSalaryMin(e.target.value)}
-                placeholder="80000"
+                type="range"
                 min={0}
-                step={5000}
-                className={inputClass}
+                max={100}
+                step={5}
+                value={minScore}
+                onChange={(e) => setMinScore(parseInt(e.target.value))}
+                className="w-full accent-primary"
               />
             </div>
           </div>
-        </section>
+        ) : (
+          <div>
+            <label className={labelClass}>Min salary to consider (USD/yr)</label>
+            <input
+              type="number"
+              value={salaryMin}
+              onChange={(e) => setSalaryMin(e.target.value)}
+              placeholder="0 = no floor"
+              min={0}
+              step={5000}
+              className={inputClass}
+            />
+            <p className="text-[11px] text-muted-foreground mt-1.5">
+              Search filter only. Your application salary expectation is in Profile.
+            </p>
+          </div>
+        )}
+      </div>
+      {!isSetupLayout && (
+        <div className="flex items-center gap-2">
+          <input
+            id="remoteOnly"
+            type="checkbox"
+            checked={remoteOnly}
+            onChange={(e) => setRemoteOnly(e.target.checked)}
+            className="rounded border-border"
+          />
+          <label htmlFor="remoteOnly" className="text-sm">
+            Remote only
+          </label>
+        </div>
+      )}
+    </section>
+  )
 
-        {/* Filters */}
-        <section className="glass glass-subtle rounded-2xl px-5 py-5 space-y-4">
-          <h2 className="font-semibold text-sm">Filters</h2>
+  const filtersSection = (
+    <section className={cn('space-y-4', !isSetupLayout && 'glass glass-subtle rounded-2xl px-5 py-5')}>
+      {!isSetupLayout && <h2 className="font-semibold text-sm">Filters</h2>}
 
+      {!isSetupLayout && (
+        <>
           <TagInput
             label="Exclude companies"
             placeholder='e.g. "Revature"'
@@ -349,73 +423,100 @@ export function BotSettingsContent({
             values={spokenLanguages}
             onChange={setSpokenLanguages}
           />
+        </>
+      )}
 
-          <div>
-            <label className={labelClass}>
-              Min AI match score:{' '}
-              <strong className="tabular-nums">{minScore}/100</strong>
-            </label>
+      {!isSetupLayout && (
+        <div>
+          <label className={labelClass}>
+            Min AI match score:{' '}
+            <strong className="tabular-nums">{minScore}/100</strong>
+          </label>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={minScore}
+            onChange={(e) => setMinScore(parseInt(e.target.value))}
+            className="w-full accent-primary"
+          />
+          <div className="flex justify-between text-[11px] text-muted-foreground mt-1">
+            <span>0 (all)</span>
+            <span>50 (moderate)</span>
+            <span>100 (perfect)</span>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+
+  const scheduleSection = (
+    <section className={cn(!isSetupLayout && 'glass glass-subtle rounded-2xl px-5 py-5')}>
+      {!isSetupLayout && <h2 className="font-semibold text-sm mb-3">Schedule</h2>}
+      {isSetupLayout && (
+        <h3 className="font-medium text-sm mb-3">Schedule</h3>
+      )}
+      <div className="space-y-2">
+        {FREQUENCY_ORDER.map((f) => (
+          <label
+            key={f}
+            className={cn(
+              'flex items-center gap-2.5 cursor-pointer rounded-lg px-2.5 py-2 text-sm transition-colors',
+              frequency === f ? 'bg-primary/10' : 'hover:bg-foreground/[0.04]'
+            )}
+          >
             <input
-              type="range"
-              min={0}
-              max={100}
-              step={5}
-              value={minScore}
-              onChange={(e) => setMinScore(parseInt(e.target.value))}
-              className="w-full accent-primary"
+              type="radio"
+              name="frequency"
+              value={f}
+              checked={frequency === f}
+              onChange={() => setFrequency(f)}
+              className="accent-primary"
             />
-            <div className="flex justify-between text-[11px] text-muted-foreground mt-1">
-              <span>0 (all)</span>
-              <span>50 (moderate)</span>
-              <span>100 (perfect)</span>
-            </div>
-          </div>
-        </section>
+            <span>{FREQUENCY_LABELS[f]}</span>
+          </label>
+        ))}
+      </div>
+    </section>
+  )
 
-        {/* Schedule */}
-        <section className="glass glass-subtle rounded-2xl px-5 py-5">
-          <h2 className="font-semibold text-sm mb-3">Schedule</h2>
-          <div className="space-y-2">
-            {FREQUENCY_ORDER.map((f) => (
-              <label
-                key={f}
-                className={cn(
-                  'flex items-center gap-2.5 cursor-pointer rounded-lg px-2.5 py-2 text-sm transition-colors',
-                  frequency === f ? 'bg-primary/10' : 'hover:bg-foreground/[0.04]'
-                )}
-              >
-                <input
-                  type="radio"
-                  name="frequency"
-                  value={f}
-                  checked={frequency === f}
-                  onChange={() => setFrequency(f)}
-                  className="accent-primary"
-                />
-                <span>{FREQUENCY_LABELS[f]}</span>
-              </label>
-            ))}
-          </div>
-        </section>
+  const telegramHelpTrigger = (
+    <button
+      type="button"
+      onClick={() => setTelegramHelpOpen(true)}
+      className="text-left text-xs text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+    >
+      How to connect Telegram
+    </button>
+  )
 
-        {/* Notifications */}
-        <section className="glass glass-subtle rounded-2xl px-5 py-5 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="font-semibold text-sm">Telegram notifications</h2>
+  const setupNotificationsSection = (
+    <section
+      className={cn(
+        isSetupGridLayout ? setupStackClass : cn('border-t border-border pt-5', setupStackClass)
+      )}
+    >
+      <p className={setupSectionTitleClass}>Notifications</p>
+
+      <div className={setupStackClass}>
+        <div className={setupFieldGroupClass}>
+          <div className="flex min-h-5 items-center justify-between gap-3">
+            <label className={setupLabelClass} htmlFor="telegramChatId">
+              Telegram chat ID
+            </label>
             {!telegramConfigured && (
-              <span className="text-[11px] text-warning-text">
-                TELEGRAM_BOT_TOKEN not set
-              </span>
+              <span className="text-xs text-warning-text">Bot token not set</span>
             )}
           </div>
-
-          <div className="flex gap-2">
+          <div className={setupRowClass}>
             <input
+              id="telegramChatId"
               type="text"
               value={telegramChatId}
               onChange={(e) => setTelegramChatId(e.target.value)}
-              placeholder="Chat ID, e.g. 123456789"
-              className={cn(inputClass, 'flex-1')}
+              placeholder="e.g. 123456789"
+              className={cn(setupFieldClass, 'min-w-0 flex-1')}
             />
             <button
               type="button"
@@ -425,121 +526,259 @@ export function BotSettingsContent({
                 !telegramChatId.trim() ||
                 !telegramConfigured
               }
-              className="px-3 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-40"
+              className={setupBtnSecondaryClass}
             >
-              {isVerifying ? 'Verifying…' : 'Verify'}
+              {isVerifying ? '…' : 'Verify'}
             </button>
           </div>
           {verifyMessage && (
             <p className="text-xs text-muted-foreground">{verifyMessage}</p>
           )}
+          {telegramHelpTrigger}
+        </div>
 
-          <details className="text-xs text-muted-foreground group">
-            <summary className="cursor-pointer inline-flex items-center gap-1 select-none hover:text-foreground">
-              <HelpCircle className="size-3.5" />
-              How to get my chat ID
-            </summary>
-            <ol className="mt-2 space-y-1 list-decimal pl-4">
-              <li>
-                Message <strong>@BotFather</strong> →{' '}
-                <code className="font-mono">/newbot</code> → copy the token →
-                set as <code className="font-mono">TELEGRAM_BOT_TOKEN</code>
-              </li>
-              <li>
-                Start your new bot and send{' '}
-                <code className="font-mono">/start</code>
-              </li>
-              <li>
-                Open{' '}
-                <code className="font-mono">
-                  https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates
-                </code>{' '}
-                → find <code className="font-mono">chat.id</code>
-              </li>
-              <li>Paste here and click Verify.</li>
-            </ol>
-          </details>
-        </section>
-      </div>
-
-      {/* Collapsible search preview — auto-open once keywords exist so the
-          user can sanity-check the query they'll run. */}
-      <details
-        className="mt-5 glass glass-subtle rounded-2xl px-5 py-4 group"
-        open={searchPreview.hasKeywords}
-      >
-        <summary className="cursor-pointer select-none flex items-center justify-between gap-3">
-          <div>
-            <h2 className="font-semibold text-sm">Next search preview</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Based on current form — save before running to persist.
-            </p>
+        <div className={setupFieldGroupClass}>
+          <div className="flex min-h-5 items-center justify-between gap-3">
+            <label className={setupLabelClass} htmlFor="setupAutoSearch">
+              Scheduled searches
+            </label>
+            <button
+              id="setupAutoSearch"
+              type="button"
+              onClick={() => setIsActive(!isActive)}
+              className={cn(
+                'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30',
+                isActive ? 'bg-primary' : 'bg-muted-foreground/30'
+              )}
+              role="switch"
+              aria-checked={isActive}
+              aria-label="Toggle automatic searches"
+            >
+              <span
+                className={cn(
+                  'inline-block size-3.5 transform rounded-full bg-white shadow transition-transform',
+                  isActive ? 'translate-x-[18px]' : 'translate-x-0.5'
+                )}
+              />
+            </button>
           </div>
-          <span className="text-xs text-muted-foreground group-open:rotate-180 transition-transform">
-            ▾
-          </span>
-        </summary>
-        <div className="mt-4 text-sm">
-          {!searchPreview.hasKeywords ? (
-            <p className="text-muted-foreground">
-              Add at least one keyword to see the query.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              <KVRow label={`Keyword passes (first ${caps.keywordOrMax})`}>
-                <span className="font-mono text-xs break-all">
-                  {searchPreview.providerSearchTerms.join(' · ') || searchPreview.keywordQuery}
-                </span>
-              </KVRow>
-              {safeResumeSearchTerms.length > 0 && (
-                <KVRow label="Resume search terms">
-                  <span className="text-xs">
-                    {safeResumeSearchTerms.slice(0, caps.keywordOrMax).join(' · ')}
-                  </span>
-                </KVRow>
-              )}
-              {searchPreview.locationRuns.length > 0 && (
-                <KVRow label={`Location passes (per keyword, up to ${caps.locationPassesMax})`}>
-                  <span className="text-xs">
-                    {searchPreview.locationRuns.join(' · ')}
-                  </span>
-                </KVRow>
-              )}
-              <KVRow label="Provider passes">
-                <span className="text-xs">
-                  {searchPreview.providerPassesSelected} of{' '}
-                  {searchPreview.providerPassesPlanned} planned
-                  {searchPreview.providerPassesCapped
-                    ? ` · ${searchPreview.providerPassesDropped} capped`
-                    : ''}
-                </span>
-              </KVRow>
-              <KVRow label="APIs">
-                <span className="text-xs">
-                  {searchPreview.noBackends
-                    ? '—'
-                    : searchPreview.enabledPlatforms.join(', ')}
-                </span>
-              </KVRow>
-              <KVRow label="Scoring">
-                <span className="text-xs">
-                  Min {searchPreview.scoringHints.minScore}/100
-                  {searchPreview.scoringHints.salaryMinUsd != null &&
-                    ` · Min $${searchPreview.scoringHints.salaryMinUsd.toLocaleString()}/yr`}
-                  {` · ${searchPreview.scoringHints.experienceLabel}`}
-                </span>
-              </KVRow>
+          {isActive && (
+            <div
+              className="inline-flex w-fit rounded-md border border-border bg-muted/25 p-0.5"
+              role="group"
+              aria-label="Search frequency"
+            >
+              {FREQUENCY_ORDER.map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setFrequency(f)}
+                  className={cn(
+                    'rounded px-2.5 py-1 text-xs font-medium transition-colors',
+                    frequency === f
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  {f === 'DAILY' ? 'Daily' : 'Weekly'}
+                </button>
+              ))}
             </div>
           )}
         </div>
-      </details>
+      </div>
+    </section>
+  )
 
-      {/* Sticky save bar */}
+  const telegramSection = (
+    <section className={cn('space-y-3', !isSetupLayout && 'glass glass-subtle rounded-2xl px-5 py-5')}>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="font-medium text-sm">Telegram notifications</h3>
+        {!telegramConfigured && (
+          <span className="text-[11px] text-warning-text">
+            TELEGRAM_BOT_TOKEN not set
+          </span>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={telegramChatId}
+          onChange={(e) => setTelegramChatId(e.target.value)}
+          placeholder="Chat ID, e.g. 123456789"
+          className={cn(inputClass, 'flex-1')}
+        />
+        <button
+          type="button"
+          onClick={handleVerifyTelegram}
+          disabled={
+            isVerifying ||
+            !telegramChatId.trim() ||
+            !telegramConfigured
+          }
+          className="px-3 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-40"
+        >
+          {isVerifying ? 'Verifying…' : 'Verify'}
+        </button>
+      </div>
+      {verifyMessage && (
+        <p className="text-xs text-muted-foreground">{verifyMessage}</p>
+      )}
+      {telegramHelpTrigger}
+    </section>
+  )
+
+  const simpleSearchSummary = searchPreview.hasKeywords ? (
+    <ul className="space-y-2 text-sm text-muted-foreground list-disc pl-4">
+      <li>
+        <span className="text-foreground">Searches for:</span>{' '}
+        {(safeResumeSearchTerms.length > 0
+          ? safeResumeSearchTerms
+          : keywords
+        )
+          .slice(0, caps.keywordOrMax)
+          .join(', ') || '—'}
+      </li>
+      <li>
+        <span className="text-foreground">In:</span>{' '}
+        {searchPreview.locationRuns.length > 0
+          ? searchPreview.locationRuns.join(', ')
+          : locations.join(', ') || 'Anywhere'}
+        {searchPreview.remoteOnly ? ' (remote only)' : ''}
+      </li>
+      <li>
+        <span className="text-foreground">Saves jobs scoring</span> ≥{' '}
+        {searchPreview.scoringHints.minScore}/100
+        {searchPreview.scoringHints.experienceLabel !== 'Any level' &&
+          ` · ${searchPreview.scoringHints.experienceLabel}`}
+      </li>
+      {droppedResumeTerms.length > 0 && (
+        <li>
+          <span className="text-foreground">Not searched (resume term cap):</span>{' '}
+          {droppedResumeTerms.join(', ')}
+        </li>
+      )}
+    </ul>
+  ) : (
+    <p className="text-sm text-muted-foreground">
+      Add at least one keyword to see how the next search will run.
+    </p>
+  )
+
+  const technicalPreview = searchPreview.hasKeywords && (
+    <div className="mt-4 space-y-3 text-sm border-t border-border/40 pt-4">
+      <KVRow label={`Keyword passes (first ${caps.keywordOrMax})`}>
+        <span className="font-mono text-xs break-all">
+          {searchPreview.providerSearchTerms.join(' · ') || searchPreview.keywordQuery}
+        </span>
+      </KVRow>
+      {allResumeSearchTerms.length > 0 && (
+        <KVRow label="All resume-derived terms">
+          <span className="text-xs">{allResumeSearchTerms.join(' · ')}</span>
+        </KVRow>
+      )}
+      {searchPreview.locationRuns.length > 0 && (
+        <KVRow label={`Location passes (up to ${caps.locationPassesMax})`}>
+          <span className="text-xs">{searchPreview.locationRuns.join(' · ')}</span>
+        </KVRow>
+      )}
+      <KVRow label="Provider passes">
+        <span className="text-xs">
+          {searchPreview.providerPassesSelected} of{' '}
+          {searchPreview.providerPassesPlanned} planned
+          {searchPreview.providerPassesCapped
+            ? ` · ${searchPreview.providerPassesDropped} capped`
+            : ''}
+        </span>
+      </KVRow>
+    </div>
+  )
+
+  const searchPreviewBlock = (
+    <div className="glass glass-subtle rounded-2xl px-5 py-4">
+      <h3 className="font-semibold text-sm">How your next search works</h3>
+      <p className="text-xs text-muted-foreground mt-0.5 mb-3">
+        Based on current form — save search settings before running.
+      </p>
+      {simpleSearchSummary}
+      <details className="mt-3 text-xs text-muted-foreground">
+        <summary className="cursor-pointer select-none hover:text-foreground">
+          Technical details
+        </summary>
+        {technicalPreview}
+      </details>
+    </div>
+  )
+
+  return (
+    <div className={cn('relative', isSetupLayout ? 'pb-20' : 'pb-24')}>
+      {!searchServiceConfigured && (
+        <div className="mb-5 p-3 bg-warning-bg border border-warning/30 rounded-xl text-sm text-warning-text">
+          <strong>No search backends available.</strong> Add{' '}
+          <code className="font-mono text-xs">JOBS_SEARCH_API_KEY</code>.
+        </div>
+      )}
+
+      {isSetupGridLayout ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 lg:divide-x lg:divide-border">
+          <div className={cn(setupPanelBodyClass, 'order-1 lg:col-start-1 lg:row-start-1')}>
+            {profileSection}
+          </div>
+          <div
+            id="search"
+            className={cn(
+              setupPanelBodyClass,
+              'order-2 scroll-mt-20 border-t lg:col-start-2 lg:row-start-1 lg:border-t-0'
+            )}
+          >
+            {searchPreferencesSection}
+          </div>
+          <div
+            className={cn(
+              setupPanelBodyClass,
+              'order-3 border-t lg:col-start-1 lg:row-start-2'
+            )}
+          >
+            {resumeSection}
+          </div>
+          <div
+            className={cn(
+              setupPanelBodyClass,
+              'order-4 border-t lg:col-start-2 lg:row-start-2'
+            )}
+          >
+            {setupNotificationsSection}
+          </div>
+        </div>
+      ) : isSetupLayout ? (
+        <div className={setupStackClass}>
+          {searchPreferencesSection}
+          {setupNotificationsSection}
+        </div>
+      ) : (
+        <>
+          <div className="mb-5">{activationCard}</div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {searchPreferencesSection}
+            {filtersSection}
+            {scheduleSection}
+            {telegramSection}
+          </div>
+          <div className="mt-5">{searchPreviewBlock}</div>
+        </>
+      )}
+
       <StickySaveBar
         isDirty={isDirty}
         isPending={isPending}
         saveStatus={saveStatus}
         onSave={handleSave}
+      />
+
+      <TelegramHelpPanel
+        open={telegramHelpOpen}
+        onClose={() => setTelegramHelpOpen(false)}
       />
     </div>
   )
@@ -568,12 +807,14 @@ function TagInput({
   hint,
   values,
   onChange,
+  compact = false,
 }: {
   label: string
   placeholder: string
   hint?: string
   values: string[]
   onChange: (v: string[]) => void
+  compact?: boolean
 }) {
   const [input, setInput] = useState('')
 
@@ -588,14 +829,20 @@ function TagInput({
   }
 
   return (
-    <div>
-      <label className="block text-sm font-medium mb-1.5">{label}</label>
+    <div className={compact ? setupFieldGroupClass : undefined}>
+      <label
+        className={
+          compact ? setupLabelClass : 'mb-1.5 block text-sm font-medium text-foreground/90'
+        }
+      >
+        {label}
+      </label>
       {values.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-2">
+        <div className={cn('flex flex-wrap gap-1.5', compact ? '' : 'mb-2')}>
           {values.map((v) => (
             <span
               key={v}
-              className="inline-flex items-center gap-1 px-2.5 py-1 bg-muted rounded-full text-xs"
+              className={compact ? setupTagClass : 'inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs'}
             >
               {v}
               <button
@@ -624,10 +871,12 @@ function TagInput({
           if (input.trim()) addTags(input)
         }}
         placeholder={placeholder}
-        className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-colors"
+        className={compact ? setupFieldClass : 'w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-colors'}
       />
       {hint && (
-        <p className="text-[11px] text-muted-foreground mt-1.5">{hint}</p>
+        <p className={cn('text-muted-foreground', compact ? 'text-[10px] mt-1' : 'text-[11px] mt-1.5')}>
+          {hint}
+        </p>
       )}
     </div>
   )

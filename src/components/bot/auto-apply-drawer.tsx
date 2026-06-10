@@ -262,14 +262,14 @@ export function AutoApplyDrawer({
                 </p>
                 {result.screenshotUrls.length > 0 ? (
                   <div className="space-y-3 min-w-0">
-                    {result.screenshotUrls.map((url, i) => (
+                    {result.screenshotUrls.map((_url, i) => (
                       <div key={i} className="min-w-0 rounded-lg border border-border bg-muted/20">
                         <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-1.5 border-b border-border/80 bg-muted/40">
                           <span className="text-xs text-muted-foreground">
                             Scroll vertically in this panel; scroll horizontally below if needed. For 1:1 pixels, open in a new tab.
                           </span>
                           <a
-                            href={url}
+                            href={`/api/bot/auto-apply/${result.attemptId}/screenshots/${i}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             download={`apply-preview-${i + 1}.png`}
@@ -282,7 +282,7 @@ export function AutoApplyDrawer({
                         <div className="min-w-0 max-w-full overflow-x-auto overflow-y-visible rounded-b-lg bg-muted/10">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={url}
+                            src={`/api/bot/auto-apply/${result.attemptId}/screenshots/${i}`}
                             alt={`Form page ${i + 1}`}
                             className="block h-auto max-w-none w-auto align-top"
                             loading="lazy"

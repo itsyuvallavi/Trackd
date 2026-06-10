@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import excelRowsFixture from './__fixtures__/jobs-search-api-excel-rows.json'
@@ -13,11 +13,15 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
   })
 }
 
-function workbookResponse(rows: Record<string, unknown>[]): Response {
-  const workbook = XLSX.utils.book_new()
-  const worksheet = XLSX.utils.json_to_sheet(rows)
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Jobs')
-  const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
+async function workbookResponse(rows: Record<string, unknown>[]): Promise<Response> {
+  const workbook = new ExcelJS.Workbook()
+  const worksheet = workbook.addWorksheet('Jobs')
+  const headers = Array.from(new Set(rows.flatMap((row) => Object.keys(row))))
+  worksheet.addRow(headers)
+  for (const row of rows) {
+    worksheet.addRow(headers.map((header) => row[header] ?? null))
+  }
+  const buffer = await workbook.xlsx.writeBuffer()
   return new Response(buffer, {
     status: 200,
     headers: {
@@ -123,7 +127,7 @@ describe('searchJobsSearchApiExcel provider contract', () => {
   it('maps Excel rows with provider column aliases and filters invalid rows', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(workbookResponse(excelRowsFixture as Record<string, unknown>[]))
+      .mockResolvedValue(await workbookResponse(excelRowsFixture as Record<string, unknown>[]))
     vi.stubGlobal('fetch', fetchMock)
 
     const response = await searchJobsSearchApiExcel(

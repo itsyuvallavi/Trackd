@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import type { EmailIntegration } from '@prisma/client'
+import type { EmailProvider } from '@prisma/client'
 import { saveEmailIntegration, syncEmails, testEmailConnection, updateAutoSyncSettings } from '@/app/(authenticated)/settings/email-actions'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { EMAIL_SYNC_COMPLETE_EVENT, EMAIL_SYNC_STARTED_EVENT, NOTIFICATIONS_REFRESH_EVENT } from '@/lib/constants'
@@ -11,7 +11,20 @@ import { cn } from '@/lib/utils'
 import { ListChecks, MailCheck, RefreshCw, Settings2 } from 'lucide-react'
 
 interface EmailIntegrationFormProps {
-  integration: EmailIntegration | null
+  integration: {
+    id: string
+    provider: EmailProvider
+    email: string
+    imapHost: string | null
+    imapPort: number | null
+    imapUsername: string | null
+    isActive: boolean
+    lastSyncedAt: Date | string | null
+    lastError: string | null
+    autoSyncEnabled: boolean
+    autoSyncFrequency: number
+    nextSyncAt: Date | string | null
+  } | null
 }
 
 export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps) {
@@ -426,13 +439,16 @@ export function EmailIntegrationForm({ integration }: EmailIntegrationFormProps)
                 type="password"
                 id="imapPassword"
                 name="imapPassword"
-                required
-                defaultValue={integration?.imapPassword || ''}
+                required={!integration}
                 className="w-full rounded-md border border-foreground/20 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/50"
-                placeholder="Your email password or app-specific password"
+                placeholder={
+                  integration
+                    ? 'Leave blank to keep the stored password'
+                    : 'Your email password or app-specific password'
+                }
               />
               <p className="text-xs text-foreground/60 mt-1">
-                💡 We recommend using an app-specific password for better security
+                We recommend using an app-specific password. Stored credentials are not shown again.
               </p>
             </div>
 

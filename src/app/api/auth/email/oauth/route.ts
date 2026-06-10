@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { checkRateLimitAsync, RATE_LIMITS } from '@/lib/rate-limit'
 import { requireAuth } from '@/lib/auth'
 import {
   createEmailOAuthState,
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     'unknown'
   
   // Check auth rate limit (defense in depth - middleware also checks)
-  const rateLimitResult = checkRateLimit(
+  const rateLimitResult = await checkRateLimitAsync(
     `auth:ip:${ip}`,
     RATE_LIMITS.auth.limit,
     RATE_LIMITS.auth.window
@@ -78,15 +78,18 @@ export async function GET(request: NextRequest) {
   // Ensure baseUrl has a protocol (add https:// if missing)
   if (baseUrl && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
     baseUrl = `https://${baseUrl}`
-    console.log('[OAuth] Added https:// protocol to baseUrl:', baseUrl)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[OAuth] Added https:// protocol to baseUrl')
+    }
   }
   
   const callbackUrl = `${baseUrl}/api/auth/email/oauth/callback`
   
   // Log the callback URL for debugging (helpful to verify it matches OAuth app settings)
-  console.log('[OAuth] Callback URL:', callbackUrl)
-  console.log('[OAuth] Base URL source:', process.env.NEXT_PUBLIC_APP_URL ? `NEXT_PUBLIC_APP_URL env var: ${process.env.NEXT_PUBLIC_APP_URL}` : `request.nextUrl.origin: ${request.nextUrl.origin}`)
-  console.log('[OAuth] Request origin:', request.nextUrl.origin)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[OAuth] Callback URL:', callbackUrl)
+    console.log('[OAuth] Base URL source:', process.env.NEXT_PUBLIC_APP_URL ? 'NEXT_PUBLIC_APP_URL env var' : 'request.nextUrl.origin')
+  }
 
   // For Google (Gmail)
   if (provider === 'google') {

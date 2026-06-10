@@ -4,6 +4,10 @@ import { prisma } from '@/lib/prisma'
 import type { EmailMessage } from '@/lib/email-service'
 import { createEmailService } from '@/lib/email-service'
 import { alignEmailSyncLowerBound } from '@/lib/email-sync-window'
+import {
+  decryptEmailCredential,
+  encryptEmailCredential,
+} from '@/lib/email-credential-crypto'
 
 const TOKEN_SKEW_MS = 5 * 60 * 1000
 /** Cap per sync to stay within serverless time limits */
@@ -51,7 +55,7 @@ async function refreshGoogleAccessToken(integration: EmailIntegration): Promise<
   accessToken: string
   expiresAt: Date | null
 }> {
-  const rt = integration.refreshToken
+  const rt = decryptEmailCredential(integration.refreshToken)
   if (!rt) {
     throw new Error(
       'Gmail connection expired. Disconnect and reconnect Google in Email settings (enable offline access).',
@@ -73,8 +77,7 @@ async function refreshGoogleAccessToken(integration: EmailIntegration): Promise<
     }),
   })
   if (!res.ok) {
-    const t = await res.text()
-    console.error('Google token refresh failed:', t)
+    console.error('Google token refresh failed:', { status: res.status })
     throw new Error('Failed to refresh Gmail access. Reconnect Google in settings.')
   }
   const json = (await res.json()) as { access_token: string; expires_in?: number }
@@ -85,7 +88,7 @@ async function refreshGoogleAccessToken(integration: EmailIntegration): Promise<
   await prisma.emailIntegration.update({
     where: { userId: integration.userId },
     data: {
-      accessToken: json.access_token,
+      accessToken: encryptEmailCredential(json.access_token),
       tokenExpiry: expiresAt,
     },
   })
@@ -95,11 +98,12 @@ async function refreshGoogleAccessToken(integration: EmailIntegration): Promise<
 async function getGoogleAccessToken(integration: EmailIntegration): Promise<string> {
   const now = Date.now()
   const exp = integration.tokenExpiry?.getTime() ?? 0
-  if (integration.accessToken && exp > now + TOKEN_SKEW_MS) {
-    return integration.accessToken
+  const accessToken = decryptEmailCredential(integration.accessToken)
+  if (accessToken && exp > now + TOKEN_SKEW_MS) {
+    return accessToken
   }
-  const { accessToken } = await refreshGoogleAccessToken(integration)
-  return accessToken
+  const refreshed = await refreshGoogleAccessToken(integration)
+  return refreshed.accessToken
 }
 
 async function gmailAuthorizedFetch(url: string, integration: EmailIntegration): Promise<Response> {
@@ -109,11 +113,7 @@ async function gmailAuthorizedFetch(url: string, integration: EmailIntegration):
     const latest = await prisma.emailIntegration.findUniqueOrThrow({
       where: { userId: integration.userId },
     })
-    await refreshGoogleAccessToken(latest)
-    const after = await prisma.emailIntegration.findUniqueOrThrow({
-      where: { userId: integration.userId },
-    })
-    token = after.accessToken!
+    token = (await refreshGoogleAccessToken(latest)).accessToken
     res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
   }
   return res
@@ -132,8 +132,7 @@ async function fetchViaGmail(integration: EmailIntegration, syncSince: Date): Pr
 
     const listRes = await gmailAuthorizedFetch(url.toString(), integration)
     if (!listRes.ok) {
-      const errText = await listRes.text()
-      console.error('Gmail list messages failed:', listRes.status, errText)
+      console.error('Gmail list messages failed:', { status: listRes.status })
       throw new Error(`Gmail API error (${listRes.status})`)
     }
     const listJson = (await listRes.json()) as {
@@ -150,7 +149,7 @@ async function fetchViaGmail(integration: EmailIntegration, syncSince: Date): Pr
         integration,
       )
       if (!msgRes.ok) {
-        console.error(`Gmail get message ${id} failed:`, await msgRes.text())
+        console.error('Gmail get message failed:', { status: msgRes.status })
         continue
       }
       const msg = (await msgRes.json()) as {
@@ -212,7 +211,7 @@ async function refreshMicrosoftAccessToken(integration: EmailIntegration): Promi
   accessToken: string
   expiresAt: Date | null
 }> {
-  const rt = integration.refreshToken
+  const rt = decryptEmailCredential(integration.refreshToken)
   if (!rt) {
     throw new Error('Outlook connection expired. Disconnect and reconnect Microsoft in Email settings.')
   }
@@ -232,8 +231,7 @@ async function refreshMicrosoftAccessToken(integration: EmailIntegration): Promi
     }),
   })
   if (!res.ok) {
-    const t = await res.text()
-    console.error('Microsoft token refresh failed:', t)
+    console.error('Microsoft token refresh failed:', { status: res.status })
     throw new Error('Failed to refresh Outlook access. Reconnect Microsoft in settings.')
   }
   const json = (await res.json()) as {
@@ -248,9 +246,11 @@ async function refreshMicrosoftAccessToken(integration: EmailIntegration): Promi
   await prisma.emailIntegration.update({
     where: { userId: integration.userId },
     data: {
-      accessToken: json.access_token,
+      accessToken: encryptEmailCredential(json.access_token),
       tokenExpiry: expiresAt,
-      ...(json.refresh_token ? { refreshToken: json.refresh_token } : {}),
+      ...(json.refresh_token
+        ? { refreshToken: encryptEmailCredential(json.refresh_token) }
+        : {}),
     },
   })
   return { accessToken: json.access_token, expiresAt }
@@ -259,11 +259,12 @@ async function refreshMicrosoftAccessToken(integration: EmailIntegration): Promi
 async function getMicrosoftAccessToken(integration: EmailIntegration): Promise<string> {
   const now = Date.now()
   const exp = integration.tokenExpiry?.getTime() ?? 0
-  if (integration.accessToken && exp > now + TOKEN_SKEW_MS) {
-    return integration.accessToken
+  const accessToken = decryptEmailCredential(integration.accessToken)
+  if (accessToken && exp > now + TOKEN_SKEW_MS) {
+    return accessToken
   }
-  const { accessToken } = await refreshMicrosoftAccessToken(integration)
-  return accessToken
+  const refreshed = await refreshMicrosoftAccessToken(integration)
+  return refreshed.accessToken
 }
 
 async function fetchViaMicrosoft(integration: EmailIntegration, syncSince: Date): Promise<EmailMessage[]> {
@@ -296,8 +297,7 @@ async function fetchViaMicrosoft(integration: EmailIntegration, syncSince: Date)
       })
     }
     if (!res.ok) {
-      const errText = await res.text()
-      console.error('Microsoft Graph messages failed:', res.status, errText)
+      console.error('Microsoft Graph messages failed:', { status: res.status })
       throw new Error(`Microsoft Graph error (${res.status})`)
     }
     const page = (await res.json()) as {
@@ -350,7 +350,7 @@ function fetchViaImap(integration: EmailIntegration, syncSince: Date): Promise<E
     host: integration.imapHost,
     port: integration.imapPort,
     user: integration.imapUsername,
-    password: integration.imapPassword,
+    password: decryptEmailCredential(integration.imapPassword) ?? '',
   })
   return emailService.fetchEmailsSince(syncSince)
 }
@@ -365,8 +365,7 @@ export async function verifyGmailConnection(integration: EmailIntegration): Prom
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!res.ok) {
-    const t = await res.text()
-    console.error('Gmail profile check failed:', res.status, t)
+    console.error('Gmail profile check failed:', { status: res.status })
     throw new Error('Cannot reach Gmail with the saved connection. Reconnect Google.')
   }
 }
@@ -390,8 +389,7 @@ export async function verifyMicrosoftConnection(integration: EmailIntegration): 
     })
   }
   if (!res.ok) {
-    const t = await res.text()
-    console.error('Microsoft Graph me check failed:', res.status, t)
+    console.error('Microsoft Graph me check failed:', { status: res.status })
     throw new Error('Cannot reach Outlook with the saved connection. Reconnect Microsoft.')
   }
 }

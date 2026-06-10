@@ -4,6 +4,15 @@ import { useState, useRef, useTransition } from 'react'
 import { AlertCircle, Trash2, Upload, FileText, Star, ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ResumeStructuredData } from '@/lib/bot/resume/types'
+import {
+  setupBtnPrimaryClass,
+  setupFilePickerClass,
+  setupFieldGroupClass,
+  setupInsetClass,
+  setupLabelClass,
+  setupRowClass,
+  setupStackClass,
+} from '@/components/bot/setup-ui'
 
 interface BotResume {
   id: string
@@ -18,9 +27,17 @@ interface BotResume {
 
 interface BotResumeManagerProps {
   initialResumes: BotResume[]
+  /** Hide page-level heading when embedded in Setup. */
+  embedded?: boolean
+  /** Setup page: compact upload, no parsed-data drill-down. */
+  minimal?: boolean
 }
 
-export function BotResumeManager({ initialResumes }: BotResumeManagerProps) {
+export function BotResumeManager({
+  initialResumes,
+  embedded = false,
+  minimal = false,
+}: BotResumeManagerProps) {
   const [resumes, setResumes] = useState<BotResume[]>(initialResumes)
   const [isUploading, startUpload] = useTransition()
   const [isDeleting, startDelete] = useTransition()
@@ -51,12 +68,14 @@ export function BotResumeManager({ initialResumes }: BotResumeManagerProps) {
 
   function handleUpload() {
     if (!file) { flashMessage('Select a PDF file first', true); return }
-    if (!label.trim()) { flashMessage('Add a label (e.g. "Software Engineer")', true); return }
+    const uploadLabel =
+      label.trim() || file.name.replace(/\.pdf$/i, '').replace(/_/g, ' ').trim()
+    if (!uploadLabel) { flashMessage('Add a label (e.g. "Software Engineer")', true); return }
 
     startUpload(async () => {
       const fd = new FormData()
       fd.append('file', file)
-      fd.append('label', label.trim())
+      fd.append('label', uploadLabel)
       fd.append('matchKeywords', keywords)
       fd.append('isDefault', String(isDefault))
 
@@ -101,31 +120,47 @@ export function BotResumeManager({ initialResumes }: BotResumeManagerProps) {
   const inputClass = 'w-full px-3 py-2 text-sm border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-ring'
 
   return (
-    <div className="border border-border rounded-lg p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="font-medium text-sm">Resumes</h2>
-        <span className="text-xs text-muted-foreground">{resumes.length} uploaded</span>
-      </div>
+    <div className={cn(minimal ? setupStackClass : 'space-y-4', !embedded && !minimal && 'border border-border rounded-lg p-4')}>
+      {!embedded && (
+        <div className="flex items-center justify-between">
+          <h2 className="font-medium text-sm">Resumes</h2>
+          <span className="text-xs text-muted-foreground">{resumes.length} uploaded</span>
+        </div>
+      )}
 
-      <p className="text-xs text-muted-foreground">
-        Upload one resume per job type. The bot picks the best match based on keywords in the job title.
-        For example: "Software Engineer" resume for engineering roles, "Product Manager" for PM roles.
-      </p>
+      {!minimal && (
+        <p className="text-xs text-muted-foreground">
+          {embedded
+            ? 'Upload a PDF for job matching and applications. We derive search terms from its skills.'
+            : 'Upload one resume per job type. The bot picks the best match based on keywords in the job title.'}
+        </p>
+      )}
 
       {/* Existing resumes */}
       {resumes.length > 0 && (
-        <div className="space-y-2">
+        <div className={cn(minimal && setupFieldGroupClass)}>
+          {minimal && <p className={setupLabelClass}>Resume</p>}
+          <div className="space-y-2">
           {resumes.map((resume) => {
-            const isExpanded = expandedId === resume.id
+            const isExpanded = !minimal && expandedId === resume.id
             const sd = resume.structuredData
             return (
-              <div key={resume.id} className="border border-border rounded-lg overflow-hidden">
-                <div className="flex items-center gap-2 px-3 py-2.5">
-                  <FileText className="size-4 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
+              <div
+                key={resume.id}
+                className={cn(
+                  !minimal && 'overflow-hidden border border-border rounded-lg'
+                )}
+              >
+                <div
+                  className={cn(
+                    minimal ? setupInsetClass : 'flex items-center gap-2 px-3 py-2'
+                  )}
+                >
+                  <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-medium truncate">{resume.label}</span>
-                      {resume.isDefault && (
+                      <span className="truncate text-sm font-medium">{resume.label}</span>
+                      {!minimal && resume.isDefault && (
                         <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400">
                           <Star className="size-2.5 fill-current" /> default
                         </span>
@@ -136,20 +171,24 @@ export function BotResumeManager({ initialResumes }: BotResumeManagerProps) {
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-muted-foreground truncate">{resume.fileName}</p>
-                    {resume.matchKeywords.length > 0 && (
-                      <p className="text-[11px] text-muted-foreground">
-                        Triggers on: {resume.matchKeywords.join(', ')}
-                      </p>
-                    )}
-                    {!sd && (
-                      <p className="text-[11px] text-warning-text">
-                        This PDF is stored but unavailable to AI scoring.
-                      </p>
+                    {!minimal && (
+                      <>
+                        <p className="text-[11px] text-muted-foreground truncate">{resume.fileName}</p>
+                        {resume.matchKeywords.length > 0 && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Triggers on: {resume.matchKeywords.join(', ')}
+                          </p>
+                        )}
+                        {!sd && (
+                          <p className="text-[11px] text-warning-text">
+                            This PDF is stored but unavailable to AI scoring.
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    {sd && (
+                    {!minimal && sd && (
                       <button
                         type="button"
                         onClick={() => setExpandedId(isExpanded ? null : resume.id)}
@@ -160,10 +199,13 @@ export function BotResumeManager({ initialResumes }: BotResumeManagerProps) {
                       </button>
                     )}
                     <a
-                      href={resume.fileUrl}
+                      href={`/api/bot/resumes/${resume.id}/file`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-1.5 text-muted-foreground hover:text-foreground transition-colors text-xs"
+                      className={cn(
+                        'text-muted-foreground hover:text-foreground transition-colors',
+                        minimal ? 'px-2 text-xs' : 'p-1.5 text-xs'
+                      )}
                     >
                       View
                     </a>
@@ -171,10 +213,13 @@ export function BotResumeManager({ initialResumes }: BotResumeManagerProps) {
                       type="button"
                       onClick={() => handleDelete(resume.id)}
                       disabled={isDeleting}
-                      className="p-1.5 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40"
+                      className={cn(
+                        'text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40',
+                        minimal ? 'flex size-9 items-center justify-center' : 'p-1.5'
+                      )}
                       aria-label="Delete resume"
                     >
-                      <Trash2 className="size-4" />
+                      <Trash2 className={minimal ? 'size-3.5' : 'size-4'} />
                     </button>
                   </div>
                 </div>
@@ -216,48 +261,85 @@ export function BotResumeManager({ initialResumes }: BotResumeManagerProps) {
               </div>
             )
           })}
+          </div>
         </div>
       )}
 
       {/* Upload form */}
-      <div className="border border-dashed border-border rounded-lg p-3 space-y-3">
-        <p className="text-xs font-medium text-muted-foreground">Add resume</p>
+      <div
+        className={cn(
+          minimal ? setupFieldGroupClass : 'space-y-3 border border-dashed border-border rounded-lg p-3'
+        )}
+      >
+        {!minimal && (
+          <p className="text-xs font-medium text-muted-foreground">Add resume</p>
+        )}
 
-        <div>
-          <label className="block text-xs font-medium mb-1">Label *</label>
-          <input
-            type="text"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder='e.g. "Software Engineer" or "Product Manager"'
-            className={inputClass}
-          />
-        </div>
+        {!minimal && (
+          <div>
+            <label className="block text-xs font-medium mb-1">Label *</label>
+            <input
+              type="text"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder='e.g. "Software Engineer" or "Product Manager"'
+              className={inputClass}
+            />
+          </div>
+        )}
 
-        <div>
-          <label className="block text-xs font-medium mb-1">Job title keywords (triggers this resume)</label>
-          <input
-            type="text"
-            value={keywords}
-            onChange={(e) => setKeywords(e.target.value)}
-            placeholder='e.g. "engineer, developer, frontend, backend"'
-            className={inputClass}
-          />
-          <p className="text-[11px] text-muted-foreground mt-1">Comma-separated. Leave blank to use as default.</p>
-        </div>
+        {embedded && !minimal ? (
+          <details className="text-xs text-muted-foreground">
+            <summary className="cursor-pointer select-none font-medium text-foreground/80">
+              Advanced: job title keywords
+            </summary>
+            <div className="mt-2">
+              <input
+                type="text"
+                value={keywords}
+                onChange={(e) => setKeywords(e.target.value)}
+                placeholder='e.g. "engineer, developer, frontend"'
+                className={inputClass}
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Optional. Picks this resume when a job title matches. Leave blank for default resume.
+              </p>
+            </div>
+          </details>
+        ) : !minimal ? (
+          <div>
+            <label className="block text-xs font-medium mb-1">Job title keywords (triggers this resume)</label>
+            <input
+              type="text"
+              value={keywords}
+              onChange={(e) => setKeywords(e.target.value)}
+              placeholder='e.g. "engineer, developer, frontend, backend"'
+              className={inputClass}
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">Comma-separated. Leave blank to use as default.</p>
+          </div>
+        ) : null}
 
-        <div className="flex items-center gap-2">
-          <input
-            id="isDefault"
-            type="checkbox"
-            checked={isDefault}
-            onChange={(e) => setIsDefault(e.target.checked)}
-            className="rounded border-border"
-          />
-          <label htmlFor="isDefault" className="text-xs">Use as default when no keywords match</label>
-        </div>
+        {!minimal && (
+          <div className="flex items-center gap-2">
+            <input
+              id="isDefault"
+              type="checkbox"
+              checked={isDefault}
+              onChange={(e) => setIsDefault(e.target.checked)}
+              className="rounded border-border"
+            />
+            <label htmlFor="isDefault" className="text-xs">Use as default when no keywords match</label>
+          </div>
+        )}
 
-        <div>
+        {minimal && (
+          <p className={setupLabelClass}>
+            {resumes.length > 0 ? 'Replace file' : 'Upload resume'}
+          </p>
+        )}
+
+        <div className={minimal ? setupRowClass : 'space-y-2'}>
           <input
             ref={fileRef}
             type="file"
@@ -269,37 +351,41 @@ export function BotResumeManager({ initialResumes }: BotResumeManagerProps) {
           <label
             htmlFor="resume-file-input"
             className={cn(
-              'flex items-center gap-2 px-3 py-2 border border-border rounded text-sm cursor-pointer',
-              'hover:bg-muted transition-colors',
-              file ? 'text-foreground' : 'text-muted-foreground'
+              minimal ? setupFilePickerClass : 'flex w-full cursor-pointer items-center gap-2 rounded border border-border px-3 py-2 text-sm hover:bg-muted transition-colors',
+              !minimal && (file ? 'text-foreground' : 'text-muted-foreground'),
+              minimal && (file ? 'text-foreground' : undefined)
             )}
           >
-            <Upload className="size-4" />
-            {file ? file.name : 'Choose PDF file (max 5MB)'}
+            <Upload className="size-3.5 shrink-0" />
+            <span className="truncate">
+              {file ? file.name : minimal ? 'Choose PDF' : 'Choose PDF file (max 5MB)'}
+            </span>
           </label>
-        </div>
 
         <button
           type="button"
           onClick={handleUpload}
-          disabled={isUploading || !file || !label.trim()}
-          className="w-full px-3 py-2 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          disabled={isUploading || !file}
+          className={cn(minimal ? setupBtnPrimaryClass : 'flex w-full items-center justify-center gap-2 rounded bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50')}
         >
           {isUploading ? (
             <>
               <span className="inline-block size-3 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-              Uploading and parsing…
+              {minimal ? 'Uploading…' : 'Uploading and parsing…'}
             </>
+          ) : minimal ? (
+            resumes.length > 0 ? 'Replace resume' : 'Upload PDF'
           ) : (
             'Upload and parse resume'
           )}
         </button>
 
-        {isUploading && (
+        {isUploading && !minimal && (
           <p className="text-xs text-muted-foreground text-center">
             AI is extracting your info from the PDF — this takes ~15 seconds
           </p>
         )}
+        </div>
       </div>
 
       {message && <p className="text-xs text-green-600 dark:text-green-400">{message}</p>}

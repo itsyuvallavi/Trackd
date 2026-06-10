@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Loader2, Play, AlertCircle, X } from 'lucide-react'
 import type { ResumeReadinessSource } from '@/lib/bot/profile-source-labels'
+import type { SetupReadiness } from '@/lib/bot/setup-readiness'
 import {
   BOT_RUN_STARTED_EVENT,
 } from '@/lib/constants'
@@ -25,6 +26,7 @@ interface BotStatusStripProps {
     totalCount: number
     source: ResumeReadinessSource
   }
+  setupReadiness?: SetupReadiness
 }
 
 type ManualRunStartResponse = {
@@ -86,6 +88,7 @@ export function BotStatusStrip({
   canRun,
   runDisabledReason,
   resumeReadiness,
+  setupReadiness,
 }: BotStatusStripProps) {
   const router = useRouter()
   const [running, setRunning] = useState(false)
@@ -169,12 +172,43 @@ export function BotStatusStrip({
   const profileSource = resumeReadiness.source
   const showSourceWarning = profileSource.tone !== 'ready'
   const resumeActionLabel =
-    resumeReadiness.totalCount > 0 ? 'Review resumes' : 'Add resume'
+    resumeReadiness.totalCount > 0 ? 'Review resume' : 'Add resume'
+
+  const setupIncomplete = setupReadiness && !setupReadiness.isComplete
 
   return (
     <div className="flex flex-col gap-2 text-sm">
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="inline-flex items-center gap-2">
+      {setupIncomplete && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-border/60 bg-background/40 px-3 py-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Setup:</span>
+          {!setupReadiness.hasResume && (
+            <Link href="/bot/setup?section=resume" className="underline hover:text-foreground">
+              Add resume
+            </Link>
+          )}
+          {!setupReadiness.hasProfile && (
+            <>
+              {!setupReadiness.hasResume && <span aria-hidden>·</span>}
+              <Link href="/bot/setup?section=profile" className="underline hover:text-foreground">
+                Complete profile
+              </Link>
+            </>
+          )}
+          {!setupReadiness.hasSearchTerms && (
+            <>
+              {(!setupReadiness.hasResume || !setupReadiness.hasProfile) && (
+                <span aria-hidden>·</span>
+              )}
+              <Link href="/bot/setup?section=search" className="underline hover:text-foreground">
+                Add search terms
+              </Link>
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <span
             aria-hidden
             className={cn(
@@ -225,14 +259,14 @@ export function BotStatusStrip({
           </>
         )}
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center gap-2 sm:ml-auto">
           <button
             type="button"
             onClick={handleRun}
             disabled={running || !canRun}
             title={!canRun ? runDisabledReason : undefined}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium',
+              'inline-flex w-full items-center justify-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium sm:w-auto',
               'bg-primary text-primary-foreground transition-[transform,background-color] duration-150',
               'ease-[var(--ease-ios)] hover:bg-primary/90 active:scale-[0.98]',
               'disabled:opacity-50 disabled:hover:bg-primary disabled:active:scale-100'
@@ -265,7 +299,7 @@ export function BotStatusStrip({
           </span>
           <span>{sourceWarningText(profileSource)}</span>
           <Link
-            href="/bot/resumes"
+            href="/bot/setup?section=resume"
             className="font-medium underline underline-offset-2 hover:text-foreground"
           >
             {resumeActionLabel}
@@ -274,10 +308,10 @@ export function BotStatusStrip({
             <>
               <span aria-hidden className="opacity-50">·</span>
               <Link
-                href="/bot/identity"
+                href="/bot/setup?section=profile"
                 className="font-medium underline underline-offset-2 hover:text-foreground"
               >
-                Identity
+                Profile
               </Link>
             </>
           )}

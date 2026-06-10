@@ -955,6 +955,14 @@ export async function runBotSearch(
       profileSource: safeSearchProfile.profileSource,
     })
 
+    if (safeSearchProfile.terms.length === 0) {
+      result.errors['config'] =
+        'No searchable terms — add job keywords in Setup or upload a parseable resume.'
+      result.fatalError = result.errors['config']
+      pushLog('warn', result.errors['config'])
+      return result
+    }
+
     const searchRequest = timePhaseSync('search_request_build', () =>
       buildBotSearchRequest(botConfig, safeSearchProfile)
     )

@@ -3,8 +3,8 @@ import { revalidateTag } from 'next/cache'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { cacheTagsFor } from '@/lib/cache-tags'
-import { createClient } from '@supabase/supabase-js'
 import { parseResumePdf, ResumeParseError } from '@/lib/bot/resume/parser'
+import { getSupabaseStorageAdmin, storageObjectPath, RESUME_BUCKET } from '@/lib/supabase/private-storage'
 import type { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
@@ -38,56 +38,15 @@ class ResumeUploadError extends Error {
   }
 }
 
-/** Object path inside the `resume` bucket from a Supabase Storage public or signed URL. */
-function storageResumeObjectPath(fileUrl: string): string | null {
-  const raw = fileUrl?.trim()
-  if (!raw) return null
+function getResumeStorageAdmin() {
   try {
-    const pathname = new URL(raw).pathname
-    const markers = ['/object/public/resume/', '/object/sign/resume/'] as const
-    for (const m of markers) {
-      const i = pathname.indexOf(m)
-      if (i !== -1) {
-        const segment = pathname.slice(i + m.length)
-        try {
-          return decodeURIComponent(segment)
-        } catch {
-          return segment
-        }
-      }
-    }
-    const parts = pathname.split('/resume/')
-    if (parts.length > 1) {
-      const segment = parts[parts.length - 1]!
-      try {
-        return decodeURIComponent(segment)
-      } catch {
-        return segment
-      }
-    }
+    return getSupabaseStorageAdmin()
   } catch {
-    return null
-  }
-  return null
-}
-
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
-
-  if (!url || !key) {
     throw new ResumeUploadError(
       'Resume upload is not configured. Missing storage credentials.',
       503,
     )
   }
-
-  return createClient(url, key, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
 }
 
 function safeResumeFileName(fileName: string) {
@@ -122,7 +81,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const user = await requireAuth()
 
-  let supabase: ReturnType<typeof getSupabaseAdmin> | null = null
+  let supabase: ReturnType<typeof getResumeStorageAdmin> | null = null
   let uploadedPath: string | null = null
 
   try {
@@ -147,15 +106,15 @@ export async function POST(req: NextRequest) {
       ? matchKeywordsRaw.split(',').map((k) => k.trim()).filter(Boolean)
       : []
 
-    // Upload to Supabase Storage.
-    supabase = getSupabaseAdmin()
+    // Upload to private Supabase Storage. Store the object path, not a public URL.
+    supabase = getResumeStorageAdmin()
     const path = `bot-resumes/${user.id}/${Date.now()}-${safeResumeFileName(file.name)}`
     uploadedPath = path
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
     const { error: storageError } = await supabase.storage
-      .from('resume')
+      .from(RESUME_BUCKET)
       .upload(path, buffer, { contentType: 'application/pdf', upsert: false })
 
     if (storageError) {
@@ -163,8 +122,7 @@ export async function POST(req: NextRequest) {
       return uploadError('Resume file upload failed. Please try again.', 502)
     }
 
-    const { data: urlData } = supabase.storage.from('resume').getPublicUrl(path)
-    const fileUrl = urlData.publicUrl
+    const fileUrl = path
 
     // Parse PDF with OpenAI. Parsing failure should not block storing the resume.
     let structured = null
@@ -211,7 +169,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(redactResumeRawText(resume))
   } catch (error) {
     if (uploadedPath && supabase) {
-      const { error: removeError } = await supabase.storage.from('resume').remove([uploadedPath])
+      const { error: removeError } = await supabase.storage.from(RESUME_BUCKET).remove([uploadedPath])
       if (removeError) {
         console.warn('[api/bot/resumes] Cleanup after failed upload:', removeError.message)
       }
@@ -237,10 +195,10 @@ export async function DELETE(req: NextRequest) {
   if (!resume) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   try {
-    const objectPath = storageResumeObjectPath(resume.fileUrl)
+    const objectPath = storageObjectPath(resume.fileUrl, RESUME_BUCKET)
     if (objectPath) {
-      const supabase = getSupabaseAdmin()
-      const { error: removeErr } = await supabase.storage.from('resume').remove([objectPath])
+      const supabase = getResumeStorageAdmin()
+      const { error: removeErr } = await supabase.storage.from(RESUME_BUCKET).remove([objectPath])
       if (removeErr) {
         console.warn('[api/bot/resumes] Storage remove:', removeErr.message)
       }

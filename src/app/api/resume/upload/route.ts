@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { getAIClient } from '@/lib/ai/client'
-import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { checkRateLimitAsync, RATE_LIMITS } from '@/lib/rate-limit'
 
 /**
  * POST /api/resume/upload
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     const user = await requireAuth()
     
     // Check upload rate limit (defense in depth - middleware also checks)
-    const rateLimitResult = checkRateLimit(
+    const rateLimitResult = await checkRateLimitAsync(
       `upload:${user.id}`,
       RATE_LIMITS.upload.limit,
       RATE_LIMITS.upload.window
@@ -106,4 +106,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

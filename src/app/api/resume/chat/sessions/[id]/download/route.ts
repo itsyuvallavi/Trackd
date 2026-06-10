@@ -83,8 +83,8 @@ export async function GET(
           // Log but don't fail - caching is optional
           console.error('[Download] Error caching data (non-fatal):', cacheError)
         }
-      } catch (parseError) {
-        console.error('Failed to parse resume JSON:', cleanJson)
+      } catch {
+        console.error('Failed to parse resume JSON')
         return NextResponse.json(
           { error: 'Failed to parse resume data' },
           { status: 500 }

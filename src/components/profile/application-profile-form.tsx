@@ -1,9 +1,20 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
+import Link from 'next/link'
 import { updateApplicationProfile } from '@/app/(authenticated)/profile/actions'
 import { CheckCircle } from 'lucide-react'
 import type { ApplicationProfile } from '@prisma/client'
+import { cn } from '@/lib/utils'
+import { SetupSelect } from '@/components/bot/setup-field-select'
+import {
+  setupBtnPrimaryClass,
+  setupFieldClass,
+  setupFieldGroupClass,
+  setupGridClass,
+  setupLabelClass,
+  setupStackClass,
+} from '@/components/bot/setup-ui'
 
 /** Password is never sent to the client; `hasPortalSignupPassword` indicates one is stored. */
 export type ApplicationProfileFormProps = Omit<ApplicationProfile, 'portalSignupPassword'> & {
@@ -12,12 +23,16 @@ export type ApplicationProfileFormProps = Omit<ApplicationProfile, 'portalSignup
 
 interface Props {
   profile: ApplicationProfileFormProps | null
+  /** Hide duplicate intro copy when embedded in Setup. */
+  embedded?: boolean
+  /** Setup page: only fields required to run searches. */
+  minimal?: boolean
 }
 
 const inputCls =
   'w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20'
 
-const labelCls = 'block text-xs font-medium text-muted-foreground uppercase mb-1'
+const labelCls = 'block text-[11px] font-medium text-muted-foreground mb-0.5'
 
 const WORK_AUTH_OPTIONS = [
   { value: '', label: 'Select…' },
@@ -36,7 +51,11 @@ const WORK_AUTH_OPTIONS = [
   { value: 'other', label: 'Other / Not listed' },
 ]
 
-export function ApplicationProfileForm({ profile }: Props) {
+export function ApplicationProfileForm({
+  profile,
+  embedded = false,
+  minimal = false,
+}: Props) {
   const [saved, setSaved] = useState(false)
   const [pending, startTransition] = useTransition()
   const formRef = useRef<HTMLFormElement>(null)
@@ -51,17 +70,108 @@ export function ApplicationProfileForm({ profile }: Props) {
     })
   }
 
+  if (minimal) {
+    return (
+      <form ref={formRef} onSubmit={handleSubmit} className={setupStackClass}>
+        <div className={setupGridClass}>
+          <div className={setupFieldGroupClass}>
+            <label className={setupLabelClass}>Legal name</label>
+            <input
+              type="text"
+              name="applicationFullName"
+              defaultValue={profile?.applicationFullName ?? ''}
+              placeholder="As on applications"
+              className={setupFieldClass}
+              autoComplete="name"
+              required
+            />
+          </div>
+          <div className={setupFieldGroupClass}>
+            <label className={setupLabelClass}>Email</label>
+            <input
+              type="email"
+              name="applicationEmail"
+              defaultValue={profile?.applicationEmail ?? ''}
+              placeholder="you@example.com"
+              className={setupFieldClass}
+              autoComplete="email"
+              required
+            />
+          </div>
+          <div className={setupFieldGroupClass}>
+            <label className={setupLabelClass}>Phone</label>
+            <input
+              type="tel"
+              name="phone"
+              defaultValue={profile?.phone ?? ''}
+              placeholder="+351 900 000 000"
+              className={setupFieldClass}
+              required
+            />
+          </div>
+          <div className={setupFieldGroupClass}>
+            <label className={setupLabelClass}>City</label>
+            <input
+              type="text"
+              name="city"
+              defaultValue={profile?.city ?? ''}
+              placeholder="Lisbon"
+              className={setupFieldClass}
+              required
+            />
+          </div>
+          <div className={cn('col-span-2', setupFieldGroupClass)}>
+            <label className={setupLabelClass}>Work authorization</label>
+            <SetupSelect
+              name="workAuthorization"
+              defaultValue={profile?.workAuthorization ?? ''}
+              required
+            >
+              {WORK_AUTH_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </SetupSelect>
+          </div>
+        </div>
+        <input type="hidden" name="requiresSponsorship" value={profile?.requiresSponsorship ? 'true' : 'false'} />
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="submit" disabled={pending} className={setupBtnPrimaryClass}>
+            {pending ? 'Saving…' : 'Save'}
+          </button>
+          {saved && (
+            <span className="flex h-9 items-center gap-1 text-xs text-green-600 dark:text-green-400">
+              <CheckCircle className="size-3.5" />
+              Saved
+            </span>
+          )}
+          <Link
+            href="/profile"
+            className="inline-flex h-9 items-center text-xs text-muted-foreground hover:text-foreground"
+          >
+            More fields →
+          </Link>
+        </div>
+      </form>
+    )
+  }
+
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
-      {/* Identity for auto-apply / job-board signup */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-          Application identity
-        </p>
-        <p className="text-xs text-muted-foreground mb-3">
-          Used by the apply bot for your legal name, email, and optional host job-board password (signup
-          gates). The bot still will not click final &quot;Sign up&quot; — you confirm from the screenshot.
-        </p>
+        {!embedded && (
+          <>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+              Application identity
+            </p>
+            <p className="text-xs text-muted-foreground mb-3">
+              Used by the apply bot for your legal name, email, and optional host job-board password
+              (signup gates). The bot still will not click final &quot;Sign up&quot; — you confirm from
+              the screenshot.
+            </p>
+          </>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className={labelCls}>Legal name</label>
@@ -85,34 +195,37 @@ export function ApplicationProfileForm({ profile }: Props) {
               autoComplete="email"
             />
           </div>
-          <div className="sm:col-span-2">
-            <label className={labelCls}>Host job-board password (optional)</label>
-            <input
-              type="password"
-              name="portalSignupPassword"
-              placeholder={
-                profile?.hasPortalSignupPassword
-                  ? 'Leave blank to keep current password'
-                  : 'Unique password for job-board signups only'
-              }
-              className={inputCls}
-              autoComplete="new-password"
-            />
-            {profile?.hasPortalSignupPassword ? (
-              <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-                <input type="checkbox" name="clearPortalSignupPassword" className="rounded border-border" />
-                Remove saved job-board password
-              </label>
-            ) : null}
-          </div>
+          {!embedded && (
+            <div className="sm:col-span-2">
+              <label className={labelCls}>Host job-board password (optional)</label>
+              <input
+                type="password"
+                name="portalSignupPassword"
+                placeholder={
+                  profile?.hasPortalSignupPassword
+                    ? 'Leave blank to keep current password'
+                    : 'Unique password for job-board signups only'
+                }
+                className={inputCls}
+                autoComplete="new-password"
+              />
+              {profile?.hasPortalSignupPassword ? (
+                <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                  <input type="checkbox" name="clearPortalSignupPassword" className="rounded border-border" />
+                  Remove saved job-board password
+                </label>
+              ) : null}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Contact & Location */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-          Contact &amp; Location
-        </p>
+        {!embedded && (
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+            Contact &amp; Location
+          </p>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className={labelCls}>Phone</label>
@@ -125,7 +238,7 @@ export function ApplicationProfileForm({ profile }: Props) {
             />
           </div>
           <div>
-            <label className={labelCls}>Years of Experience</label>
+            <label className={labelCls}>Years of experience</label>
             <input
               type="number"
               name="yearsExperience"
@@ -146,83 +259,91 @@ export function ApplicationProfileForm({ profile }: Props) {
               className={inputCls}
             />
           </div>
-          <div>
-            <label className={labelCls}>Region / State (optional)</label>
-            <input
-              type="text"
-              name="state"
-              defaultValue={profile?.state ?? ''}
-              placeholder="Lisboa"
-              className={inputCls}
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <label className={labelCls}>Country</label>
-            <input
-              type="text"
-              name="country"
-              defaultValue={profile?.country ?? ''}
-              placeholder="Portugal"
-              className={inputCls}
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <label className={labelCls}>Street Address (optional)</label>
-            <input
-              type="text"
-              name="address"
-              defaultValue={profile?.address ?? ''}
-              placeholder="Rua Example 123"
-              className={inputCls}
-            />
-          </div>
+          {!embedded && (
+            <>
+              <div>
+                <label className={labelCls}>Region / State (optional)</label>
+                <input
+                  type="text"
+                  name="state"
+                  defaultValue={profile?.state ?? ''}
+                  placeholder="Lisboa"
+                  className={inputCls}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className={labelCls}>Country</label>
+                <input
+                  type="text"
+                  name="country"
+                  defaultValue={profile?.country ?? ''}
+                  placeholder="Portugal"
+                  className={inputCls}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className={labelCls}>Street Address (optional)</label>
+                <input
+                  type="text"
+                  name="address"
+                  defaultValue={profile?.address ?? ''}
+                  placeholder="Rua Example 123"
+                  className={inputCls}
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Online Presence */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-          Online Presence
-        </p>
-        <div className="space-y-3">
+      {!embedded && (
+        <>
           <div>
-            <label className={labelCls}>LinkedIn URL</label>
-            <input
-              type="url"
-              name="linkedinUrl"
-              defaultValue={profile?.linkedinUrl ?? ''}
-              placeholder="https://linkedin.com/in/yourname"
-              className={inputCls}
-            />
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+              Online Presence
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className={labelCls}>LinkedIn URL</label>
+                <input
+                  type="url"
+                  name="linkedinUrl"
+                  defaultValue={profile?.linkedinUrl ?? ''}
+                  placeholder="https://linkedin.com/in/yourname"
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>GitHub URL</label>
+                <input
+                  type="url"
+                  name="githubUrl"
+                  defaultValue={profile?.githubUrl ?? ''}
+                  placeholder="https://github.com/yourname"
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Portfolio / Website</label>
+                <input
+                  type="url"
+                  name="portfolioUrl"
+                  defaultValue={profile?.portfolioUrl ?? ''}
+                  placeholder="https://yoursite.com"
+                  className={inputCls}
+                />
+              </div>
+            </div>
           </div>
-          <div>
-            <label className={labelCls}>GitHub URL</label>
-            <input
-              type="url"
-              name="githubUrl"
-              defaultValue={profile?.githubUrl ?? ''}
-              placeholder="https://github.com/yourname"
-              className={inputCls}
-            />
-          </div>
-          <div>
-            <label className={labelCls}>Portfolio / Website</label>
-            <input
-              type="url"
-              name="portfolioUrl"
-              defaultValue={profile?.portfolioUrl ?? ''}
-              placeholder="https://yoursite.com"
-              className={inputCls}
-            />
-          </div>
-        </div>
-      </div>
+        </>
+      )}
 
-      {/* Work Authorization */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-          Work Authorization
-        </p>
+        {!embedded && (
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+            Work Authorization
+          </p>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">
             <label className={labelCls}>Status</label>
@@ -236,59 +357,62 @@ export function ApplicationProfileForm({ profile }: Props) {
               ))}
             </select>
           </div>
-          <div>
-            <label className={labelCls}>Requires Visa Sponsorship?</label>
-            <select
-              name="requiresSponsorship"
-              defaultValue={profile?.requiresSponsorship ? 'true' : 'false'}
-              className={inputCls}
-            >
-              <option value="false">No</option>
-              <option value="true">Yes</option>
-            </select>
-          </div>
+          {!embedded && (
+            <div>
+              <label className={labelCls}>Requires Visa Sponsorship?</label>
+              <select
+                name="requiresSponsorship"
+                defaultValue={profile?.requiresSponsorship ? 'true' : 'false'}
+                className={inputCls}
+              >
+                <option value="false">No</option>
+                <option value="true">Yes</option>
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Application Preferences */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-          Application Preferences
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className={labelCls}>Salary Expectation (annual, gross)</label>
-            <div className="relative">
-              <input
-                type="number"
-                name="salaryExpectation"
-                defaultValue={profile?.salaryExpectation ?? ''}
-                placeholder="80000"
-                min={0}
-                step={1000}
+      {!embedded && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+            Application Preferences
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Salary expectation (applications)</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  name="salaryExpectation"
+                  defaultValue={profile?.salaryExpectation ?? ''}
+                  placeholder="80000"
+                  min={0}
+                  step={1000}
+                  className={inputCls}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
+                  EUR/year
+                </span>
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Notice Period</label>
+              <select
+                name="noticePeriod"
+                defaultValue={profile?.noticePeriod ?? ''}
                 className={inputCls}
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
-                EUR/year
-              </span>
+              >
+                <option value="">Select…</option>
+                <option value="immediately">Immediately available</option>
+                <option value="2_weeks">2 weeks</option>
+                <option value="1_month">1 month</option>
+                <option value="3_months">3 months</option>
+              </select>
             </div>
           </div>
-          <div>
-            <label className={labelCls}>Notice Period</label>
-            <select
-              name="noticePeriod"
-              defaultValue={profile?.noticePeriod ?? ''}
-              className={inputCls}
-            >
-              <option value="">Select…</option>
-              <option value="immediately">Immediately available</option>
-              <option value="2_weeks">2 weeks</option>
-              <option value="1_month">1 month</option>
-              <option value="3_months">3 months</option>
-            </select>
-          </div>
         </div>
-      </div>
+      )}
 
       <div className="flex items-center gap-3">
         <button

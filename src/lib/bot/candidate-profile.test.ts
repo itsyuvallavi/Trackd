@@ -90,7 +90,8 @@ describe('candidate profile source priority', () => {
     expect(profile.resume?.skills).toEqual(
       expect.arrayContaining(['React', 'TypeScript', 'Next.js'])
     )
-    expect(profile.resume?.summary).toContain('Application Identity supplemental info')
+    expect(profile.resume?.summary).toContain('Application profile:')
+    expect(profile.resume?.summary).toContain('Years of experience:')
     expect(profile.resume?.summary).not.toContain('Python Developer')
     expect(profile.source.settingsSignals).toEqual([])
   })

@@ -1,9 +1,6 @@
 import { Resend } from 'resend'
 import { FeedbackType, FeedbackSource } from '@prisma/client'
-
-// For Resend testing: can only send to account owner's email
-// For production: verify domain at resend.com/domains to send to any email
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'yuvalavi12@gmail.com'
+import { getAdminEmail } from '@/lib/admin'
 
 // Initialize Resend only if API key is available
 const getResend = () => {
@@ -26,16 +23,22 @@ export interface FeedbackEmailData {
 }
 
 export async function sendFeedbackEmail(data: FeedbackEmailData): Promise<void> {
+  const adminEmail = getAdminEmail()
+  if (!adminEmail) {
+    console.warn('ADMIN_EMAIL is not configured. Feedback email notification skipped.')
+    return
+  }
+
   const resend = getResend()
   if (!resend) {
     console.warn('⚠️ RESEND_API_KEY not set in environment variables. Email notification skipped.')
     console.warn('   To enable emails, add RESEND_API_KEY to your .env file')
-    console.warn('   Current ADMIN_EMAIL:', ADMIN_EMAIL)
+    console.warn('   ADMIN_EMAIL configured:', Boolean(adminEmail))
     console.warn('   RESEND_API_KEY exists:', !!process.env.RESEND_API_KEY)
     return
   }
 
-  console.log(`📧 Attempting to send feedback email to ${ADMIN_EMAIL}...`)
+  console.log('📧 Attempting to send feedback email...')
   console.log('   RESEND_API_KEY is set:', !!process.env.RESEND_API_KEY)
 
   const typeLabels: Record<FeedbackType, string> = {
@@ -55,7 +58,7 @@ export async function sendFeedbackEmail(data: FeedbackEmailData): Promise<void> 
     // For production: verify your domain and use your own domain in 'from' address
     const emailData: any = {
       from: 'Trackd <onboarding@resend.dev>', // Resend's default testing domain
-      to: ADMIN_EMAIL, // Must be account owner's email in testing mode
+      to: adminEmail,
       subject: `[Feedback] ${typeLabels[data.type]}: ${data.title}`,
       html: `
         <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -112,7 +115,7 @@ This is an automated notification from Trackd.
 
     console.log('✅ Feedback email sent successfully!', {
       id: result.data?.id,
-      to: ADMIN_EMAIL,
+      to: adminEmail,
     })
   } catch (error) {
     console.error('❌ Failed to send feedback email:', error)
@@ -124,4 +127,3 @@ This is an automated notification from Trackd.
     // But log it so we can debug
   }
 }
-

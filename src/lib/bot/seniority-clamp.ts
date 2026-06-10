@@ -265,14 +265,18 @@ export function applySeniorityClamp(
   if (direction === 'underqualified') {
     const yearsGap = Math.max(0, facts.maxYearsRequired - ceiling)
     const verySenior = titleSuggestsVerySenior(job.title) || descriptionSeniorRole.verySenior
+    const midLevelStretch = level === 'mid_level'
+    const seniorTitlePenalty = midLevelStretch ? 9 : SENIOR_TITLE_PENALTY
+    const verySeniorTitlePenalty = midLevelStretch ? 18 : VERY_SENIOR_TITLE_PENALTY
+    const verySeniorCap = midLevelStretch ? 62 : VERY_SENIOR_CAP
     if (titleSuggestsSenior(job.title) || descriptionSeniorRole.senior) {
-      afterScore -= verySenior ? VERY_SENIOR_TITLE_PENALTY : SENIOR_TITLE_PENALTY
+      afterScore -= verySenior ? verySeniorTitlePenalty : seniorTitlePenalty
     }
     if (yearsGap > 0) {
       afterScore -= Math.min(18, yearsGap * YEARS_GAP_PENALTY)
     }
     if (verySenior) {
-      afterScore = Math.min(afterScore, VERY_SENIOR_CAP)
+      afterScore = Math.min(afterScore, verySeniorCap)
     }
   } else {
     afterScore -= JUNIOR_TITLE_PENALTY

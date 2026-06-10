@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { cacheTagsFor } from '@/lib/cache-tags'
+import { encryptEmailCredential } from '@/lib/email-credential-crypto'
 
 export async function updateProfile(formData: FormData) {
   const user = await requireAuth()
@@ -48,7 +49,7 @@ export async function updateApplicationProfile(formData: FormData) {
   const portalPasswordPatch = clearPortalPassword
     ? { portalSignupPassword: null as string | null }
     : portalPwdRaw
-      ? { portalSignupPassword: portalPwdRaw }
+      ? { portalSignupPassword: encryptEmailCredential(portalPwdRaw) }
       : {}
 
   const shared = {
@@ -78,13 +79,14 @@ export async function updateApplicationProfile(formData: FormData) {
     create: {
       userId: user.id,
       ...shared,
-      portalSignupPassword: clearPortalPassword ? null : portalPwdRaw || null,
+      portalSignupPassword:
+        clearPortalPassword || !portalPwdRaw ? null : encryptEmailCredential(portalPwdRaw),
     },
   })
 
   const tags = cacheTagsFor(user.id)
   revalidateTag(tags.bot, { expire: 0 })
   revalidatePath('/profile')
+  revalidatePath('/bot/setup')
   revalidatePath('/bot/identity')
 }
-

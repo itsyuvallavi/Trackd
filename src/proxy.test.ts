@@ -15,6 +15,11 @@ describe('proxy auth gating', () => {
 
   it('verifies auth for protected and auth redirect routes', () => {
     expect(shouldAuthenticateInProxy('/jobs')).toBe(true)
+    expect(shouldAuthenticateInProxy('/bot')).toBe(true)
+    expect(shouldAuthenticateInProxy('/bot/resumes')).toBe(true)
+    expect(shouldAuthenticateInProxy('/resume-advisor')).toBe(true)
+    expect(shouldAuthenticateInProxy('/interview-prep')).toBe(true)
+    expect(shouldAuthenticateInProxy('/dashboard')).toBe(true)
     expect(shouldAuthenticateInProxy('/settings/integrations')).toBe(true)
     expect(shouldAuthenticateInProxy('/login')).toBe(true)
     expect(shouldAuthenticateInProxy('/signup')).toBe(true)
