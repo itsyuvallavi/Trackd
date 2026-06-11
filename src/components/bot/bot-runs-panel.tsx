@@ -1,9 +1,7 @@
 'use client'
 
-import Link from 'next/link'
 import type { BotRun, BotRunStatus } from '@prisma/client'
 import { cn } from '@/lib/utils'
-import type { BotRunProfileSourceSummary } from '@/lib/cached-queries'
 
 type BotRunRow = Pick<
   BotRun,
@@ -18,26 +16,10 @@ type BotRunRow = Pick<
   | 'duration'
   | 'errors'
   | 'searchMeta'
-> & {
-  profileSources?: BotRunProfileSourceSummary[]
-}
+>
 
 interface BotRunsPanelProps {
   runs: BotRunRow[]
-}
-
-function pipelineSummaryFromRun(errors: BotRun['errors']): string | null {
-  if (!errors || typeof errors !== 'object' || Array.isArray(errors))
-    return null
-  const p = (errors as Record<string, unknown>).pipeline
-  return typeof p === 'string' ? p : null
-}
-
-function providerDuplicatesFromRun(errors: BotRun['errors']): string | null {
-  if (!errors || typeof errors !== 'object' || Array.isArray(errors))
-    return null
-  const p = (errors as Record<string, unknown>).providerDuplicates
-  return typeof p === 'string' ? p : null
 }
 
 type RuntimeTimingSummary = {
@@ -104,14 +86,14 @@ function phaseLabel(phase: string): string {
     profile_load: 'Profile',
     search_profile_build: 'Search profile',
     search_request_build: 'Query plan',
-    provider_search: 'Provider search',
-    dedupe_db_lookup: 'DB dedupe',
-    dedupe_filter: 'Dedupe',
-    pre_filter: 'Pre-filter',
+    provider_search: 'Searching',
+    dedupe_db_lookup: 'Existing jobs check',
+    dedupe_filter: 'Duplicate cleanup',
+    pre_filter: 'Eligibility check',
     priority_sort: 'Ranking',
     ai_scoring: 'AI scoring',
     job_persistence: 'Saving jobs',
-    listing_audit_persistence: 'Audit save',
+    listing_audit_persistence: 'Saving results',
   }
   return labels[phase] ?? phase.replaceAll('_', ' ')
 }
@@ -163,18 +145,11 @@ type EvaluationSkipRow = {
   filterKind: 'hard_filter' | 'ai_score' | 'eval_budget'
   priorityScore: number | null
   priorityReasons: string[]
-  jobBoard: string | null
-  providerPass: {
-    providerQuery?: string
-    location?: string
-    siteNames?: string[]
-  } | null
 }
 
 type EvaluationFailureRow = {
   title: string
   company: string
-  error: string
 }
 
 function evaluationSkipsFromRun(
@@ -200,10 +175,6 @@ function evaluationSkipsFromRun(
       (!rawKind &&
         o.score <= 30 &&
         flags.some((f) => ['wrong_location', 'underqualified', 'overqualified'].includes(f)))
-    const providerPass =
-      o.providerPass && typeof o.providerPass === 'object' && !Array.isArray(o.providerPass)
-        ? (o.providerPass as EvaluationSkipRow['providerPass'])
-        : null
     out.push({
       title: o.title,
       company: o.company,
@@ -216,8 +187,6 @@ function evaluationSkipsFromRun(
       priorityReasons: Array.isArray(o.priorityReasons)
         ? o.priorityReasons.filter((f): f is string => typeof f === 'string')
         : [],
-      jobBoard: typeof o.jobBoard === 'string' ? o.jobBoard : null,
-      providerPass,
     })
   }
   return out
@@ -234,94 +203,16 @@ function evaluationFailuresFromRun(
     if (!item || typeof item !== 'object' || Array.isArray(item)) continue
     const o = item as Record<string, unknown>
     if (typeof o.title !== 'string' || typeof o.company !== 'string') continue
-    const error = typeof o.error === 'string' ? o.error : ''
     out.push({
       title: o.title,
       company: o.company,
-      error,
     })
   }
   return out
 }
 
-function historicalBudgetNoteFromRun(errors: BotRun['errors']): string | null {
-  if (!errors || typeof errors !== 'object' || Array.isArray(errors)) return null
-  const budget = (errors as Record<string, unknown>).evaluation_budget
-  return typeof budget === 'string' ? budget : null
-}
-
 function displayFlags(flags: string[]): string[] {
   return flags.filter((flag) => flag !== 'eval_budget')
-}
-
-function profileSourceBadgeClass(source: BotRunProfileSourceSummary): string {
-  switch (source.kind) {
-    case 'parsed_resume':
-      return 'border-success/25 bg-success-bg text-success-text'
-    case 'none':
-      return 'border-error/25 bg-error-bg/50 text-error-text'
-    case 'raw_resume_fallback':
-    case 'application_identity_fallback':
-    case 'settings_fallback':
-      return 'border-warning/25 bg-warning-bg text-warning-text'
-  }
-}
-
-function isLimitedProfileSource(source: BotRunProfileSourceSummary): boolean {
-  return source.kind !== 'parsed_resume'
-}
-
-function profileSourceDetail(source: BotRunProfileSourceSummary): string | null {
-  if (source.limitations.length > 0) return source.limitations[0]
-  if (source.applicationIdentitySupplemented) return 'Application Identity supplemented scoring context.'
-  if (source.settingsDerivedSignalsUsed) return 'Settings-derived signals were used as fallback context.'
-  return null
-}
-
-function ProfileSourceSummary({
-  sources,
-}: {
-  sources: BotRunProfileSourceSummary[]
-}) {
-  if (sources.length === 0) return null
-
-  const limited = sources.some(isLimitedProfileSource)
-
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-      <span className="font-medium text-foreground/80">Scoring profile</span>
-      {sources.map((source) => {
-        const detail = profileSourceDetail(source)
-        return (
-          <span
-            key={`${source.kind}-${source.label}-${source.resumeLabel ?? 'none'}`}
-            className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5"
-          >
-            <span
-              className={cn(
-                'inline-flex items-center rounded-full border px-2 py-0.5 font-medium',
-                profileSourceBadgeClass(source)
-              )}
-              title={detail ?? undefined}
-            >
-              {source.label}
-              {source.resumeLabel ? ` · ${source.resumeLabel}` : ''}
-              {source.listings > 1 ? ` · ${source.listings} listings` : ''}
-            </span>
-            {detail && <span>{detail}</span>}
-          </span>
-        )
-      })}
-      {limited && (
-        <Link
-          href="/bot/setup?section=resume"
-          className="font-medium underline underline-offset-2 hover:text-foreground"
-        >
-          Review resumes
-        </Link>
-      )}
-    </div>
-  )
 }
 
 function StatusBadge({ status }: { status: BotRunStatus }) {
@@ -352,6 +243,164 @@ function LocalDateTime({ iso }: { iso: string | Date }) {
   )
 }
 
+function ActivitySummaryCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string
+  value: number
+  hint: string
+}) {
+  return (
+    <div className="glass glass-subtle rounded-2xl px-4 py-3">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
+        {value}
+      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
+    </div>
+  )
+}
+
+function RunMetric({
+  label,
+  value,
+}: {
+  label: string
+  value: number | string
+}) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function RunSignal({
+  tone,
+  children,
+}: {
+  tone: 'success' | 'warning' | 'error' | 'muted'
+  children: React.ReactNode
+}) {
+  const styles = {
+    success: 'border-success/25 bg-success-bg text-success-text',
+    warning: 'border-warning/25 bg-warning-bg text-warning-text',
+    error: 'border-error/25 bg-error-bg/50 text-error-text',
+    muted: 'border-border bg-muted/30 text-muted-foreground',
+  } satisfies Record<typeof tone, string>
+
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium',
+        styles[tone]
+      )}
+    >
+      {children}
+    </span>
+  )
+}
+
+function DiagnosticGroup({
+  title,
+  rows,
+  emptyText,
+  kind,
+}: {
+  title: string
+  rows: EvaluationSkipRow[]
+  emptyText: string
+  kind: EvaluationSkipRow['filterKind']
+}) {
+  if (rows.length === 0) {
+    return emptyText ? (
+      <p className="text-xs text-muted-foreground">{emptyText}</p>
+    ) : null
+  }
+
+  return (
+    <details className="group/diagnostic">
+      <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground">
+        {title}
+      </summary>
+      <ul className="mt-2 max-h-72 space-y-2 overflow-y-auto pr-1">
+        {rows.map((row, index) => {
+          const flags = kind === 'eval_budget' ? displayFlags(row.flags) : row.flags
+          return (
+            <li
+              key={`${kind}-${index}-${row.title}-${row.company}`}
+              className="rounded-lg border border-border/60 bg-background/40 px-3 py-2"
+            >
+              <p className="text-sm font-medium leading-tight text-foreground">
+                {row.title}{' '}
+                <span className="font-normal text-muted-foreground">
+                  @ {row.company}
+                </span>
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground tabular-nums">
+                {kind === 'eval_budget'
+                  ? 'Legacy cap skip'
+                  : kind === 'hard_filter'
+                    ? 'Filtered before scoring'
+                    : `Score ${row.score}/${row.minScore}`}
+                {flags.length > 0 ? ` · ${flags.join(', ')}` : ''}
+              </p>
+              {row.reasoning && (
+                <p className="mt-1 text-xs leading-relaxed text-foreground/85">
+                  {row.reasoning}
+                </p>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </details>
+  )
+}
+
+function RunDetailsOverview({
+  filteredCount,
+  belowScoreCount,
+  legacySkipCount,
+  failureCount,
+}: {
+  filteredCount: number
+  belowScoreCount: number
+  legacySkipCount: number
+  failureCount: number
+}) {
+  const rows = [
+    { label: 'Filtered before scoring', value: filteredCount },
+    { label: 'Below minimum score', value: belowScoreCount },
+    { label: 'Needs review', value: legacySkipCount + failureCount },
+  ]
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-3">
+      {rows.map((row) => (
+        <div
+          key={row.label}
+          className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2"
+        >
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {row.label}
+          </p>
+          <p className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
+            {row.value}
+          </p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function BotRunsPanel({ runs }: BotRunsPanelProps) {
   if (runs.length === 0) {
     return (
@@ -363,193 +412,172 @@ export function BotRunsPanel({ runs }: BotRunsPanelProps) {
   }
 
   return (
-    <div className="glass glass-subtle rounded-2xl overflow-hidden">
-      <div className="divide-y divide-border/60">
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <ActivitySummaryCard
+          label="Recent runs"
+          value={runs.length}
+          hint="Latest 25 searches"
+        />
+        <ActivitySummaryCard
+          label="Jobs found"
+          value={runs.reduce((sum, run) => sum + run.jobsFound, 0)}
+          hint="Across visible runs"
+        />
+        <ActivitySummaryCard
+          label="Saved"
+          value={runs.reduce((sum, run) => sum + run.jobsNew, 0)}
+          hint="Added to your queue"
+        />
+      </div>
+
+      <div className="space-y-3">
         {runs.map((run) => {
-          const pipeline = pipelineSummaryFromRun(run.errors)
-          const providerDuplicates = providerDuplicatesFromRun(run.errors)
           const evalSkips = evaluationSkipsFromRun(run.errors)
           const hardFilterSkips = evalSkips.filter((s) => s.filterKind === 'hard_filter')
           const budgetSkips = evalSkips.filter((s) => s.filterKind === 'eval_budget')
           const aiScoreSkips = evalSkips.filter((s) => s.filterKind === 'ai_score')
           const evalFailures = evaluationFailuresFromRun(run.errors)
-          const historicalBudgetNote = historicalBudgetNoteFromRun(run.errors)
-          const profileSources = run.profileSources ?? []
           const runtimeTimings = runtimeTimingsFromRun(run.searchMeta)
+          const totalRejected = hardFilterSkips.length + aiScoreSkips.length
+          const issueCount = budgetSkips.length + evalFailures.length
+          const scoredCount =
+            typeof runtimeTimings?.counts.ai_scored === 'number'
+              ? runtimeTimings.counts.ai_scored
+              : null
+
           return (
-            <div key={run.id} className="px-5 py-3 space-y-1.5">
-              <div className="flex flex-wrap items-center gap-3 text-sm">
-                <StatusBadge status={run.status} />
-                <span className="text-muted-foreground text-xs flex-1 min-w-[10rem]">
-                  <LocalDateTime iso={run.startedAt} />
-                  {run.source === 'manual' && ' · manual'}
-                </span>
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {run.jobsFound} from API · {run.jobsNew} saved ·{' '}
-                  {run.jobsApproved} approved
-                </span>
-                {run.duration != null && (
-                  <span className="text-[11px] text-muted-foreground tabular-nums">
-                    {(run.duration / 1000).toFixed(0)}s
-                  </span>
-                )}
+            <article
+              key={run.id}
+              className="glass glass-subtle rounded-2xl px-4 py-4 md:px-5"
+            >
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={run.status} />
+                    <span className="text-sm font-medium text-foreground">
+                      <LocalDateTime iso={run.startedAt} />
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {run.source === 'manual' ? 'Manual' : 'Scheduled'}
+                    </span>
+                    {run.duration != null && (
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        {formatMs(run.duration)}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <RunMetric label="Found" value={run.jobsFound} />
+                    <RunMetric label="Scored" value={scoredCount ?? '—'} />
+                    <RunMetric label="Saved" value={run.jobsNew} />
+                    <RunMetric label="Approved" value={run.jobsApproved} />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 md:justify-end">
+                  {totalRejected > 0 && (
+                    <RunSignal tone="muted">
+                      {totalRejected} rejected
+                    </RunSignal>
+                  )}
+                  {hardFilterSkips.length > 0 && (
+                    <RunSignal tone="warning">
+                      {hardFilterSkips.length} filtered
+                    </RunSignal>
+                  )}
+                  {issueCount > 0 && (
+                    <RunSignal tone="error">
+                      {issueCount} needs review
+                    </RunSignal>
+                  )}
+                  {issueCount === 0 && run.status === 'COMPLETED' && (
+                    <RunSignal tone="success">Clean run</RunSignal>
+                  )}
+                </div>
               </div>
-              <ProfileSourceSummary sources={profileSources} />
-              {pipeline && (
-                <p
-                  className="text-[10px] font-mono text-muted-foreground leading-snug break-all"
-                  title="Provider duplicates, dedup vs your DB, AI threshold skips, and saves"
-                >
-                  {pipeline}
-                </p>
-              )}
-              {providerDuplicates && (
-                <p className="text-[11px] text-muted-foreground leading-snug">
-                  {providerDuplicates}
-                </p>
-              )}
-              {runtimeTimings && <RuntimeTimings timings={runtimeTimings} />}
-              {hardFilterSkips.length > 0 && (
-                <details className="text-xs group">
-                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
-                    Filtered {hardFilterSkips.length} before AI scoring — show
-                    reasons
+
+              <div className="mt-4">
+                <details className="group rounded-xl border border-border/60 bg-background/30">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-medium text-foreground [&::-webkit-details-marker]:hidden">
+                    <span>Run details</span>
+                    <span className="text-xs font-normal text-muted-foreground group-open:hidden">
+                      Show diagnostics
+                    </span>
+                    <span className="hidden text-xs font-normal text-muted-foreground group-open:inline">
+                      Hide diagnostics
+                    </span>
                   </summary>
-                  <ul className="mt-2 space-y-3 border-l-2 border-border pl-3 max-h-64 overflow-y-auto">
-                    {hardFilterSkips.map((s, i) => (
-                      <li key={`${run.id}-hard-filter-${i}`}>
-                        <p className="font-medium text-foreground leading-tight">
-                          {s.title}{' '}
-                          <span className="text-muted-foreground font-normal">
-                            @ {s.company}
-                          </span>
+
+                  <div className="space-y-4 border-t border-border/60 px-3 py-3">
+                    <RunDetailsOverview
+                      filteredCount={hardFilterSkips.length}
+                      belowScoreCount={aiScoreSkips.length}
+                      legacySkipCount={budgetSkips.length}
+                      failureCount={evalFailures.length}
+                    />
+
+                    {runtimeTimings && <RuntimeTimings timings={runtimeTimings} />}
+
+                    <DiagnosticGroup
+                      title={`Filtered before scoring (${hardFilterSkips.length})`}
+                      rows={hardFilterSkips}
+                      emptyText="No deterministic filters triggered."
+                      kind="hard_filter"
+                    />
+
+                    <DiagnosticGroup
+                      title={`Below minimum score (${aiScoreSkips.length})`}
+                      rows={aiScoreSkips}
+                      emptyText="No AI-scored listings were below threshold."
+                      kind="ai_score"
+                    />
+
+                    {budgetSkips.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="rounded-lg border border-warning/25 bg-warning-bg px-3 py-2 text-xs leading-relaxed text-warning-text">
+                          Legacy audit data: these listings were skipped by an older scoring cap.
+                          Current runs score every eligible listing.
                         </p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
-                          Filtered before scoring · Score {s.score}/{s.minScore}
-                          {s.flags.length > 0 ? ` · ${s.flags.join(', ')}` : ''}
+                        <DiagnosticGroup
+                          title={`Legacy cap skips (${budgetSkips.length})`}
+                          rows={budgetSkips}
+                          emptyText=""
+                          kind="eval_budget"
+                        />
+                      </div>
+                    )}
+
+                    {evalFailures.length > 0 && (
+                      <div>
+                        <p className="mb-2 text-xs font-medium text-error-text">
+                          Scoring failures ({evalFailures.length})
                         </p>
-                        {(s.jobBoard || s.providerPass?.providerQuery) && (
-                          <p className="text-[11px] text-muted-foreground mt-0.5">
-                            {s.jobBoard ? `Board ${s.jobBoard}` : 'Provider pass'}
-                            {s.providerPass?.providerQuery ? ` · "${s.providerPass.providerQuery}"` : ''}
-                            {s.providerPass?.location ? ` · ${s.providerPass.location}` : ''}
-                          </p>
-                        )}
-                        <p className="text-[11px] leading-snug text-foreground/90 mt-1">
-                          {s.reasoning}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
+                        <ul className="space-y-2">
+                          {evalFailures.map((failure, index) => (
+                            <li
+                              key={`${run.id}-eval-failure-${index}`}
+                              className="rounded-lg border border-error/20 bg-error-bg/30 px-3 py-2"
+                            >
+                              <p className="text-sm font-medium leading-tight text-foreground">
+                                {failure.title}{' '}
+                                <span className="font-normal text-muted-foreground">
+                                  @ {failure.company}
+                                </span>
+                              </p>
+                              <p className="mt-1 text-xs leading-relaxed text-error-text">
+                                Scoring could not complete for this listing. Technical details are hidden from the activity page.
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                 </details>
-              )}
-              {budgetSkips.length > 0 && (
-                <details className="text-xs group">
-                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
-                    Historical scoring cap skipped {budgetSkips.length} in this old run —
-                    show details
-                  </summary>
-                  <p className="mt-2 rounded-md border border-warning/25 bg-warning-bg px-3 py-2 text-[11px] leading-snug text-warning-text">
-                    These listings are preserved audit data from an older scorer version.
-                    Current Job Search runs no longer use the 12-listing AI evaluation cap;
-                    every eligible listing returned by search is sent through scoring.
-                    {historicalBudgetNote ? ` Previous run note: ${historicalBudgetNote}` : ''}
-                  </p>
-                  <ul className="mt-2 space-y-3 border-l-2 border-border pl-3 max-h-64 overflow-y-auto">
-                    {budgetSkips.map((s, i) => {
-                      const flags = displayFlags(s.flags)
-                      return (
-                        <li key={`${run.id}-budget-skip-${i}`}>
-                          <p className="font-medium text-foreground leading-tight">
-                            {s.title}{' '}
-                            <span className="text-muted-foreground font-normal">
-                              @ {s.company}
-                            </span>
-                          </p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
-                            Legacy cap skip
-                            {s.priorityScore != null ? ` · Rank ${s.priorityScore}` : ''}
-                            {flags.length > 0 ? ` · ${flags.join(', ')}` : ''}
-                          </p>
-                          {s.priorityReasons.length > 0 && (
-                            <p className="text-[11px] text-muted-foreground mt-0.5">
-                              Signals: {s.priorityReasons.join(', ')}
-                            </p>
-                          )}
-                          {(s.jobBoard || s.providerPass?.providerQuery) && (
-                            <p className="text-[11px] text-muted-foreground mt-0.5">
-                              {s.jobBoard ? `Board ${s.jobBoard}` : 'Provider pass'}
-                              {s.providerPass?.providerQuery ? ` · "${s.providerPass.providerQuery}"` : ''}
-                              {s.providerPass?.location ? ` · ${s.providerPass.location}` : ''}
-                            </p>
-                          )}
-                          <p className="text-[11px] leading-snug text-foreground/90 mt-1">
-                            {s.reasoning}
-                          </p>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </details>
-              )}
-              {aiScoreSkips.length > 0 && (
-                <details className="text-xs group">
-                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
-                    AI scored {aiScoreSkips.length} below your min score — show
-                    model reasoning
-                  </summary>
-                  <ul className="mt-2 space-y-3 border-l-2 border-border pl-3 max-h-64 overflow-y-auto">
-                    {aiScoreSkips.map((s, i) => (
-                      <li key={`${run.id}-eval-skip-${i}`}>
-                        <p className="font-medium text-foreground leading-tight">
-                          {s.title}{' '}
-                          <span className="text-muted-foreground font-normal">
-                            @ {s.company}
-                          </span>
-                        </p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
-                          Score {s.score}/{s.minScore}
-                          {s.flags.length > 0 ? ` · ${s.flags.join(', ')}` : ''}
-                        </p>
-                        {(s.jobBoard || s.providerPass?.providerQuery) && (
-                          <p className="text-[11px] text-muted-foreground mt-0.5">
-                            {s.jobBoard ? `Board ${s.jobBoard}` : 'Provider pass'}
-                            {s.providerPass?.providerQuery ? ` · "${s.providerPass.providerQuery}"` : ''}
-                            {s.providerPass?.location ? ` · ${s.providerPass.location}` : ''}
-                          </p>
-                        )}
-                        <p className="text-[11px] leading-snug text-foreground/90 mt-1">
-                          {s.reasoning}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-              {evalFailures.length > 0 && (
-                <details className="text-xs group">
-                  <summary className="cursor-pointer text-error-text hover:text-foreground select-none">
-                    AI scoring failed for {evalFailures.length} listing
-                    {evalFailures.length === 1 ? '' : 's'} — show errors
-                  </summary>
-                  <ul className="mt-2 space-y-3 border-l-2 border-error/30 pl-3 max-h-64 overflow-y-auto">
-                    {evalFailures.map((f, i) => (
-                      <li key={`${run.id}-eval-failure-${i}`}>
-                        <p className="font-medium text-foreground leading-tight">
-                          {f.title}{' '}
-                          <span className="text-muted-foreground font-normal">
-                            @ {f.company}
-                          </span>
-                        </p>
-                        <p className="text-[11px] leading-snug text-error-text mt-1">
-                          {f.error}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-            </div>
+              </div>
+            </article>
           )
         })}
       </div>

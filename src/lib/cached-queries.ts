@@ -167,63 +167,6 @@ export function summarizeProfileSources(
   return [...bySource.values()].sort((a, b) => b.listings - a.listings)
 }
 
-type CompactProfileSourceRow = {
-  botRunId: string
-  profileSource: Prisma.JsonValue | null
-  resumeUsed: Prisma.JsonValue | null
-}
-
-function compactProfileSourceScoringInput(row: CompactProfileSourceRow): Prisma.JsonValue {
-  return {
-    profileSource: row.profileSource,
-    resumeUsed: row.resumeUsed,
-  }
-}
-
-async function getCompactProfileSourceRows(botRunIds: string[]): Promise<CompactProfileSourceRow[]> {
-  if (botRunIds.length === 0) return []
-
-  return prisma.$queryRaw<CompactProfileSourceRow[]>`
-    SELECT
-      "botRunId",
-      jsonb_strip_nulls(jsonb_build_object(
-        'kind', "scoringInputs" #> '{profileSource,kind}',
-        'label', "scoringInputs" #> '{profileSource,label}',
-        'resumeLabel', "scoringInputs" #> '{profileSource,resumeLabel}',
-        'applicationIdentitySupplemented', "scoringInputs" #> '{profileSource,applicationIdentitySupplemented}',
-        'settingsDerivedSignalsUsed', "scoringInputs" #> '{profileSource,settingsDerivedSignalsUsed}',
-        'limitations', "scoringInputs" #> '{profileSource,limitations}'
-      )) AS "profileSource",
-      jsonb_strip_nulls(jsonb_build_object(
-        'sourceKind', "scoringInputs" #> '{resumeUsed,sourceKind}',
-        'selection', "scoringInputs" #> '{resumeUsed,selection}',
-        'sourceLabel', "scoringInputs" #> '{resumeUsed,sourceLabel}',
-        'label', "scoringInputs" #> '{resumeUsed,label}',
-        'applicationIdentitySupplemented', "scoringInputs" #> '{resumeUsed,applicationIdentitySupplemented}',
-        'settingsDerivedSignalsUsed', "scoringInputs" #> '{resumeUsed,settingsDerivedSignalsUsed}',
-        'limitations', "scoringInputs" #> '{resumeUsed,limitations}',
-        'resumeId', "scoringInputs" #> '{resumeUsed,resumeId}'
-      )) AS "resumeUsed"
-    FROM "BotRunListing"
-    WHERE "botRunId" IN (${Prisma.join(botRunIds)})
-      AND "scoringInputs" IS NOT NULL
-      AND ("scoringInputs" ? 'profileSource' OR "scoringInputs" ? 'resumeUsed')
-    ORDER BY "botRunId" ASC, "sequence" ASC
-  `
-}
-
-function summarizeProfileSourcesByRun(rows: CompactProfileSourceRow[]) {
-  const rowsByRun = new Map<string, { scoringInputs: Prisma.JsonValue | null }[]>()
-
-  for (const row of rows) {
-    const runRows = rowsByRun.get(row.botRunId) ?? []
-    runRows.push({ scoringInputs: compactProfileSourceScoringInput(row) })
-    rowsByRun.set(row.botRunId, runRows)
-  }
-
-  return rowsByRun
-}
-
 /**
  * Cached query for email integration.
  * Fetched on almost every authenticated page and changes rarely, so a long
@@ -784,8 +727,8 @@ export const getBotResumesList = (userId: string) =>
 
 export const getBotRunsList = (userId: string) =>
   unstable_cache(
-    async () => {
-      const runs = await prisma.botRun.findMany({
+    async () =>
+      prisma.botRun.findMany({
         where: { userId },
         orderBy: { startedAt: 'desc' },
         take: 25,
@@ -802,16 +745,7 @@ export const getBotRunsList = (userId: string) =>
           errors: true,
           searchMeta: true,
         },
-      })
-
-      const profileSourceRows = await getCompactProfileSourceRows(runs.map((run) => run.id))
-      const profileSourcesByRun = summarizeProfileSourcesByRun(profileSourceRows)
-
-      return runs.map((run) => ({
-        ...run,
-        profileSources: summarizeProfileSources(profileSourcesByRun.get(run.id) ?? []),
-      }))
-    },
+      }),
     ['getBotRuns', userId],
     {
       tags: [cacheTagsFor(userId).bot],

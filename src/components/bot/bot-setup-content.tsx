@@ -5,8 +5,6 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import type { BotConfig } from '@prisma/client'
 import { BotResumeManager } from '@/components/bot/bot-resume-manager'
-import { ApplicationProfileForm } from '@/components/profile/application-profile-form'
-import type { ApplicationProfileFormProps } from '@/components/profile/application-profile-form'
 import { BotSettingsContent } from '@/components/bot/bot-settings-content'
 import type { BotSearchBackends, BotSearchUiCaps } from '@/lib/bot/search-preview'
 import type { SetupReadiness } from '@/lib/bot/setup-readiness'
@@ -26,7 +24,6 @@ type BotResumeRow = {
 
 export type BotSetupContentProps = {
   initialConfig: BotConfig | null
-  applicationProfile: ApplicationProfileFormProps | null
   initialResumes: BotResumeRow[]
   setupReadiness: SetupReadiness
   telegramConfigured: boolean
@@ -37,7 +34,7 @@ export type BotSetupContentProps = {
   searchUiCaps: BotSearchUiCaps
 }
 
-const SECTIONS = ['resume', 'profile', 'search'] as const
+const SECTIONS = ['resume', 'search'] as const
 type SetupSection = (typeof SECTIONS)[number]
 
 function isSetupSection(value: string | null): value is SetupSection {
@@ -46,7 +43,6 @@ function isSetupSection(value: string | null): value is SetupSection {
 
 export function BotSetupContent({
   initialConfig,
-  applicationProfile,
   initialResumes,
   setupReadiness,
   telegramConfigured,
@@ -90,11 +86,6 @@ export function BotSetupContent({
           safeResumeSearchTerms={safeResumeSearchTerms}
           allResumeSearchTerms={allResumeSearchTerms}
           searchUiCaps={searchUiCaps}
-          profileSection={
-            <div id="profile" className="scroll-mt-20">
-              <ApplicationProfileForm profile={applicationProfile} embedded minimal />
-            </div>
-          }
           resumeSection={
             <div id="resume" className="scroll-mt-20">
               <BotResumeManager initialResumes={initialResumes} embedded minimal />

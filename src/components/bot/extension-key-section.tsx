@@ -85,9 +85,9 @@ export function ExtensionKeySection({ initialData }: ExtensionKeySectionProps) {
     return (
       <div className="glass glass-subtle rounded-2xl p-5 md:p-6">
         <div className="flex items-center gap-3 mb-4">
-          <Chrome className="size-5 text-muted-foreground" />
+          <Chrome className="size-5 text-primary" />
           <h3 className="text-base font-semibold tracking-tight">
-            Chrome extension
+            Browser extension connection
           </h3>
         </div>
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -97,32 +97,34 @@ export function ExtensionKeySection({ initialData }: ExtensionKeySectionProps) {
 
   return (
     <div className="glass glass-subtle rounded-2xl p-5 md:p-6">
-      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-        <div className="flex items-center gap-3">
-          <Chrome className="size-5" />
-          <h3 className="text-base font-semibold tracking-tight">
-            Chrome extension
-          </h3>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleDownloadExtension}
-          className="flex items-center gap-2"
-        >
-          <Download className="size-4" />
-          Download
-        </Button>
-      </div>
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <Chrome className="size-5 text-primary" />
+              <h3 className="text-base font-semibold tracking-tight">
+                Browser extension connection
+              </h3>
+              <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+                keyPrefix || key
+                  ? 'border-success/30 bg-success/15 text-success'
+                  : 'border-warning/30 bg-warning/15 text-warning-text'
+              }`}>
+                <span className="size-1.5 rounded-full bg-current" />
+                {keyPrefix || key ? 'Key generated' : 'Setup needed'}
+              </span>
+            </div>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+              Install the Trackd extension, generate a connection key, then paste it into the extension popup.
+            </p>
+          </div>
 
-      {!keyPrefix && !key ? (
-        // No key exists
-        <div>
-          <p className="text-sm text-muted-foreground mb-4">
-            Connect the Trackd Chrome extension to save jobs with one click from any job board.
-          </p>
-          <div className="flex flex-col gap-2">
-            <Button onClick={generateKey} disabled={isGenerating}>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={generateKey}
+              disabled={isGenerating}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
               {isGenerating ? (
                 <>
                   <RefreshCw className="size-4 mr-2 animate-spin" />
@@ -131,30 +133,35 @@ export function ExtensionKeySection({ initialData }: ExtensionKeySectionProps) {
               ) : (
                 <>
                   <RefreshCw className="size-4 mr-2" />
-                  Generate Extension Key
+                  {keyPrefix || key ? 'Regenerate connection key' : 'Generate connection key'}
                 </>
               )}
             </Button>
             <Button
               variant="outline"
               onClick={handleDownloadExtension}
-              className="flex items-center justify-center gap-2"
+              className="flex items-center gap-2"
             >
               <Download className="size-4" />
-              Download Extension First
+              Download extension
             </Button>
           </div>
         </div>
-      ) : (
-        // Key exists
-        <div className="space-y-4">
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.9fr)]">
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">
-              Your Extension Key
+              Connection key
             </label>
             <div className="flex items-center gap-2">
-              <code className="flex-1 bg-muted px-3 py-2 rounded-md font-mono text-sm border border-border">
-                {key && showKey ? key : `${keyPrefix}••••••••••••••••••••••`}
+              <code className="flex-1 overflow-x-auto rounded-md border border-border bg-muted px-3 py-2 font-mono text-sm">
+                {key
+                  ? showKey
+                    ? key
+                    : `${key.slice(0, 10)}••••••••••••••••••••••`
+                  : keyPrefix
+                    ? `${keyPrefix}••••••••••••••••••••••`
+                    : 'Generate a key to connect the extension'}
               </code>
 
               {key && (
@@ -189,64 +196,49 @@ export function ExtensionKeySection({ initialData }: ExtensionKeySectionProps) {
                 </>
               )}
             </div>
-            {!key && (
+            {!key && keyPrefix && (
               <p className="text-xs text-muted-foreground mt-2">
-                Key was previously generated. Click "Regenerate Key" to view it again (this will disconnect any currently connected extensions).
+                A key already exists, but the full value is only shown when generated. Regenerate it to copy a fresh key.
+              </p>
+            )}
+            {!key && !keyPrefix && (
+              <p className="text-xs text-muted-foreground mt-2">
+                No connection key exists yet. Generate one, then paste it into the extension.
+              </p>
+            )}
+
+            {lastUsedAt && (
+              <p className="mt-3 text-sm text-muted-foreground" suppressHydrationWarning>
+                Last used: {new Date(lastUsedAt).toLocaleString()}
+              </p>
+            )}
+
+            {(keyPrefix || key) && (
+              <p className="mt-3 text-sm text-muted-foreground">
+                Regenerating disconnects existing extension installs. Paste the new key into the extension after regenerating.
               </p>
             )}
           </div>
 
-          {lastUsedAt && (
-            <p className="text-sm text-muted-foreground" suppressHydrationWarning>
-              Last used: {new Date(lastUsedAt).toLocaleString()}
-            </p>
-          )}
-
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={generateKey}
-              disabled={isGenerating}
-            >
-              {isGenerating ? (
-                <>
-                  <RefreshCw className="size-4 mr-2 animate-spin" />
-                  Regenerating...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="size-4 mr-2" />
-                  Regenerate Key
-                </>
-              )}
-            </Button>
-          </div>
-
-          <p className="text-sm text-muted-foreground">
-            Regenerating will disconnect any currently connected extensions. Make sure to update your extension with the new key.
-          </p>
-
-          <div className="pt-4 border-t border-border">
-            <h4 className="text-sm font-medium mb-2">How to Connect:</h4>
-            <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
-              <li>
-                <button
-                  onClick={handleDownloadExtension}
-                  className="text-primary hover:underline"
-                >
-                  Download and install the Trackd Chrome extension
-                </button>
+          <div className="rounded-xl border border-border/80 bg-muted/25 p-4">
+            <h4 className="text-sm font-medium mb-3">Connection setup</h4>
+            <ol className="space-y-2 text-sm text-muted-foreground">
+              <li className="flex gap-2">
+                <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">1</span>
+                <span>Download and load the extension from <code className="rounded bg-muted px-1 py-0.5 text-xs">chrome://extensions</code>.</span>
               </li>
-              <li>Go to <code className="px-1 py-0.5 bg-muted rounded text-xs">chrome://extensions/</code></li>
-              <li>Enable "Developer mode" (toggle in top right)</li>
-              <li>Click "Load unpacked" and select the extracted extension folder</li>
-              <li>Click the extension icon and paste your extension key</li>
-              <li>Start saving jobs with one click!</li>
+              <li className="flex gap-2">
+                <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">2</span>
+                <span>Generate a connection key on this page.</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">3</span>
+                <span>Open the extension popup, paste the key, and click Connect.</span>
+              </li>
             </ol>
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }
-

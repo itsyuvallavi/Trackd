@@ -2,19 +2,22 @@ import { AppShell } from '@/components/layout/app-shell'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { updateProfile } from './actions'
+import { ApplicationProfileForm } from '@/components/profile/application-profile-form'
 import { ThemeSelector } from '@/components/profile/theme-selector'
 import Link from 'next/link'
-import { ArrowRight, Bot, Plug } from 'lucide-react'
+import { ArrowRight, Bot, Plug, UserCheck } from 'lucide-react'
 import { getUserProfile, getEmailIntegration } from '@/lib/cached-queries'
+import { serializeForClient } from '@/lib/serialize-for-client'
 
 export const revalidate = 0
 
 export default async function ProfilePage() {
   const user = await requireAuth()
 
-  const [profileData, emailIntegration] = await Promise.all([
+  const [profileData, emailIntegration, applicationProfile] = await Promise.all([
     getUserProfile(user.id),
     getEmailIntegration(user.id),
+    prisma.applicationProfile.findUnique({ where: { userId: user.id } }),
   ])
 
   let profile = profileData
@@ -33,16 +36,26 @@ export default async function ProfilePage() {
     })
   }
 
+  const applicationProfileForClient = applicationProfile
+    ? (() => {
+        const { portalSignupPassword: _omit, ...rest } = applicationProfile
+        return {
+          ...rest,
+          hasPortalSignupPassword: Boolean(_omit),
+        }
+      })()
+    : null
+
   return (
     <AppShell showEmailNotification={!emailIntegration}>
       <div className="flex-1 overflow-auto">
-        <div className="max-w-3xl mx-auto px-4 md:px-8 py-6 md:py-10">
+        <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-10">
           <header className="mb-6">
             <h1 className="text-3xl font-semibold tracking-tight mb-1">
               Profile
             </h1>
             <p className="text-sm text-muted-foreground">
-              Your basic account details and appearance.
+              Account details, application identity, and appearance.
             </p>
           </header>
 
@@ -103,6 +116,25 @@ export default async function ProfilePage() {
             </form>
           </section>
 
+          <section className="glass glass-subtle mt-6 rounded-2xl px-5 py-6 md:px-6">
+            <div className="mb-5 flex items-start gap-3">
+              <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+                <UserCheck className="size-4.5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold tracking-tight">
+                  Application identity
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Legal name, contact details, location, work authorization, and application preferences.
+                </p>
+              </div>
+            </div>
+            <ApplicationProfileForm
+              profile={serializeForClient(applicationProfileForClient)}
+            />
+          </section>
+
           {/* Related pages — links, not duplicates. */}
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Link
@@ -113,21 +145,21 @@ export default async function ProfilePage() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium">Integrations</p>
                 <p className="text-xs text-muted-foreground">
-                  Email sync, Chrome extension
+                  Email sync and mailbox review
                 </p>
               </div>
               <ArrowRight className="size-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
             </Link>
 
             <Link
-              href="/bot/setup?section=profile"
+              href="/bot/setup?section=resume"
               className="group glass glass-subtle rounded-2xl px-5 py-4 flex items-center gap-3 hover:bg-foreground/[0.02] transition-colors"
             >
               <Bot className="size-5 text-muted-foreground group-hover:text-foreground transition-colors" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium">Job Search setup</p>
                 <p className="text-xs text-muted-foreground">
-                  Resume, profile, and search preferences
+                  Resume, search preferences, extension
                 </p>
               </div>
               <ArrowRight className="size-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />

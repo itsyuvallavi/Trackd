@@ -20,7 +20,7 @@ export default async function BotRunsPage() {
       <header className="mb-5">
         <h2 className="text-xl font-semibold tracking-tight">Activity</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Search history with match counts, scoring sources, and skip reasons.
+          Recent searches, saved jobs, and diagnostics when something needs review.
         </p>
       </header>
       <BotRunsPanel runs={serializeForClient(recentRunsSafe)} />

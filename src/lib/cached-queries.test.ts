@@ -118,7 +118,7 @@ describe('bot run profile source summaries', () => {
     ])
   })
 
-  it('keeps the bot runs list query off full listing scoringInputs while returning profileSources', async () => {
+  it('uses only the slim bot run projection for the activity list', async () => {
     const startedAt = new Date('2026-05-20T10:00:00.000Z')
     prismaMock.botRun.findMany.mockResolvedValue([
       {
@@ -131,29 +131,10 @@ describe('bot run profile source summaries', () => {
         startedAt,
         completedAt: new Date('2026-05-20T10:01:00.000Z'),
         duration: 60_000,
+        searchMeta: null,
         errors: {
           pipeline: 'found=3 new=2 evaluated=2 approved=1',
           evaluationSkips: [{ title: 'Skipped role' }],
-        },
-      },
-    ])
-    prismaMock.$queryRaw.mockResolvedValue([
-      {
-        botRunId: 'run_1',
-        profileSource: {
-          kind: 'parsed_resume',
-          label: 'Parsed resume',
-          resumeLabel: 'Main resume',
-        },
-        resumeUsed: {},
-      },
-      {
-        botRunId: 'run_1',
-        profileSource: {},
-        resumeUsed: {
-          resumeId: 'resume_1',
-          label: 'Main resume',
-          selection: 'matched_by_keywords',
         },
       },
     ])
@@ -165,13 +146,6 @@ describe('bot run profile source summaries', () => {
           pipeline: 'found=3 new=2 evaluated=2 approved=1',
           evaluationSkips: [{ title: 'Skipped role' }],
         }),
-        profileSources: [
-          expect.objectContaining({
-            kind: 'parsed_resume',
-            resumeLabel: 'Main resume',
-            listings: 2,
-          }),
-        ],
       }),
     ])
 
@@ -182,7 +156,7 @@ describe('bot run profile source summaries', () => {
         }),
       })
     )
-    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1)
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled()
   })
 
   it('uses a slim jobs-page projection instead of full job rows', async () => {

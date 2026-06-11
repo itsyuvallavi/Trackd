@@ -8,14 +8,26 @@ export const dynamic = 'force-dynamic'
  * GET /api/email-sync-logs
  * Retrieve email sync log history for the authenticated user
  */
-export async function GET() {
+const DEFAULT_SYNC_LOG_LIMIT = 10
+const MAX_SYNC_LOG_LIMIT = 50
+
+function parseLimit(value: string | null): number {
+  if (!value) return DEFAULT_SYNC_LOG_LIMIT
+  const parsed = Number.parseInt(value, 10)
+  if (!Number.isFinite(parsed)) return DEFAULT_SYNC_LOG_LIMIT
+  return Math.min(Math.max(1, parsed), MAX_SYNC_LOG_LIMIT)
+}
+
+export async function GET(request: Request) {
   try {
     const user = await requireAuth()
+    const url = new URL(request.url)
+    const limit = parseLimit(url.searchParams.get('limit'))
     
     const logs = await prisma.emailSyncLog.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
-      take: 100, // Last 100 syncs
+      take: limit,
     })
     
     return NextResponse.json({ logs })

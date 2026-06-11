@@ -72,16 +72,6 @@ export default async function BotSetupPage() {
 
   const allResumeSearchTerms = deriveSafeResumeSearchTerms(candidateProfile)
 
-  const appProfileForClient = appProfile
-    ? (() => {
-        const { portalSignupPassword: _omit, ...rest } = appProfile
-        return {
-          ...rest,
-          hasPortalSignupPassword: Boolean(_omit),
-        }
-      })()
-    : null
-
   const resumesSafe = resumes.map((r) => ({
     ...r,
     structuredData: sanitizeJsonClone(r.structuredData),
@@ -100,7 +90,6 @@ export default async function BotSetupPage() {
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading setup…</p>}>
         <BotSetupContent
           initialConfig={serializeForClient(botConfig)}
-          applicationProfile={serializeForClient(appProfileForClient)}
           initialResumes={serializeForClient(resumesSafe).map((r) => ({
             id: r.id,
             label: r.label,

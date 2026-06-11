@@ -705,7 +705,7 @@ export function BotQueueContent() {
             <strong>Your application profile is incomplete.</strong> The bot
             needs your phone, location, and work authorization to fill forms
             automatically.{' '}
-            <Link href="/bot/setup?section=profile" className="underline hover:text-foreground">
+            <Link href="/profile" className="underline hover:text-foreground">
               Complete your profile →
             </Link>
           </span>

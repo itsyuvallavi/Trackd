@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/prisma'
 import { EmailIntegrationForm } from '@/components/email/email-integration-form'
-import { ExtensionKeySection } from '@/components/email/extension-key-section'
 import { SyncHistory } from '@/components/email/sync-history'
 import { AppShell } from '@/components/layout/app-shell'
 import { requireAuth } from '@/lib/auth'
@@ -12,32 +11,23 @@ export const maxDuration = 300
 export default async function IntegrationsPage() {
   const user = await requireAuth()
 
-  const [integration, extensionKey] = await Promise.all([
-    prisma.emailIntegration.findUnique({
-      where: { userId: user.id },
-      select: {
-        id: true,
-        provider: true,
-        email: true,
-        imapHost: true,
-        imapPort: true,
-        imapUsername: true,
-        isActive: true,
-        lastSyncedAt: true,
-        lastError: true,
-        autoSyncEnabled: true,
-        autoSyncFrequency: true,
-        nextSyncAt: true,
-      },
-    }),
-    prisma.extensionKey.findUnique({
-      where: { userId: user.id },
-      select: {
-        keyPrefix: true,
-        lastUsedAt: true,
-      },
-    }),
-  ])
+  const integration = await prisma.emailIntegration.findUnique({
+    where: { userId: user.id },
+    select: {
+      id: true,
+      provider: true,
+      email: true,
+      imapHost: true,
+      imapPort: true,
+      imapUsername: true,
+      isActive: true,
+      lastSyncedAt: true,
+      lastError: true,
+      autoSyncEnabled: true,
+      autoSyncFrequency: true,
+      nextSyncAt: true,
+    },
+  })
 
   const integrationForClient = integration
     ? {
@@ -55,7 +45,7 @@ export default async function IntegrationsPage() {
           <div className="mb-6">
             <div className="flex items-center gap-3 mb-1 flex-wrap">
               <h1 className="text-3xl font-semibold tracking-tight">
-                Email integration
+                Integrations
               </h1>
               {integrationForClient && integrationForClient.isActive && (
                 <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -68,7 +58,7 @@ export default async function IntegrationsPage() {
               )}
             </div>
             <p className="text-sm text-muted-foreground mb-4">
-              Manage mailbox sync, review AI email findings, and extension settings.
+              Manage mailbox sync and AI email findings.
             </p>
             <Link
               href="/settings/integrations/logs"
@@ -99,25 +89,9 @@ export default async function IntegrationsPage() {
           </div>
 
           <div className="space-y-5">
-            {/* Email Integration Section */}
             <div className="glass glass-subtle rounded-2xl p-5 md:p-6">
               <EmailIntegrationForm integration={integrationForClient} />
             </div>
-
-            {/* Chrome Extension Section */}
-            <ExtensionKeySection
-              initialData={
-                extensionKey
-                  ? {
-                      keyPrefix: extensionKey.keyPrefix,
-                      lastUsedAt:
-                        extensionKey.lastUsedAt?.toISOString() || null,
-                    }
-                  : null
-              }
-            />
-
-            {/* Sync History Section */}
             <SyncHistory />
           </div>
         </div>

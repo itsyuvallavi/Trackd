@@ -84,8 +84,8 @@ export function BotSettingsContent({
   resumeSection,
 }: BotSettingsContentProps) {
   const isSetupLayout = layout === 'setup'
-  const isSetupGridLayout =
-    isSetupLayout && profileSection != null && resumeSection != null
+  const isSetupGridLayout = isSetupLayout && resumeSection != null
+  const hasSetupProfileSection = isSetupGridLayout && profileSection != null
   const caps = searchUiCaps ?? defaultSearchUiCaps()
 
   const [isPending, startTransition] = useTransition()
@@ -721,36 +721,53 @@ export function BotSettingsContent({
       )}
 
       {isSetupGridLayout ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 lg:divide-x lg:divide-border">
-          <div className={cn(setupPanelBodyClass, 'order-1 lg:col-start-1 lg:row-start-1')}>
-            {profileSection}
+        hasSetupProfileSection ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 lg:divide-x lg:divide-border">
+            <div className={cn(setupPanelBodyClass, 'order-1 lg:col-start-1 lg:row-start-1')}>
+              {profileSection}
+            </div>
+            <div
+              id="search"
+              className={cn(
+                setupPanelBodyClass,
+                'order-2 scroll-mt-20 border-t lg:col-start-2 lg:row-start-1 lg:border-t-0'
+              )}
+            >
+              {searchPreferencesSection}
+            </div>
+            <div
+              className={cn(
+                setupPanelBodyClass,
+                'order-3 border-t lg:col-start-1 lg:row-start-2'
+              )}
+            >
+              {resumeSection}
+            </div>
+            <div
+              className={cn(
+                setupPanelBodyClass,
+                'order-4 border-t lg:col-start-2 lg:row-start-2'
+              )}
+            >
+              {setupNotificationsSection}
+            </div>
           </div>
-          <div
-            id="search"
-            className={cn(
-              setupPanelBodyClass,
-              'order-2 scroll-mt-20 border-t lg:col-start-2 lg:row-start-1 lg:border-t-0'
-            )}
-          >
-            {searchPreferencesSection}
+        ) : (
+          <div className="divide-y divide-border">
+            <div className={setupPanelBodyClass}>
+              {resumeSection}
+            </div>
+            <div
+              id="search"
+              className={cn(setupPanelBodyClass, 'scroll-mt-20')}
+            >
+              {searchPreferencesSection}
+            </div>
+            <div className={setupPanelBodyClass}>
+              {setupNotificationsSection}
+            </div>
           </div>
-          <div
-            className={cn(
-              setupPanelBodyClass,
-              'order-3 border-t lg:col-start-1 lg:row-start-2'
-            )}
-          >
-            {resumeSection}
-          </div>
-          <div
-            className={cn(
-              setupPanelBodyClass,
-              'order-4 border-t lg:col-start-2 lg:row-start-2'
-            )}
-          >
-            {setupNotificationsSection}
-          </div>
-        </div>
+        )
       ) : isSetupLayout ? (
         <div className={setupStackClass}>
           {searchPreferencesSection}

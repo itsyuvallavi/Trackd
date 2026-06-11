@@ -189,7 +189,7 @@ export function BotStatusStrip({
           {!setupReadiness.hasProfile && (
             <>
               {!setupReadiness.hasResume && <span aria-hidden>·</span>}
-              <Link href="/bot/setup?section=profile" className="underline hover:text-foreground">
+              <Link href="/profile" className="underline hover:text-foreground">
                 Complete profile
               </Link>
             </>
@@ -308,7 +308,7 @@ export function BotStatusStrip({
             <>
               <span aria-hidden className="opacity-50">·</span>
               <Link
-                href="/bot/setup?section=profile"
+                href="/profile"
                 className="font-medium underline underline-offset-2 hover:text-foreground"
               >
                 Profile
