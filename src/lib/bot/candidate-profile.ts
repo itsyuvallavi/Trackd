@@ -367,7 +367,7 @@ function buildNoResumeFallback(
   if (profile && hasIdentity) {
     const location = profileLocation(profile)
     const summaryParts = [
-      'No usable Job Search resume content is available; this limited profile is built from Application Identity and search preferences.',
+      'No usable Job Search resume content is available; this limited profile is built from saved profile details and search preferences.',
       profile.yearsExperience != null ? `Reported experience: ${profile.yearsExperience} years` : null,
       location ? `Location: ${location}` : null,
       cleanString(profile.workAuthorization)
@@ -394,7 +394,7 @@ function buildNoResumeFallback(
       languages: config.spokenLanguages ?? [],
       experience: [
         {
-          company: 'Application Identity',
+          company: 'Saved profile',
           title: config.experienceLevel
             ? `${config.experienceLevel} candidate profile`
             : 'Candidate profile',
@@ -440,7 +440,7 @@ function buildNoResumeFallback(
       name: 'Candidate',
       email: '',
       summary: [
-        'No usable Job Search resume content or Application Identity is available.',
+        'No usable Job Search resume content or saved profile details are available.',
         config.keywords.length > 0 ? `Target roles from settings: ${config.keywords.join(', ')}` : null,
         settingsSignals.length > 0
           ? `Settings-derived role/stack signals (not resume evidence): ${settingsSignals.join(', ')}`
@@ -463,7 +463,7 @@ function buildNoResumeFallback(
         settingsSignals,
         limitations: [
           'No usable Job Search resume content is available for this user.',
-          'No Application Identity fallback exists for this user.',
+          'No saved profile fallback exists for this user.',
           'Settings-derived role/stack signals are not treated as resume evidence.',
         ],
       }),
@@ -475,7 +475,7 @@ function buildNoResumeFallback(
     source: sourceMeta({
       kind: 'none',
       limitations: [
-        'No usable Job Search resume content, Application Identity, or settings-derived profile signals are available.',
+        'No usable Job Search resume content, saved profile details, or settings-derived profile signals are available.',
       ],
     }),
   }

@@ -8,10 +8,7 @@ import { resolveResumeReadinessSource } from '@/lib/bot/profile-source-labels'
 import { buildSetupReadiness } from '@/lib/bot/setup-readiness'
 import {
   BOT_SEARCH_TERMS_REQUIRED_MSG,
-  buildSearchableTerms,
-  hasSearchableTerms,
 } from '@/lib/bot/bot-search-readiness'
-import { loadCandidateProfileForEvaluation } from '@/lib/bot/candidate-profile'
 import { prisma } from '@/lib/prisma'
 import { Prisma, type BotSearchFrequency } from '@prisma/client'
 
@@ -95,20 +92,6 @@ export default async function BotLayout({
   ])
 
   const searchServiceConfigured = botSearchHasQueryableBackend()
-  const candidateProfile = botConfig
-    ? await loadCandidateProfileForEvaluation(
-        user.id,
-        botConfig.keywords[0] ?? 'Job Search',
-        botConfig
-      )
-    : null
-  const canRun =
-    searchServiceConfigured &&
-    !!botConfig &&
-    hasSearchableTerms(botConfig, candidateProfile)
-  const searchableTermCount = botConfig
-    ? buildSearchableTerms(botConfig, candidateProfile).length
-    : 0
   const hasIdentityFallback = Boolean(
     appProfile &&
       (appProfile.applicationFullName?.trim() ||
@@ -137,8 +120,11 @@ export default async function BotLayout({
     parsedResumeCount: resumeReadinessCounts.parsedCount,
     applicationProfile: appProfile,
     keywordCount: botConfig?.keywords?.length ?? 0,
-    searchableTermCount,
   })
+  const canRun =
+    searchServiceConfigured &&
+    !!botConfig &&
+    setupReadiness.isComplete
 
   const runDisabledReason = !searchServiceConfigured
     ? 'No search backend configured.'

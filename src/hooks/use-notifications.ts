@@ -22,6 +22,8 @@ export interface NotificationsResponse {
 interface UseNotificationsOptions {
   /** Must match the list fetch (default 20). */
   limit?: number
+  /** Fetch the notification list. Use false when only the count is needed. */
+  enabled?: boolean
   /** Enable automatic polling (disabled by default to reduce server load) */
   enablePolling?: boolean
   /** Polling interval in milliseconds (default: 60 seconds) */
@@ -35,11 +37,12 @@ interface UseNotificationsOptions {
 export function useNotifications(options: UseNotificationsOptions = {}) {
   const {
     limit = 20,
+    enabled = true,
     enablePolling = false,
     pollingInterval = 60_000,
   } = options
 
-  const key = `/api/notifications?limit=${limit}`
+  const key = enabled ? `/api/notifications?limit=${limit}` : null
 
   const { data, error, isLoading, isValidating, mutate } =
     useSWR<NotificationsResponse>(key, {

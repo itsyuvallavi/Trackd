@@ -178,7 +178,7 @@ function buildEvalPrompt(
       ? `Resume used: ${profileSource.resumeLabel || 'Uploaded resume'} (${profileSource.resumeId})`
       : null,
     profileSource.applicationIdentitySupplemented
-      ? 'Application Identity supplements contact, location, and work authorization fields only.'
+      ? 'Saved profile details supplement contact, location, and work authorization fields only.'
       : null,
     profileSource.settingsDerivedSignalsUsed
       ? 'Settings-derived role/stack signals are weak fallback hints because no usable Job Search resume content exists; do not treat them as verified resume evidence.'

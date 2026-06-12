@@ -71,7 +71,7 @@ function sourceWarningText(source: ResumeReadinessSource): string {
     case 'raw_resume_fallback':
       return 'Scoring is using extracted resume text because parsed fields are unavailable.'
     case 'application_identity_fallback':
-      return 'Run now will score with Application Identity and search preferences until a usable Job Search resume is available.'
+      return 'Run now will score with saved profile details and search preferences until a usable Job Search resume is available.'
     case 'settings_fallback':
       return 'Run now will score with search preferences only until a usable Job Search resume is available.'
     case 'none':
@@ -304,17 +304,6 @@ export function BotStatusStrip({
           >
             {resumeActionLabel}
           </Link>
-          {profileSource.kind === 'application_identity_fallback' && (
-            <>
-              <span aria-hidden className="opacity-50">·</span>
-              <Link
-                href="/profile"
-                className="font-medium underline underline-offset-2 hover:text-foreground"
-              >
-                Profile
-              </Link>
-            </>
-          )}
         </div>
       )}
 

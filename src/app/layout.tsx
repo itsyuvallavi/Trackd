@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Trackd - AI-Powered Job Application Tracker",
   description:
-    "An AI-powered job application tracker with automatic email sync, browser extension for one-click job saving, AI interview prep, and resume advisor.",
+    "An AI-powered job application tracker with automatic email sync, browser extension for one-click job saving, AI job matching, and interview prep.",
   icons: {
     icon: "/favicon.png",
     apple: "/logo.png",

@@ -1,18 +1,7 @@
-import { requireAuth } from '@/lib/auth'
-import { AppShell } from '@/components/layout/app-shell'
-import { ResumeAdvisorContent } from '@/components/resume/resume-advisor-content'
+import { redirect } from 'next/navigation'
 
 export const revalidate = 60
 
 export default async function ResumeAdvisorPage() {
-  await requireAuth()
-
-  const aiConfigured = Boolean(process.env.OPENAI_API_KEY?.trim())
-
-  return (
-    <AppShell>
-      <ResumeAdvisorContent aiConfigured={aiConfigured} />
-    </AppShell>
-  )
+  redirect('/jobs')
 }
-

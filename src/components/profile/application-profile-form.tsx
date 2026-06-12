@@ -163,7 +163,7 @@ export function ApplicationProfileForm({
         {!embedded && (
           <>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-              Application identity
+              Saved profile details
             </p>
             <p className="text-xs text-muted-foreground mb-3">
               Used by the apply bot for your legal name, email, and optional host job-board password

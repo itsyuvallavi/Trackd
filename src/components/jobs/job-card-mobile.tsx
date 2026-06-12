@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { StickyNote } from 'lucide-react'
 import { StatusDropdown } from './status-dropdown'
-import { JobActionsMenu } from './job-actions-menu'
 import { cn } from '@/lib/utils'
 import type { JobStatus } from '@prisma/client'
 
@@ -46,45 +45,43 @@ export function JobCardMobile({
 }: JobCardMobileProps) {
   return (
     <div
-      className="glass glass-subtle rounded-2xl p-3 active:scale-[0.99] transition-transform duration-150 ease-[var(--ease-ios)] animate-in fade-in"
-      style={{ animationDelay: `${Math.min(index, 12) * 20}ms`, animationDuration: '260ms' }}
+      className="group relative overflow-hidden rounded-[1.35rem] border border-border/70 bg-card/82 p-3.5 shadow-[0_14px_42px_-28px_rgba(0,0,0,0.9)] backdrop-blur-xl transition-[transform,border-color,background-color] duration-200 ease-[var(--ease-ios)] active:scale-[0.985] animate-in fade-in slide-in-from-bottom-1"
+      style={{
+        animationDelay: `${Math.min(index, 12) * 18}ms`,
+        animationDuration: '260ms',
+      }}
     >
-      <div className="flex items-center gap-2">
-        <div
-          aria-hidden
-          className={cn(
-            'w-[3px] h-8 rounded-full shrink-0',
-            statusAccent[job.status] || 'bg-muted'
-          )}
-        />
-        <Link href={`/jobs/${job.id}`} className="flex-1 min-w-0 block">
+      <div
+        aria-hidden
+        className={cn(
+          'absolute inset-y-3 left-3 w-[3px] rounded-full',
+          statusAccent[job.status] || 'bg-muted'
+        )}
+      />
+      <div className="flex items-center gap-3 pl-3">
+        <Link href={`/jobs/${job.id}`} className="min-w-0 flex-1 block">
           <h3
-            className="text-xs font-medium text-foreground line-clamp-1 hover:text-primary transition-colors"
+            className="text-sm font-semibold leading-tight text-foreground line-clamp-1 transition-colors group-hover:text-primary"
             style={{ viewTransitionName: `job-title-${job.id}` }}
           >
             {job.title}
           </h3>
-          <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">
+          <p className="mt-1 text-[11px] leading-tight text-muted-foreground line-clamp-1">
             {job.company}
-            {job.location && ` · ${job.location}`}
+            {job.location && (
+              <span className="text-muted-foreground/75"> · {job.location}</span>
+            )}
           </p>
         </Link>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex shrink-0 items-center gap-1.5">
           {job.notes && (
-            <StickyNote className="size-2.5 text-muted-foreground/60" />
+            <StickyNote className="size-3 text-muted-foreground/60" />
           )}
-          <div className="min-h-[22px] flex items-center">
-            <StatusDropdown
-              jobId={job.id}
-              currentStatus={job.status as JobStatus}
-              onOptimisticStatus={onStatusOptimistic}
-              onStatusCommitFailed={onStatusCommitFailed}
-            />
-          </div>
-          <JobActionsMenu
+          <StatusDropdown
             jobId={job.id}
-            jobTitle={job.title}
-            jobCompany={job.company}
+            currentStatus={job.status as JobStatus}
+            onOptimisticStatus={onStatusOptimistic}
+            onStatusCommitFailed={onStatusCommitFailed}
           />
         </div>
       </div>

@@ -45,6 +45,6 @@ export function buildSetupReadiness(input: {
     hasProfile,
     hasKeywords,
     hasSearchTerms,
-    isComplete: hasResume && hasProfile && hasSearchTerms,
+    isComplete: hasResume && hasSearchTerms,
   }
 }

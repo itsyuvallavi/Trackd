@@ -52,7 +52,7 @@ function identity(partial: Partial<ApplicationProfile> = {}): ApplicationProfile
 }
 
 describe('candidate profile source priority', () => {
-  it('uses parsed Job Search resume first and supplements Application Identity', () => {
+  it('uses parsed Job Search resume first and supplements saved profile details', () => {
     const profile = buildCandidateProfileFromSources({
       jobTitle: 'Frontend React Developer',
       config: cfg({ keywords: ['React Developer', 'Python Developer'] }),
@@ -130,7 +130,7 @@ describe('candidate profile source priority', () => {
     expect(profile.resume?.summary).toContain('Inferred from resume context')
   })
 
-  it('uses raw resume fallback before Application Identity fallback', () => {
+  it('uses raw resume fallback before saved profile fallback', () => {
     const profile = buildCandidateProfileFromSources({
       jobTitle: 'Frontend Developer',
       config: cfg(),
@@ -160,7 +160,7 @@ describe('candidate profile source priority', () => {
     expect(profile.resume?.summary).toContain('Parsed resume fields are unavailable')
   })
 
-  it('falls back to Application Identity and clearly marks settings-derived signals', () => {
+  it('falls back to saved profile details and clearly marks settings-derived signals', () => {
     const profile = buildCandidateProfileFromSources({
       jobTitle: 'AI Frontend Engineer',
       config: cfg({ keywords: ['React Developer', 'Full-stack AI Engineer'] }),
@@ -218,7 +218,7 @@ describe('candidate profile source priority', () => {
     expect(profile.resume?.skills).not.toContain('AI Engineering')
   })
 
-  it('uses settings fallback only when no resume or Application Identity exists', () => {
+  it('uses settings fallback only when no resume or saved profile exists', () => {
     const profile = buildCandidateProfileFromSources({
       jobTitle: 'React Developer',
       config: cfg({ keywords: ['React Developer'] }),
@@ -231,6 +231,6 @@ describe('candidate profile source priority', () => {
       settingsDerivedSignalsUsed: true,
       settingsSignals: ['React', 'Frontend Engineering'],
     })
-    expect(profile.source.limitations).toContain('No Application Identity fallback exists for this user.')
+    expect(profile.source.limitations).toContain('No saved profile fallback exists for this user.')
   })
 })

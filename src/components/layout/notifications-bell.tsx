@@ -9,6 +9,7 @@ import { NotificationItem } from '@/components/notifications/notification-item'
 import { NOTIFICATIONS_REFRESH_EVENT } from '@/lib/constants'
 import {
   useNotifications,
+  useUnreadNotificationCount,
   type NotificationsResponse,
 } from '@/hooks/use-notifications'
 
@@ -20,14 +21,22 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
   const [isOpen, setIsOpen] = useState(false)
   const {
     notifications,
-    unreadCount,
+    unreadCount: listUnreadCount,
     isLoading,
     mutate,
-  } = useNotifications({ limit: 20 })
+  } = useNotifications({ limit: 20, enabled: isOpen })
+  const {
+    count: unreadCount,
+    mutate: mutateUnreadCount,
+  } = useUnreadNotificationCount()
 
   const fetchNotifications = useCallback(() => {
-    return mutate()
-  }, [mutate])
+    void mutateUnreadCount()
+    if (isOpen) {
+      return mutate()
+    }
+    return Promise.resolve()
+  }, [isOpen, mutate, mutateUnreadCount])
 
   // Refresh when dropdown is opened (SWR cache may be stale)
   useEffect(() => {
@@ -62,9 +71,16 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
         },
         { revalidate: false }
       )
+      await mutateUnreadCount(
+        (current) => ({
+          count: Math.max(0, (current?.count ?? unreadCount) - 1),
+        }),
+        { revalidate: false }
+      )
     } catch (error) {
       console.error('Error marking notification as read:', error)
       await mutate()
+      await mutateUnreadCount()
     }
   }
 
@@ -93,6 +109,14 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
       },
       { revalidate: false }
     )
+    if (!removed.isRead) {
+      void mutateUnreadCount(
+        (current) => ({
+          count: Math.max(0, (current?.count ?? unreadCount) - 1),
+        }),
+        { revalidate: false }
+      )
+    }
     void (async () => {
       try {
         const res = await fetch(`/api/notifications/${notificationId}`, {
@@ -100,18 +124,15 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
         })
         if (!res.ok) throw new Error('Delete failed')
         await mutate()
+        await mutateUnreadCount()
       } catch (error) {
         console.error('Error dismissing notification:', error)
-        await mutate(
-          () => prevSnapshot,
-          { revalidate: false }
-        )
+        await mutate(() => prevSnapshot, { revalidate: false })
+        await mutateUnreadCount()
       }
     })()
   }
 
-  const hasNotifications =
-    unreadCount > 0 || notifications.length > 0 || showEmailNotification
   const showRedDot = unreadCount > 0 || showEmailNotification
 
   return (
@@ -134,9 +155,9 @@ export function NotificationsBell({ showEmailNotification }: NotificationsBellPr
         <div className="fixed md:absolute right-4 md:right-0 top-[72px] md:top-auto md:mt-2 w-[calc(100vw-2rem)] max-w-96 rounded-lg border border-border bg-card shadow-lg z-30 py-2">
           <div className="px-3 py-2 border-b border-border flex items-center justify-between">
             <span className="text-sm font-semibold text-foreground">Notifications</span>
-            {unreadCount > 0 && (
+            {listUnreadCount > 0 && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-error-bg text-error-text">
-                {unreadCount} new
+                {listUnreadCount} new
               </span>
             )}
           </div>

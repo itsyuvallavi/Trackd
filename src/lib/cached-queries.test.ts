@@ -194,7 +194,10 @@ describe('bot run profile source summaries', () => {
     ])
 
     expect(prismaMock.job.findMany).toHaveBeenCalledWith({
-      where: { userId: 'user_1' },
+      where: {
+        userId: 'user_1',
+        status: { in: ['APPLIED', 'INTERVIEW', 'OFFER'] },
+      },
       select: {
         id: true,
         title: true,
@@ -209,6 +212,8 @@ describe('bot run profile source summaries', () => {
         importJobBoard: true,
       },
       orderBy: { savedAt: 'desc' },
+      take: 50,
+      skip: 0,
     })
   })
 

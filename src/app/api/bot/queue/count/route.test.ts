@@ -2,27 +2,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
-  queryRaw: vi.fn(),
+  getBotQueueCount: vi.fn(),
 }))
 
 vi.mock('@/lib/auth', () => ({
   getCurrentUser: mocks.getCurrentUser,
 }))
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
-    $queryRaw: mocks.queryRaw,
-  },
+vi.mock('@/lib/cached-queries', () => ({
+  getBotQueueCount: mocks.getBotQueueCount,
 }))
 
 describe('/api/bot/queue/count', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getCurrentUser.mockResolvedValue({ id: 'user_1' })
-    mocks.queryRaw.mockResolvedValue([{ count: BigInt(12) }])
+    mocks.getBotQueueCount.mockResolvedValue(12)
   })
 
-  it('returns the deduped saved bot queue count from a database aggregate', async () => {
+  it('returns the cached deduped saved bot queue count', async () => {
     const { GET } = await import('./route')
 
     const response = await GET()
@@ -30,7 +28,7 @@ describe('/api/bot/queue/count', () => {
 
     expect(response.status).toBe(200)
     expect(body).toEqual({ count: 12 })
-    expect(mocks.queryRaw).toHaveBeenCalledTimes(1)
+    expect(mocks.getBotQueueCount).toHaveBeenCalledWith('user_1')
   })
 
   it('does not query the queue count for anonymous users', async () => {
@@ -42,6 +40,6 @@ describe('/api/bot/queue/count', () => {
 
     expect(response.status).toBe(401)
     expect(body).toEqual({ count: 0, error: 'Unauthorized' })
-    expect(mocks.queryRaw).not.toHaveBeenCalled()
+    expect(mocks.getBotQueueCount).not.toHaveBeenCalled()
   })
 })

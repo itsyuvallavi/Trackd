@@ -35,7 +35,7 @@ const AddJobFromUrlModal = dynamic(() => import('@/components/jobs/add-job-from-
   ssr: false,
 })
 
-const JOB_RENDER_PAGE_SIZE = 80
+const JOB_RENDER_PAGE_SIZE = 50
 
 // Tokenized status accent bar (left of each row) — drives the redesign's
 // colored hairline. All values are OKLCH variables defined in globals.css.
@@ -65,123 +65,128 @@ interface Job {
 
 interface JobsPageContentProps {
   jobs: Job[]
+  initialTotal: number
+  totalApplications: number
+  statusCounts: {
+    SAVED: number
+    APPLIED: number
+    INTERVIEW: number
+    OFFER: number
+    REJECTED: number
+    ARCHIVED: number
+  }
 }
 
-type IndexedJob = {
-  job: Job
-  searchText: string
+type JobsListResponse = {
+  jobs: Job[]
+  total: number | null
+  hasMore: boolean
 }
 
-export function JobsPageContent({ jobs }: JobsPageContentProps) {
+export function JobsPageContent({
+  jobs,
+  initialTotal,
+  totalApplications: initialTotalApplications,
+  statusCounts: initialStatusCounts,
+}: JobsPageContentProps) {
   const [listJobs, setListJobs] = useState<Job[]>(jobs)
+  const [currentTotal, setCurrentTotal] = useState(initialTotal)
+  const [statusCounts, setStatusCounts] = useState(initialStatusCounts)
+  const [totalApplications, setTotalApplications] = useState(
+    initialTotalApplications
+  )
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isAddUrlModalOpen, setIsAddUrlModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const [activeStatus, setActiveStatus] = useState('all')
-  const [visibleLimit, setVisibleLimit] = useState(JOB_RENDER_PAGE_SIZE)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkMessage, setBulkMessage] = useState<string | null>(null)
+  const [isPageLoading, setIsPageLoading] = useState(false)
+  const [pageError, setPageError] = useState<string | null>(null)
   const { visibleColumns, setVisibleColumns, isHydrated } = useColumnVisibility()
 
   // Keep client list in sync when the server payload changes (e.g. after
   // add/delete or a completed router.refresh()).
   useEffect(() => {
     setListJobs(jobs)
-  }, [jobs])
+    setCurrentTotal(initialTotal)
+    setStatusCounts(initialStatusCounts)
+    setTotalApplications(initialTotalApplications)
+  }, [jobs, initialStatusCounts, initialTotal, initialTotalApplications])
 
   useEffect(() => {
     setSelectedIds((prev) => {
-      const available = new Set(jobs.map((job) => job.id))
+      const available = new Set(listJobs.map((job) => job.id))
       const next = new Set([...prev].filter((id) => available.has(id)))
       return next.size === prev.size ? prev : next
     })
-  }, [jobs])
-
-  const indexedJobs = useMemo<IndexedJob[]>(
-    () =>
-      listJobs.map((job) => {
-        const sourceLabel = jobSourceDisplayName(
-          job.importSource ?? null,
-          job.source as JobSource,
-          job.importJobBoard,
-          { tags: job.tags }
-        )
-
-        return {
-          job,
-          searchText: [
-            job.company,
-            job.title,
-            job.location,
-            job.source,
-            sourceLabel,
-            job.importSource,
-            job.notes,
-          ]
-            .filter(Boolean)
-            .join('\n')
-            .toLowerCase(),
-        }
-      }),
-    [listJobs]
-  )
-
-  const { statusCounts, totalActiveJobs } = useMemo(() => {
-    const counts = {
-      SAVED: 0,
-      APPLIED: 0,
-      INTERVIEW: 0,
-      OFFER: 0,
-      REJECTED: 0,
-      ARCHIVED: 0,
-    }
-    let active = 0
-
-    for (const job of listJobs) {
-      const status = job.status as keyof typeof counts
-      if (status in counts) {
-        counts[status]++
-      }
-      if (isActiveApplicationStatus(job.status)) {
-        active++
-      }
-    }
-
-    return { statusCounts: counts, totalActiveJobs: active }
   }, [listJobs])
 
-  // Filter jobs based on search query and status.
-  // By default, show only real active applications. SAVED jobs are review/queue
-  // items and live in their own tab.
-  const filteredJobs = useMemo(() => {
-    let filtered = indexedJobs.filter(({ job }) => {
-      if (activeStatus === 'all') {
-        return isActiveApplicationStatus(job.status)
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => setDebouncedSearchQuery(searchQuery.trim()),
+      250
+    )
+    return () => window.clearTimeout(timeout)
+  }, [searchQuery])
+
+  const fetchJobsPage = useCallback(
+    async ({
+      append = false,
+      offset = 0,
+    }: { append?: boolean; offset?: number } = {}) => {
+      setIsPageLoading(true)
+      setPageError(null)
+
+      const params = new URLSearchParams({
+        status: activeStatus,
+        limit: String(JOB_RENDER_PAGE_SIZE),
+        offset: String(offset),
+      })
+      if (append) {
+        params.set('includeTotal', 'false')
       }
-      // Otherwise, show jobs matching the selected status
-      return true
-    })
+      if (debouncedSearchQuery) {
+        params.set('q', debouncedSearchQuery)
+      }
 
-    // Filter by status
-    if (activeStatus !== 'all') {
-      filtered = filtered.filter(({ job }) => job.status === activeStatus)
-    }
-
-    // Filter by search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(({ searchText }) => searchText.includes(query))
-    }
-
-    return filtered.map(({ job }) => job)
-  }, [indexedJobs, searchQuery, activeStatus])
-
-  const visibleJobs = useMemo(
-    () => filteredJobs.slice(0, visibleLimit),
-    [filteredJobs, visibleLimit]
+      try {
+        const response = await fetch(`/api/jobs/list?${params.toString()}`)
+        if (!response.ok) throw new Error('Could not load applications')
+        const payload = (await response.json()) as JobsListResponse
+        setListJobs((prev) => (append ? [...prev, ...payload.jobs] : payload.jobs))
+        if (payload.total !== null) {
+          setCurrentTotal(payload.total)
+        }
+      } catch (error) {
+        console.error('[jobs] List page fetch failed:', error)
+        setPageError('Could not refresh applications. Try again.')
+      } finally {
+        setIsPageLoading(false)
+      }
+    },
+    [activeStatus, debouncedSearchQuery]
   )
-  const hasMoreFilteredJobs = visibleJobs.length < filteredJobs.length
+
+  useEffect(() => {
+    if (activeStatus === 'all' && debouncedSearchQuery === '') {
+      setListJobs(jobs)
+      setCurrentTotal(initialTotal)
+      return
+    }
+    void fetchJobsPage()
+  }, [activeStatus, debouncedSearchQuery, fetchJobsPage, initialTotal, jobs])
+
+  const totalActiveJobs = useMemo(
+    () => statusCounts.APPLIED + statusCounts.INTERVIEW + statusCounts.OFFER,
+    [statusCounts]
+  )
+
+  const filteredJobs = listJobs
+  const visibleJobs = filteredJobs
+  const hasMoreFilteredJobs = listJobs.length < currentTotal
 
   const visibleJobIds = useMemo(
     () => visibleJobs.map((job) => job.id),
@@ -195,26 +200,48 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
   const allVisibleSelected =
     visibleJobIds.length > 0 && selectedVisibleCount === visibleJobIds.length
 
-  const totalApplications = listJobs.length
-
   // Debounced search handler
   const handleSearchChange = useCallback((query: string) => {
     setSearchQuery(query)
-    setVisibleLimit(JOB_RENDER_PAGE_SIZE)
   }, [])
 
   const handleStatusChange = useCallback((status: string) => {
     setActiveStatus(status)
-    setVisibleLimit(JOB_RENDER_PAGE_SIZE)
   }, [])
 
   const applyStatusToJob = useCallback(
     (jobId: string, next: JobStatus) => {
+      let previousStatus: JobStatus | null = null
       setListJobs((prev) =>
-        prev.map((j) => (j.id === jobId ? { ...j, status: next } : j))
+        prev
+          .map((j) => {
+            if (j.id !== jobId) return j
+            previousStatus = j.status as JobStatus
+            return { ...j, status: next }
+          })
+          .filter((j) =>
+            activeStatus === 'all'
+              ? isActiveApplicationStatus(j.status)
+              : j.status === activeStatus
+          )
       )
+      if (previousStatus && previousStatus !== next) {
+        const previousKey = previousStatus
+        setStatusCounts((prev) => ({
+          ...prev,
+          [previousKey]: Math.max(0, prev[previousKey] - 1),
+          [next]: prev[next] + 1,
+        }))
+        const stayedVisible =
+          activeStatus === 'all'
+            ? isActiveApplicationStatus(next)
+            : next === activeStatus
+        if (!stayedVisible) {
+          setCurrentTotal((total) => Math.max(0, total - 1))
+        }
+      }
     },
-    []
+    [activeStatus]
   )
 
   const toggleJobSelection = useCallback((jobId: string) => {
@@ -258,11 +285,41 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
           .filter((job) => ids.includes(job.id))
           .map((job) => [job.id, job.status])
       )
+      const previousListJobs = listJobs
+      const previousStatusCounts = statusCounts
+      const previousCurrentTotal = currentTotal
       setBulkBusy(true)
       setBulkMessage(null)
       setListJobs((prev) =>
-        prev.map((job) => (ids.includes(job.id) ? { ...job, status } : job))
+        prev
+          .map((job) => (ids.includes(job.id) ? { ...job, status } : job))
+          .filter((job) =>
+            activeStatus === 'all'
+              ? isActiveApplicationStatus(job.status)
+              : job.status === activeStatus
+          )
       )
+      setStatusCounts((prev) => {
+        const next = { ...prev }
+        for (const previous of previousStatuses.values()) {
+          if (previous === status) continue
+          const previousKey = previous as JobStatus
+          next[previousKey] = Math.max(0, next[previousKey] - 1)
+          next[status] += 1
+        }
+        return next
+      })
+      const rowsLeavingCurrentFilter = [...previousStatuses.values()].filter(
+        (previous) => {
+          if (previous === status) return false
+          return activeStatus === 'all'
+            ? !isActiveApplicationStatus(status)
+            : status !== activeStatus
+        }
+      ).length
+      if (rowsLeavingCurrentFilter > 0) {
+        setCurrentTotal((total) => Math.max(0, total - rowsLeavingCurrentFilter))
+      }
 
       try {
         await Promise.all(ids.map((id) => updateJobStatus(id, status)))
@@ -274,18 +331,22 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
         setBulkMessage(`${ids.length} application${ids.length === 1 ? '' : 's'} updated.`)
       } catch (error) {
         console.error('[jobs] Bulk status update failed:', error)
-        setListJobs((prev) =>
-          prev.map((job) => {
-            const previous = previousStatuses.get(job.id)
-            return previous ? { ...job, status: previous } : job
-          })
-        )
+        setListJobs(previousListJobs)
+        setStatusCounts(previousStatusCounts)
+        setCurrentTotal(previousCurrentTotal)
         setBulkMessage('Bulk update failed. No saved status changes were kept.')
       } finally {
         setBulkBusy(false)
       }
     },
-    [bulkBusy, listJobs, selectedVisibleIds]
+    [
+      activeStatus,
+      bulkBusy,
+      currentTotal,
+      listJobs,
+      selectedVisibleIds,
+      statusCounts,
+    ]
   )
 
   return (
@@ -304,21 +365,21 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
 
       {/* Applications Header with Tabs */}
       <ApplicationsHeader
-            totalJobs={totalActiveJobs}
-            totalApplications={totalApplications}
-            statusCounts={statusCounts}
-            onSearchChange={handleSearchChange}
-            onStatusChange={handleStatusChange}
-            searchQuery={searchQuery}
-            activeStatus={activeStatus}
-            onManualAdd={() => setIsAddModalOpen(true)}
-            onUrlAdd={() => setIsAddUrlModalOpen(true)}
-            visibleColumns={visibleColumns}
-            onColumnsChange={setVisibleColumns}
-          />
+        totalJobs={totalActiveJobs}
+        totalApplications={totalApplications}
+        statusCounts={statusCounts}
+        onSearchChange={handleSearchChange}
+        onStatusChange={handleStatusChange}
+        searchQuery={searchQuery}
+        activeStatus={activeStatus}
+        onManualAdd={() => setIsAddModalOpen(true)}
+        onUrlAdd={() => setIsAddUrlModalOpen(true)}
+        visibleColumns={visibleColumns}
+        onColumnsChange={setVisibleColumns}
+      />
 
       {filteredJobs.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card/45 px-3 py-2 text-sm">
+        <div className="mb-4 hidden flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card/45 px-3 py-2 text-sm md:flex">
           <label className="inline-flex cursor-pointer items-center gap-2 text-muted-foreground">
             <input
               type="checkbox"
@@ -378,13 +439,20 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
       )}
 
       {/* Table */}
+      {pageError && (
+        <div className="mb-3 rounded-xl border border-error/30 bg-error/10 px-3 py-2 text-sm text-error-text">
+          {pageError}
+        </div>
+      )}
+
+      {/* Table */}
       <div>
-          {listJobs.length === 0 ? (
+          {totalApplications === 0 && activeStatus === 'all' && !searchQuery.trim() ? (
             <EmptyState
               onManualAdd={() => setIsAddModalOpen(true)}
               onUrlAdd={() => setIsAddUrlModalOpen(true)}
             />
-          ) : filteredJobs.length === 0 ? (
+          ) : filteredJobs.length === 0 && !isPageLoading ? (
             <div className="glass glass-subtle rounded-2xl text-center py-12">
               <div className="mx-auto w-12 h-12 rounded-full bg-foreground/5 flex items-center justify-center mb-3">
                 <Search className="size-6 text-muted-foreground" />
@@ -393,6 +461,11 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
               <p className="text-xs text-muted-foreground">
                 Try adjusting your search or filters.
               </p>
+            </div>
+          ) : filteredJobs.length === 0 ? (
+            <div className="glass glass-subtle rounded-2xl py-12 text-center text-sm text-muted-foreground">
+              <Loader2 className="mx-auto mb-3 size-5 animate-spin text-primary" />
+              Loading applications...
             </div>
           ) : (
             <>
@@ -595,14 +668,27 @@ export function JobsPageContent({ jobs }: JobsPageContentProps) {
               {hasMoreFilteredJobs && (
                 <div className="mt-4 flex flex-col items-center gap-2">
                   <p className="text-xs text-muted-foreground">
-                    Showing {visibleJobs.length} of {filteredJobs.length} matching applications.
+                    Showing {visibleJobs.length} of {currentTotal} matching applications.
                   </p>
                   <button
                     type="button"
-                    onClick={() => setVisibleLimit((limit) => limit + JOB_RENDER_PAGE_SIZE)}
+                    onClick={() =>
+                      void fetchJobsPage({
+                        append: true,
+                        offset: listJobs.length,
+                      })
+                    }
+                    disabled={isPageLoading}
                     className="inline-flex items-center rounded-full border border-border/70 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
                   >
-                    Load more
+                    {isPageLoading ? (
+                      <>
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      'Load more'
+                    )}
                   </button>
                 </div>
               )}

@@ -30,7 +30,7 @@ export function profileSourceLabel(kind: CandidateProfileSourceKind): string {
     case 'raw_resume_fallback':
       return 'Raw resume fallback'
     case 'application_identity_fallback':
-      return 'Application Identity fallback'
+      return 'Saved profile fallback'
     case 'settings_fallback':
       return 'Search settings fallback'
     case 'none':

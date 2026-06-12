@@ -77,7 +77,7 @@ export default async function Home({ searchParams }: HomePageProps) {
             </GlassPill>
             <GlassPill variant="nav" className="pointer-events-auto">
               <Sparkles className="size-3.5" />
-              <span>AI resume advisor</span>
+              <span>AI job matching</span>
             </GlassPill>
           </div>
         </section>

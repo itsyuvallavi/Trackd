@@ -3,6 +3,7 @@ import { JobStatus, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getPublicJobTableColumnNames } from '@/lib/prisma-job-columns'
 import { cacheTagsFor } from '@/lib/cache-tags'
+import { ACTIVE_APPLICATION_STATUSES } from '@/lib/job-status-groups'
 import {
   profileSourceLabel,
   type CandidateProfileSourceKind,
@@ -18,6 +19,16 @@ import {
  */
 
 const ONE_MINUTE = 60
+const DEFAULT_JOBS_LIST_LIMIT = 50
+
+export type JobsListStatusFilter = JobStatus | 'all'
+
+export type JobsListOptions = {
+  limit?: number | null
+  offset?: number | null
+  status?: JobsListStatusFilter | null
+  query?: string | null
+}
 
 const PROFILE_SOURCE_KINDS = [
   'parsed_resume',
@@ -51,6 +62,56 @@ function stringArrayFromJson(value: unknown): string[] {
 
 function isProfileSourceKind(value: unknown): value is CandidateProfileSourceKind {
   return typeof value === 'string' && PROFILE_SOURCE_KINDS.includes(value as CandidateProfileSourceKind)
+}
+
+function normalizeJobsListOptions(options?: JobsListOptions | number | null) {
+  if (typeof options === 'number') {
+    return {
+      limit: options > 0 ? options : DEFAULT_JOBS_LIST_LIMIT,
+      offset: 0,
+      status: 'all' as JobsListStatusFilter,
+      query: '',
+    }
+  }
+
+  return {
+    limit:
+      options?.limit && Number.isFinite(options.limit) && options.limit > 0
+        ? Math.min(Math.trunc(options.limit), 100)
+        : DEFAULT_JOBS_LIST_LIMIT,
+    offset:
+      options?.offset && Number.isFinite(options.offset) && options.offset > 0
+        ? Math.trunc(options.offset)
+        : 0,
+    status: options?.status ?? 'all',
+    query: options?.query?.trim() ?? '',
+  }
+}
+
+function buildJobsListWhere(
+  userId: string,
+  options: ReturnType<typeof normalizeJobsListOptions>,
+): Prisma.JobWhereInput {
+  const where: Prisma.JobWhereInput = { userId }
+
+  if (options.status === 'all') {
+    where.status = { in: [...ACTIVE_APPLICATION_STATUSES] }
+  } else {
+    where.status = options.status
+  }
+
+  if (options.query) {
+    where.OR = [
+      { title: { contains: options.query, mode: 'insensitive' } },
+      { company: { contains: options.query, mode: 'insensitive' } },
+      { location: { contains: options.query, mode: 'insensitive' } },
+      { notes: { contains: options.query, mode: 'insensitive' } },
+      { importSource: { contains: options.query, mode: 'insensitive' } },
+      { importJobBoard: { contains: options.query, mode: 'insensitive' } },
+    ]
+  }
+
+  return where
 }
 
 function legacyProfileSourceKind(
@@ -245,6 +306,31 @@ export const getUnreadNotificationCount = (userId: string) =>
     },
   )()
 
+/** Cached deduped bot queue count for nav badges and bot headers. */
+export const getBotQueueCount = (userId: string) =>
+  unstable_cache(
+    async () => {
+      const [row] = await prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*)::bigint AS count
+        FROM (
+          SELECT lower(trim(company)) AS company_key, lower(trim(title)) AS title_key
+          FROM "Job"
+          WHERE "userId" = ${userId}
+            AND status = 'SAVED'::"JobStatus"
+            AND tags @> ARRAY['bot-approved']::text[]
+          GROUP BY lower(trim(company)), lower(trim(title))
+        ) deduped_queue
+      `
+
+      return Number(row?.count ?? 0)
+    },
+    ['getBotQueueCount', userId],
+    {
+      tags: [cacheTagsFor(userId).bot, cacheTagsFor(userId).jobs],
+      revalidate: ONE_MINUTE,
+    },
+  )()
+
 /** Cached recent notifications. */
 export const getRecentNotifications = (userId: string, limit = 50) =>
   unstable_cache(
@@ -379,10 +465,15 @@ export const getUserJobs = async (userId: string, limit = 100) => {
  * Slim projection for the /jobs table. Keep getUserJobs broader for /board and
  * future full-row consumers; this page only needs list/filter fields.
  */
-export const getUserJobsListRows = async (userId: string, limit?: number | null) => {
+export const getUserJobsListRows = async (
+  userId: string,
+  options?: JobsListOptions | number | null,
+) => {
+  const normalized = normalizeJobsListOptions(options)
   const cols = await getPublicJobTableColumnNames()
   const hasImportSource = cols.has('importSource')
   const hasImportJobBoard = cols.has('importJobBoard')
+  const where = buildJobsListWhere(userId, normalized)
 
   const select = {
     id: true,
@@ -401,10 +492,11 @@ export const getUserJobsListRows = async (userId: string, limit?: number | null)
   return unstable_cache(
     async () => {
       const rows = await prisma.job.findMany({
-        where: { userId },
+        where,
         select,
         orderBy: { savedAt: 'desc' },
-        ...(limit && limit > 0 ? { take: limit } : {}),
+        take: normalized.limit,
+        skip: normalized.offset,
       })
 
       return rows.map((r) => ({
@@ -420,9 +512,34 @@ export const getUserJobsListRows = async (userId: string, limit?: number | null)
     [
       'getUserJobsListRows',
       userId,
-      limit && limit > 0 ? String(limit) : 'all',
+      normalized.status,
+      normalized.query,
+      String(normalized.limit),
+      String(normalized.offset),
       String(hasImportSource),
       String(hasImportJobBoard),
+    ],
+    {
+      tags: [cacheTagsFor(userId).jobs],
+      revalidate: ONE_MINUTE,
+    },
+  )()
+}
+
+export const getUserJobsListTotal = (
+  userId: string,
+  options?: JobsListOptions | null,
+) => {
+  const normalized = normalizeJobsListOptions(options)
+  const where = buildJobsListWhere(userId, normalized)
+
+  return unstable_cache(
+    async () => prisma.job.count({ where }),
+    [
+      'getUserJobsListTotal',
+      userId,
+      normalized.status,
+      normalized.query,
     ],
     {
       tags: [cacheTagsFor(userId).jobs],

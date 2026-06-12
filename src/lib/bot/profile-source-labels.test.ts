@@ -39,7 +39,7 @@ describe('profile source labels', () => {
     })
   })
 
-  it('warns when Job Search can only use Application Identity fallback', () => {
+  it('warns when Job Search can only use saved profile fallback', () => {
     expect(
       resolveResumeReadinessSource({
         totalCount: 0,
@@ -49,7 +49,7 @@ describe('profile source labels', () => {
       })
     ).toMatchObject({
       kind: 'application_identity_fallback',
-      label: 'Application Identity fallback',
+      label: 'Saved profile fallback',
       tone: 'limited',
       isResumeBacked: false,
       requiresResumeWarning: true,
@@ -77,7 +77,7 @@ describe('profile source labels', () => {
     expect(profileSourceLabel('parsed_resume')).toBe('Parsed resume')
     expect(profileSourceLabel('raw_resume_fallback')).toBe('Raw resume fallback')
     expect(profileSourceLabel('application_identity_fallback')).toBe(
-      'Application Identity fallback'
+      'Saved profile fallback'
     )
   })
 })

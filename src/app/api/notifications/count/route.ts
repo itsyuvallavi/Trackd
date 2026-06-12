@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
+import { getUnreadNotificationCount } from '@/lib/cached-queries'
 
 /**
  * GET /api/notifications/count
@@ -18,12 +18,7 @@ export async function GET() {
       )
     }
 
-    const count = await prisma.notification.count({
-      where: {
-        userId: user.id,
-        isRead: false,
-      },
-    })
+    const count = await getUnreadNotificationCount(user.id)
 
     return NextResponse.json({ count })
   } catch (error) {
@@ -34,4 +29,3 @@ export async function GET() {
     )
   }
 }
-

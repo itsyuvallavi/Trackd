@@ -2,22 +2,19 @@ import { AppShell } from '@/components/layout/app-shell'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { updateProfile } from './actions'
-import { ApplicationProfileForm } from '@/components/profile/application-profile-form'
 import { ThemeSelector } from '@/components/profile/theme-selector'
 import Link from 'next/link'
-import { ArrowRight, Bot, Plug, UserCheck } from 'lucide-react'
+import { ArrowRight, Bot, Plug } from 'lucide-react'
 import { getUserProfile, getEmailIntegration } from '@/lib/cached-queries'
-import { serializeForClient } from '@/lib/serialize-for-client'
 
 export const revalidate = 0
 
 export default async function ProfilePage() {
   const user = await requireAuth()
 
-  const [profileData, emailIntegration, applicationProfile] = await Promise.all([
+  const [profileData, emailIntegration] = await Promise.all([
     getUserProfile(user.id),
     getEmailIntegration(user.id),
-    prisma.applicationProfile.findUnique({ where: { userId: user.id } }),
   ])
 
   let profile = profileData
@@ -36,16 +33,6 @@ export default async function ProfilePage() {
     })
   }
 
-  const applicationProfileForClient = applicationProfile
-    ? (() => {
-        const { portalSignupPassword: _omit, ...rest } = applicationProfile
-        return {
-          ...rest,
-          hasPortalSignupPassword: Boolean(_omit),
-        }
-      })()
-    : null
-
   return (
     <AppShell showEmailNotification={!emailIntegration}>
       <div className="flex-1 overflow-auto">
@@ -55,7 +42,7 @@ export default async function ProfilePage() {
               Profile
             </h1>
             <p className="text-sm text-muted-foreground">
-              Account details, application identity, and appearance.
+              Account details and appearance.
             </p>
           </header>
 
@@ -114,25 +101,6 @@ export default async function ProfilePage() {
                 Save changes
               </button>
             </form>
-          </section>
-
-          <section className="glass glass-subtle mt-6 rounded-2xl px-5 py-6 md:px-6">
-            <div className="mb-5 flex items-start gap-3">
-              <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
-                <UserCheck className="size-4.5" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold tracking-tight">
-                  Application identity
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Legal name, contact details, location, work authorization, and application preferences.
-                </p>
-              </div>
-            </div>
-            <ApplicationProfileForm
-              profile={serializeForClient(applicationProfileForClient)}
-            />
           </section>
 
           {/* Related pages — links, not duplicates. */}

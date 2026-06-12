@@ -356,7 +356,7 @@ describe('evaluateJob minScore behavior', () => {
     })
   })
 
-  it('falls back to application identity when no parsed resume is available', async () => {
+  it('falls back to saved profile details when no parsed resume is available', async () => {
     applicationProfileFindUniqueMock.mockResolvedValue({
       id: 'profile-1',
       userId: 'user-1',
@@ -389,7 +389,7 @@ describe('evaluateJob minScore behavior', () => {
                 reasoning: 'The listing asks for "React TypeScript" product work.',
                 shouldApply: true,
                 flags: ['good_match'],
-                resumeMatch: 'application identity fallback',
+                resumeMatch: 'saved profile fallback',
               }),
             },
           },
@@ -413,7 +413,7 @@ describe('evaluateJob minScore behavior', () => {
       label: null,
       selection: 'application_identity_fallback',
       sourceKind: 'application_identity_fallback',
-      sourceLabel: 'Application Identity fallback',
+      sourceLabel: 'Saved profile fallback',
       skillsSentToPrompt: ['Frontend Engineering'],
       summaryIncluded: true,
       experienceRolesInPrompt: 1,
@@ -426,7 +426,7 @@ describe('evaluateJob minScore behavior', () => {
     expect(prompt).toContain('Yuval Lavi')
     expect(prompt).toContain('Reported experience: 4 years')
     expect(prompt).toContain('Settings-derived role/stack signals (not resume evidence): Frontend Engineering')
-    expect(prompt).toContain('Profile source: Application Identity fallback')
+    expect(prompt).toContain('Profile source: Saved profile fallback')
   })
 
   it('uses preference-derived React/frontend signals when no parsed resume is attached', async () => {
@@ -493,7 +493,7 @@ describe('evaluateJob minScore behavior', () => {
     expect(result.scoringInputs.resumeUsed).toMatchObject({
       label: null,
       selection: 'application_identity_fallback',
-      sourceLabel: 'Application Identity fallback',
+      sourceLabel: 'Saved profile fallback',
       skillsSentToPrompt: ['React', 'Frontend Engineering'],
     })
   })

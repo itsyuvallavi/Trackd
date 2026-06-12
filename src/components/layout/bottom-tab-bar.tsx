@@ -1,26 +1,16 @@
 'use client'
 
 import { useState, useEffect, memo } from 'react'
-import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Plus, User } from 'lucide-react'
+import { User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useBotQueueCount } from '@/lib/bot/use-bot-queue-count'
 import { PRIMARY_NAV_ITEMS } from '@/components/layout/primary-nav'
 
-const QuickAddBar = dynamic(
-  () =>
-    import('@/components/jobs/quick-add-bar').then((m) => ({
-      default: m.QuickAddBar,
-    })),
-  { ssr: false, loading: () => null }
-)
-
 export const BottomTabBar = memo(function BottomTabBar() {
   const pathname = usePathname()
   const router = useRouter()
-  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const queueCount = useBotQueueCount()
 
@@ -40,91 +30,70 @@ export const BottomTabBar = memo(function BottomTabBar() {
   }
 
   return (
-    <>
-      <nav
-        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] safe-area-bottom md:hidden"
-        aria-label="Primary"
-      >
-        <div className="glass glass-nav relative flex items-center gap-1.5 rounded-full px-3 py-2.5 w-fit">
-          {/* Quick add — primary action */}
-          <button
-            onClick={() => setIsQuickAddOpen(true)}
-            className={cn(
-              'flex items-center justify-center w-10 h-10 rounded-full shrink-0',
-              'bg-primary text-primary-foreground',
-              'transition-transform duration-200 ease-[var(--ease-ios)]',
-              'active:scale-95 hover:brightness-110'
-            )}
-            aria-label="Quick add job"
-          >
-            <Plus className="size-5" strokeWidth={2.5} />
-          </button>
+    <nav
+      className="fixed inset-x-0 bottom-3 z-[9999] flex justify-center safe-area-bottom md:hidden"
+      aria-label="Primary"
+    >
+      <div className="relative flex w-[min(calc(100vw-1.5rem),21rem)] items-center justify-between rounded-[1.65rem] border border-border/70 bg-background/88 px-2 py-2 shadow-[0_18px_60px_-24px_rgba(0,0,0,0.75)] backdrop-blur-2xl animate-in slide-in-from-bottom-2 fade-in duration-300">
+        {PRIMARY_NAV_ITEMS.map((item) => {
+          const Icon = item.icon
+          const active = isActive(item.href)
 
-          <span aria-hidden className="w-px h-6 bg-border mx-0.5 shrink-0" />
-
-          {PRIMARY_NAV_ITEMS.map((item) => {
-            const Icon = item.icon
-            const active = isActive(item.href)
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onMouseEnter={() => router.prefetch(item.href)}
-                className={cn(
-                  'relative flex items-center justify-center gap-1.5 rounded-full transition-all duration-200 ease-[var(--ease-ios)]',
-                  'px-2.5 sm:px-3 py-2 min-w-[40px] sm:min-w-[44px]',
-                  active
-                    ? 'bg-foreground text-background'
-                    : 'text-muted-foreground hover:text-foreground'
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onMouseEnter={() => router.prefetch(item.href)}
+              className={cn(
+                'relative flex size-11 items-center justify-center rounded-2xl transition-[background-color,color,transform] duration-200 ease-[var(--ease-ios)]',
+                'active:scale-[0.92]',
+                active
+                  ? 'bg-foreground text-background shadow-sm'
+                  : 'text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground'
+              )}
+              aria-label={item.name}
+              title={item.name}
+            >
+              <div className="relative shrink-0">
+                <Icon className="size-5" strokeWidth={active ? 2.4 : 2} />
+                {item.href === '/bot' && queueCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-4 h-4 px-0.5 rounded-full bg-primary text-primary-foreground text-[9px] font-bold tabular-nums leading-none">
+                    {queueCount > 99 ? '99+' : queueCount}
+                  </span>
                 )}
-              >
-                <div className="relative shrink-0">
-                  <Icon className="size-5" strokeWidth={active ? 2.4 : 2} />
-                  {item.href === '/bot' && queueCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-4 h-4 px-0.5 rounded-full bg-primary text-primary-foreground text-[9px] font-bold tabular-nums leading-none">
-                      {queueCount > 99 ? '99+' : queueCount}
-                    </span>
-                  )}
-                </div>
+              </div>
+              {active && (
                 <span
-                  className={cn(
-                    'text-xs font-medium whitespace-nowrap transition-[max-width,opacity] duration-200 ease-[var(--ease-ios)]',
-                    active
-                      ? 'opacity-100 max-w-[72px] sm:max-w-[80px]'
-                      : 'opacity-0 max-w-0 overflow-hidden'
-                  )}
-                >
-                  {item.shortLabel}
-                </span>
-              </Link>
-            )
-          })}
+                  aria-hidden
+                  className="absolute -bottom-1 h-1 w-1 rounded-full bg-current opacity-70"
+                />
+              )}
+            </Link>
+          )
+        })}
 
-          <span aria-hidden className="w-px h-6 bg-border mx-0.5 shrink-0" />
-
-          <Link
-            href="/profile"
-            onMouseEnter={() => router.prefetch('/profile')}
-            className={cn(
-              'flex items-center justify-center w-10 h-10 rounded-full shrink-0',
-              'transition-transform duration-200 ease-[var(--ease-ios)]',
-              'active:scale-95 hover:brightness-110',
-              isProfileActive
-                ? 'bg-foreground text-background'
-                : 'bg-muted text-muted-foreground'
-            )}
-            aria-label="Profile"
-          >
-            <User className="size-5" strokeWidth={2.2} />
-          </Link>
-        </div>
-      </nav>
-
-      <QuickAddBar
-        isOpen={isQuickAddOpen}
-        onClose={() => setIsQuickAddOpen(false)}
-      />
-    </>
+        <Link
+          href="/profile"
+          onMouseEnter={() => router.prefetch('/profile')}
+          className={cn(
+            'relative flex size-11 shrink-0 items-center justify-center rounded-2xl',
+            'transition-[background-color,color,transform] duration-200 ease-[var(--ease-ios)]',
+            'active:scale-[0.92] hover:brightness-110',
+            isProfileActive
+              ? 'bg-foreground text-background'
+              : 'text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground'
+          )}
+          aria-label="Profile"
+        >
+          <User className="size-5" strokeWidth={2.2} />
+          {isProfileActive && (
+            <span
+              aria-hidden
+              className="absolute -bottom-1 h-1 w-1 rounded-full bg-current opacity-70"
+            />
+          )}
+        </Link>
+      </div>
+    </nav>
   )
 })

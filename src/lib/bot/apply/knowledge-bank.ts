@@ -56,7 +56,7 @@ export function buildApplicationKnowledgeBank(
   const policies = `
 ## Policies (follow strictly)
 - Be truthful. Never invent employers, degrees, certifications, or skills that are not supported by the resume or profile.
-- **Identity (name / email):** If the **Application profile** section lists legal name and application email, use those for signup and application identity fields. Otherwise use the resume name and email.
+- **Identity (name / email):** If saved profile details include legal name and application email, use those for signup and application fields. Otherwise use the resume name and email.
 - Work authorization / sponsorship: if a yes/no or choice question is about visa sponsorship, answer **Yes** only if the profile says they require sponsorship; otherwise **No**.
 - Location / relocation: answer from profile country, city, and state — do not guess a country.
 - Salary: use profile salary expectation when relevant; if the form asks EUR gross per year and the profile figure is USD, give a plausible EUR integer (no symbols).

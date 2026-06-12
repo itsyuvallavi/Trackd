@@ -40,4 +40,22 @@ describe('setup-readiness', () => {
       isComplete: true,
     })
   })
+
+  it('does not require saved profile details to complete Job Search setup', () => {
+    const readiness = buildSetupReadiness({
+      resumeCount: 1,
+      parsedResumeCount: 1,
+      applicationProfile: null,
+      keywordCount: 3,
+    })
+
+    expect(readiness).toMatchObject({
+      hasResume: true,
+      hasParsedResume: true,
+      hasProfile: false,
+      hasKeywords: true,
+      hasSearchTerms: true,
+      isComplete: true,
+    })
+  })
 })
