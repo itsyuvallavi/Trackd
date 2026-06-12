@@ -15,7 +15,6 @@ import { JobActionsMenu } from '@/components/jobs/job-actions-menu'
 import { StatusDropdown } from '@/components/jobs/status-dropdown'
 import { ApplicationsHeader } from '@/components/jobs/applications-header'
 import { EmptyState } from '@/components/jobs/empty-state'
-import { ExtensionPopup } from '@/components/jobs/extension-popup'
 import { Tooltip } from '@/components/ui/tooltip'
 import type { JobSource, JobStatus } from '@prisma/client'
 import { jobSourceDisplayName } from '@/lib/job-source-display'
@@ -35,7 +34,11 @@ const AddJobFromUrlModal = dynamic(() => import('@/components/jobs/add-job-from-
   ssr: false,
 })
 
-const JOB_RENDER_PAGE_SIZE = 50
+const ExtensionPopup = dynamic(() => import('@/components/jobs/extension-popup').then(mod => ({ default: mod.ExtensionPopup })), {
+  ssr: false,
+})
+
+const JOB_RENDER_PAGE_SIZE = 25
 
 // Tokenized status accent bar (left of each row) — drives the redesign's
 // colored hairline. All values are OKLCH variables defined in globals.css.
@@ -105,6 +108,7 @@ export function JobsPageContent({
   const [bulkMessage, setBulkMessage] = useState<string | null>(null)
   const [isPageLoading, setIsPageLoading] = useState(false)
   const [pageError, setPageError] = useState<string | null>(null)
+  const [showDeferredChrome, setShowDeferredChrome] = useState(false)
   const { visibleColumns, setVisibleColumns, isHydrated } = useColumnVisibility()
 
   // Keep client list in sync when the server payload changes (e.g. after
@@ -131,6 +135,23 @@ export function JobsPageContent({
     )
     return () => window.clearTimeout(timeout)
   }, [searchQuery])
+
+  useEffect(() => {
+    const idleCallback =
+      typeof window.requestIdleCallback === 'function'
+        ? window.requestIdleCallback(() => setShowDeferredChrome(true), {
+            timeout: 1500,
+          })
+        : window.setTimeout(() => setShowDeferredChrome(true), 900)
+
+    return () => {
+      if (typeof idleCallback === 'number') {
+        window.clearTimeout(idleCallback)
+      } else if (typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleCallback)
+      }
+    }
+  }, [])
 
   const fetchJobsPage = useCallback(
     async ({
@@ -351,17 +372,21 @@ export function JobsPageContent({
 
   return (
     <>
-      <AddJobModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-      />
-      <AddJobFromUrlModal
-        isOpen={isAddUrlModalOpen}
-        onClose={() => setIsAddUrlModalOpen(false)}
-      />
+      {isAddModalOpen && (
+        <AddJobModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+        />
+      )}
+      {isAddUrlModalOpen && (
+        <AddJobFromUrlModal
+          isOpen={isAddUrlModalOpen}
+          onClose={() => setIsAddUrlModalOpen(false)}
+        />
+      )}
       
-      {/* Extension Popup - show for first-time users */}
-      <ExtensionPopup />
+      {/* First-time extension prompt is non-critical; defer it until after the list paints. */}
+      {showDeferredChrome && <ExtensionPopup />}
 
       {/* Applications Header with Tabs */}
       <ApplicationsHeader

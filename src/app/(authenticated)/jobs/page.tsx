@@ -6,7 +6,7 @@ import { serializeForClient } from '@/lib/serialize-for-client'
 import { ACTIVE_APPLICATION_STATUSES } from '@/lib/job-status-groups'
 
 export const revalidate = 60 // Revalidate every 60 seconds
-const INITIAL_JOBS_LIMIT = 50
+const INITIAL_JOBS_LIMIT = 25
 
 export default async function JobsPage() {
   const user = await requireAuth()

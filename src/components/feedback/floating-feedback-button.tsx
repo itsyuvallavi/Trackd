@@ -1,9 +1,14 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import { MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { FeedbackModal } from './feedback-modal'
+
+const FeedbackModal = dynamic(
+  () => import('./feedback-modal').then((mod) => ({ default: mod.FeedbackModal })),
+  { ssr: false }
+)
 
 export function FloatingFeedbackButton() {
   const [isOpen, setIsOpen] = useState(false)
@@ -19,12 +24,13 @@ export function FloatingFeedbackButton() {
       >
         <MessageSquare className="size-5 group-hover:rotate-12 transition-transform duration-200" />
       </Button>
-      <FeedbackModal
-        open={isOpen}
-        onOpenChange={setIsOpen}
-        currentUrl={typeof window !== 'undefined' ? window.location.href : undefined}
-      />
+      {isOpen && (
+        <FeedbackModal
+          open={isOpen}
+          onOpenChange={setIsOpen}
+          currentUrl={typeof window !== 'undefined' ? window.location.href : undefined}
+        />
+      )}
     </>
   )
 }
-
