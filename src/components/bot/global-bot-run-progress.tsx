@@ -146,7 +146,16 @@ export function GlobalBotRunProgress() {
 
       setRun(payload)
       if (payload.status !== 'RUNNING') {
-        window.dispatchEvent(new CustomEvent(BOT_RUN_COMPLETE_EVENT))
+        window.dispatchEvent(
+          new CustomEvent(BOT_RUN_COMPLETE_EVENT, {
+            detail: {
+              startedAt: payload.startedAt,
+              jobsFound: payload.jobsFound,
+              jobsNew: payload.jobsNew,
+              jobsApproved: payload.jobsApproved,
+            },
+          })
+        )
         window.dispatchEvent(new CustomEvent(NOTIFICATIONS_REFRESH_EVENT))
       }
     }, 3000)

@@ -8,6 +8,7 @@ import { Loader2, Play, AlertCircle, X } from 'lucide-react'
 import type { ResumeReadinessSource } from '@/lib/bot/profile-source-labels'
 import type { SetupReadiness } from '@/lib/bot/setup-readiness'
 import {
+  BOT_RUN_COMPLETE_EVENT,
   BOT_RUN_STARTED_EVENT,
 } from '@/lib/constants'
 
@@ -27,6 +28,17 @@ interface BotStatusStripProps {
     source: ResumeReadinessSource
   }
   setupReadiness?: SetupReadiness
+}
+
+type RunCompleteDetail = {
+  startedAt?: string
+  jobsFound: number
+  jobsNew: number
+  jobsApproved: number
+}
+
+function isRunCompleteEvent(event: Event): event is CustomEvent<RunCompleteDetail> {
+  return event.type === BOT_RUN_COMPLETE_EVENT && 'detail' in event
 }
 
 type ManualRunStartResponse = {
@@ -93,6 +105,7 @@ export function BotStatusStrip({
   const router = useRouter()
   const [running, setRunning] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [liveLastRun, setLiveLastRun] = useState(lastRun)
   const [toast, setToast] = useState<
     | { kind: 'done'; ok: boolean; msg: string }
     | null
@@ -101,6 +114,28 @@ export function BotStatusStrip({
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  useEffect(() => {
+    setLiveLastRun(lastRun)
+  }, [lastRun])
+
+  useEffect(() => {
+    const onRunComplete = (event: Event) => {
+      setRunning(false)
+      if (isRunCompleteEvent(event) && event.detail) {
+        setLiveLastRun({
+          startedAt: event.detail.startedAt ?? new Date().toISOString(),
+          jobsFound: event.detail.jobsFound,
+          jobsNew: event.detail.jobsNew,
+          jobsApproved: event.detail.jobsApproved,
+        })
+      }
+      router.refresh()
+    }
+
+    window.addEventListener(BOT_RUN_COMPLETE_EVENT, onRunComplete)
+    return () => window.removeEventListener(BOT_RUN_COMPLETE_EVENT, onRunComplete)
+  }, [router])
 
   useEffect(() => {
     if (toast?.kind !== 'done') return
@@ -137,7 +172,6 @@ export function BotStatusStrip({
           new CustomEvent(BOT_RUN_STARTED_EVENT, { detail: { runId: res.runId } })
         )
         router.refresh()
-        setRunning(false)
         return
       }
 
@@ -146,7 +180,6 @@ export function BotStatusStrip({
           new CustomEvent(BOT_RUN_STARTED_EVENT, { detail: { runId: res.runId } })
         )
         router.refresh()
-        setRunning(false)
         return
       }
 
@@ -237,22 +270,22 @@ export function BotStatusStrip({
           Scoring: {profileSource.label}
         </span>
 
-        {lastRun && (
+        {liveLastRun && (
           <>
             <span aria-hidden className="text-muted-foreground/50">·</span>
             <span className="text-muted-foreground">
               Last run{' '}
               <span className="text-foreground" suppressHydrationWarning>
-                {mounted ? relativeTime(lastRun.startedAt) : 'recently'}
+                {mounted ? relativeTime(liveLastRun.startedAt) : 'recently'}
               </span>
               {' · '}
-              <span className="text-foreground tabular-nums">{lastRun.jobsFound}</span> found
+              <span className="text-foreground tabular-nums">{liveLastRun.jobsFound}</span> found
               {' · '}
-              <span className="text-foreground tabular-nums">{lastRun.jobsNew}</span> new
-              {lastRun.jobsApproved > 0 && (
+              <span className="text-foreground tabular-nums">{liveLastRun.jobsNew}</span> new
+              {liveLastRun.jobsApproved > 0 && (
                 <>
                   {' · '}
-                  <span className="text-foreground tabular-nums">{lastRun.jobsApproved}</span> approved
+                  <span className="text-foreground tabular-nums">{liveLastRun.jobsApproved}</span> approved
                 </>
               )}
             </span>
