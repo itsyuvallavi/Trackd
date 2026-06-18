@@ -111,6 +111,13 @@ const COUNTRY_ALIASES: Record<string, string> = {
   uae: 'united arab emirates',
 }
 
+const CITY_ALIASES: Record<string, string> = {
+  lisboa: 'lisbon',
+  lisbon: 'lisbon',
+  oporto: 'porto',
+  porto: 'porto',
+}
+
 const US_STATE_CODES = new Set([
   'al', 'ak', 'az', 'ar', 'ca', 'co', 'ct', 'de', 'fl', 'ga', 'hi', 'id',
   'il', 'in', 'ia', 'ks', 'ky', 'la', 'me', 'md', 'ma', 'mi', 'mn', 'ms',
@@ -143,6 +150,21 @@ export function hasRemoteWorkSignal(value: string | null | undefined): boolean {
   return REMOTE_WORK_SIGNAL_RE.test(normalized)
 }
 
+function normalizeLocationToken(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[-_/]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function canonicalCity(value: string): string {
+  const normalized = normalizeLocationToken(value)
+  return CITY_ALIASES[normalized] ?? normalized
+}
+
 export function parseUserLocations(raw: string[] | null | undefined): UserLocationTokens {
   const cleaned = (raw ?? [])
     .map((s) => s.trim())
@@ -167,7 +189,7 @@ export function parseUserLocations(raw: string[] | null | undefined): UserLocati
   let hasRemoteToken = false
 
   for (const entry of cleaned) {
-    const lower = entry.toLowerCase()
+    const lower = normalizeLocationToken(entry)
     tokens.add(lower)
 
     const pieces = lower
@@ -206,7 +228,11 @@ export function parseUserLocations(raw: string[] | null | undefined): UserLocati
       }
 
       // Fallback: treat it as a city (we accept free-form city names).
-      if (piece.length >= 2) cities.add(piece)
+      if (piece.length >= 2) {
+        const city = canonicalCity(piece)
+        cities.add(city)
+        tokens.add(city)
+      }
     }
   }
 
@@ -317,7 +343,7 @@ export function countryTokensFromJobLocationLine(location: string): string[] {
 
   const parts = loc
     .split(',')
-    .map((s) => s.trim().toLowerCase())
+    .map((s) => normalizeLocationToken(s))
     .filter(Boolean)
 
   if (parts.length === 0) return []
@@ -345,6 +371,7 @@ export function countryTokensFromJobLocationLine(location: string): string[] {
     candidates.add(normalise(last))
     if (parts.length >= 2) {
       candidates.add(parts[0])
+      candidates.add(canonicalCity(parts[0]))
     }
   }
 

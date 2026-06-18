@@ -16,7 +16,6 @@ import {
   Loader2,
   RefreshCw,
   Inbox,
-  UserCircle,
   Trash2,
   Square,
   CheckSquare2,
@@ -56,7 +55,6 @@ interface QueueJob {
 
 interface QueueResponse {
   jobs?: QueueJob[]
-  profileComplete?: boolean
   pagination?: {
     limit: number
     offset: number
@@ -512,7 +510,6 @@ function JobCard({
 export function BotQueueContent() {
   const [jobs, setJobs] = useState<QueueJob[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
-  const [profileComplete, setProfileComplete] = useState(true)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [bulkBusy, setBulkBusy] = useState(false)
@@ -539,7 +536,6 @@ export function BotQueueContent() {
       if (!res.ok) throw new Error(data.error ?? 'Failed to load queue')
       setJobs((prev) => mergeQueueJobs(prev, data.jobs ?? [], append))
       if (!append) setSelectedIds(new Set())
-      setProfileComplete(data.profileComplete ?? true)
       setNextOffset(data.pagination?.nextOffset ?? null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load queue')
@@ -696,21 +692,6 @@ export function BotQueueContent() {
           Refresh
         </button>
       </div>
-
-      {/* Incomplete profile warning */}
-      {!profileComplete && !loading && (
-        <div className="mb-4 flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning-bg/60 px-4 py-3 text-sm text-warning-text">
-          <UserCircle className="size-4 mt-0.5 shrink-0" />
-          <span>
-            <strong>Your application profile is incomplete.</strong> The bot
-            needs your phone, location, and work authorization to fill forms
-            automatically.{' '}
-            <Link href="/profile" className="underline hover:text-foreground">
-              Complete your profile →
-            </Link>
-          </span>
-        </div>
-      )}
 
       {/* Duplicate notice */}
       {duplicateCount > 0 && (

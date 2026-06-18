@@ -71,6 +71,38 @@ describe('preFilterJob', () => {
     ).toEqual({ rejected: false })
   })
 
+  it('treats Lisboa and Lisbon as the same target city before scoring', () => {
+    expect(
+      preFilterJob(
+        job({
+          title: 'Operations Manager',
+          location: 'Lisboa, Lisbon, Portugal',
+          description: 'Manage operations for the Lisbon office.',
+        }),
+        config({
+          keywords: ['Operations Manager'],
+          locations: ['Lisbon'],
+        })
+      )
+    ).toEqual({ rejected: false })
+  })
+
+  it('treats user-entered Lisboa as matching Lisbon listings', () => {
+    expect(
+      preFilterJob(
+        job({
+          title: 'Product Manager',
+          location: 'Lisbon, Portugal',
+          description: 'Work with operations and product teams in Lisbon.',
+        }),
+        config({
+          keywords: ['Product Manager'],
+          locations: ['Lisboa'],
+        })
+      )
+    ).toEqual({ rejected: false })
+  })
+
   it('does not treat prose in the description as title-level base-location evidence', () => {
     expect(
       preFilterJob(

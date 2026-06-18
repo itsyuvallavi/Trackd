@@ -219,19 +219,9 @@ export function BotStatusStrip({
               Add resume
             </Link>
           )}
-          {!setupReadiness.hasProfile && (
-            <>
-              {!setupReadiness.hasResume && <span aria-hidden>·</span>}
-              <Link href="/profile" className="underline hover:text-foreground">
-                Complete profile
-              </Link>
-            </>
-          )}
           {!setupReadiness.hasSearchTerms && (
             <>
-              {(!setupReadiness.hasResume || !setupReadiness.hasProfile) && (
-                <span aria-hidden>·</span>
-              )}
+              {!setupReadiness.hasResume && <span aria-hidden>·</span>}
               <Link href="/bot/setup?section=search" className="underline hover:text-foreground">
                 Add search terms
               </Link>
