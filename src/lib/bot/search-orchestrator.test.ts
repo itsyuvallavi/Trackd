@@ -277,6 +277,48 @@ describe('runBotSearch orchestration', () => {
     expect(result.platformsMeta?.runtime_timings).toBe(result.runtimeTimings)
   })
 
+  it('dedupes existing manually tracked jobs when provider appends a location suffix to the company', async () => {
+    const duplicate = job({
+      title: 'Full Stack Solutions Engineer',
+      company: 'Bauer Media Audio – Portugal',
+      location: 'Lisbon, Portugal',
+      url: 'https://linkedin.test/jobs/bauer-portugal',
+    })
+
+    mocks.runSearch.mockResolvedValue(searchResponse([duplicate]))
+    mocks.jobFindMany.mockImplementation((args: { where: Record<string, unknown> }) => {
+      if ('url' in args.where) return Promise.resolve([])
+      return Promise.resolve([
+        {
+          company: 'Bauer Media Audio',
+          title: 'Full Stack Solutions Engineer',
+        },
+      ])
+    })
+
+    const { runBotSearch } = await import('./search-orchestrator')
+    const result = await runBotSearch(config(), 'user_1')
+
+    expect(mocks.evaluateJob).not.toHaveBeenCalled()
+    expect(mocks.jobCreate).not.toHaveBeenCalled()
+    expect(result).toMatchObject({
+      jobsFound: 1,
+      jobsNew: 0,
+      jobsEvaluated: 0,
+      skippedExistingByTitle: 1,
+    })
+    expect(mocks.jobFindMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            { company: { equals: 'bauer media audio', mode: 'insensitive' } },
+          ]),
+        }),
+      }),
+    )
+  })
+
   it('passes profile-derived safe terms to the provider search request', async () => {
     mocks.runSearch.mockResolvedValue(searchResponse([]))
 

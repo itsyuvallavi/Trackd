@@ -128,4 +128,49 @@ describe('/api/bot/queue', () => {
       botScore: 70,
     })
   })
+
+  it('flags applied duplicates when the queued company has a country suffix', async () => {
+    mocks.jobFindMany.mockReset()
+    mocks.jobFindMany.mockResolvedValueOnce([
+      jobRow({
+        id: 'queued_bauer',
+        title: 'Full Stack Solutions Engineer',
+        company: 'Bauer Media Audio – Portugal',
+        savedAt: new Date('2026-06-19T10:00:00.000Z'),
+        createdAt: new Date('2026-06-19T10:00:00.000Z'),
+      }),
+    ])
+    mocks.jobFindMany.mockResolvedValueOnce([
+      {
+        id: 'applied_bauer',
+        title: 'Full Stack Solutions Engineer',
+        company: 'Bauer Media Audio',
+        url: 'https://linkedin.test/jobs/bauer-existing',
+        updatedAt: new Date('2026-06-01T10:00:00.000Z'),
+      },
+    ])
+
+    const { GET } = await import('./route')
+    const response = await GET(new Request('https://trackd.test/api/bot/queue?limit=50&offset=0'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(mocks.jobFindMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            {
+              company: { equals: 'bauer media audio', mode: 'insensitive' },
+              title: { equals: 'Full Stack Solutions Engineer', mode: 'insensitive' },
+            },
+          ]),
+        }),
+      }),
+    )
+    expect(body.jobs).toHaveLength(1)
+    expect(body.jobs[0].duplicate).toMatchObject({
+      existingId: 'applied_bauer',
+    })
+  })
 })

@@ -42,7 +42,8 @@ import {
   BOT_LISTING_OUTCOME,
   BOT_LISTING_STAGE,
   compactJobForAudit,
-  companyTitleKey,
+  companyDedupCandidates,
+  companyTitleDedupKeys,
   insertBotRunListings,
   normalizeJobUrl,
 } from './bot-run-audit'
@@ -1049,7 +1050,7 @@ export async function runBotSearch(
     const batchCompanies = Array.from(
       new Set(
         searchResponse.jobs
-          .map((j) => j.company?.trim())
+          .flatMap((j) => companyDedupCandidates(j.company ?? ''))
           .filter((c): c is string => Boolean(c)),
       ),
     )
@@ -1087,7 +1088,7 @@ export async function runBotSearch(
     )
 
     const existingTitleKeys = new Set(
-      existingJobsForDedup.map((j) => companyTitleKey({ company: j.company, title: j.title })),
+      existingJobsForDedup.flatMap((j) => companyTitleDedupKeys({ company: j.company, title: j.title })),
     )
     const dismissedFp = new Set(dismissedRows.map((r) => r.fingerprint))
 
@@ -1183,8 +1184,8 @@ export async function runBotSearch(
         continue
       }
 
-      const key = companyTitleKey(job)
-      if (existingTitleKeys.has(key)) {
+      const keys = companyTitleDedupKeys(job)
+      if (keys.some((key) => existingTitleKeys.has(key))) {
         result.skippedExistingByTitle++
         if (verboseDedup) {
           pushLog('info', `Dedup title+company (already in DB): ${job.title} @ ${job.company}`)
@@ -1206,7 +1207,7 @@ export async function runBotSearch(
         continue
       }
 
-      if (seenInBatch.has(key)) {
+      if (keys.some((key) => seenInBatch.has(key))) {
         result.skippedBatchDuplicate++
         if (verboseDedup) {
           pushLog('info', `Dedup batch (duplicate in this run): ${job.title} @ ${job.company}`)
@@ -1228,7 +1229,7 @@ export async function runBotSearch(
         continue
       }
 
-      seenInBatch.add(key)
+      for (const key of keys) seenInBatch.add(key)
       if (rawUrl) {
         urlToSeq.set(normalizedUrl, seq)
       } else {

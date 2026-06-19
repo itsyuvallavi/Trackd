@@ -4,6 +4,10 @@ import { prisma } from '@/lib/prisma'
 import { Prisma, type JobSource } from '@prisma/client'
 import { jobSourceDisplayName } from '@/lib/job-source-display'
 import { getPublicJobTableColumnNames } from '@/lib/prisma-job-columns'
+import {
+  companyDedupCandidates,
+  companyTitleDedupKeys,
+} from '@/lib/bot/bot-run-audit'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -62,6 +66,10 @@ function normUrl(u: string | null | undefined): string | null {
 
 function titleKey(company: string, title: string): string {
   return `${company.toLowerCase().trim()}::${title.toLowerCase().trim()}`
+}
+
+function titleKeys(company: string, title: string): string[] {
+  return companyTitleDedupKeys({ company, title })
 }
 
 export async function GET(request: Request) {
@@ -149,9 +157,9 @@ export async function GET(request: Request) {
 
   const seen = new Map<string, string>()
   const deduped = jobs.filter((job) => {
-    const key = titleKey(job.company, job.title)
-    if (seen.has(key)) return false
-    seen.set(key, job.id)
+    const keys = titleKeys(job.company, job.title)
+    if (keys.some((key) => seen.has(key))) return false
+    for (const key of keys) seen.set(key, job.id)
     return true
   })
 
@@ -170,6 +178,12 @@ export async function GET(request: Request) {
         company: job.company.trim(),
         title: job.title.trim(),
       })
+      for (const company of companyDedupCandidates(job.company)) {
+        duplicateTitleCandidates.set(titleKey(company, job.title), {
+          company,
+          title: job.title.trim(),
+        })
+      }
     }
 
     const duplicateFilters: Prisma.JobWhereInput[] = [
@@ -199,6 +213,9 @@ export async function GET(request: Request) {
       if (nu && !byUrl.has(nu)) byUrl.set(nu, { id: j.id, updatedAt: j.updatedAt })
       const tk = titleKey(j.company, j.title)
       if (!byTitle.has(tk)) byTitle.set(tk, { id: j.id, updatedAt: j.updatedAt })
+      for (const key of titleKeys(j.company, j.title)) {
+        if (!byTitle.has(key)) byTitle.set(key, { id: j.id, updatedAt: j.updatedAt })
+      }
     }
 
     for (const job of deduped) {
@@ -210,7 +227,9 @@ export async function GET(request: Request) {
           continue
         }
       }
-      const hit = byTitle.get(titleKey(job.company, job.title))
+      const hit = titleKeys(job.company, job.title)
+        .map((key) => byTitle.get(key))
+        .find(Boolean)
       if (hit && hit.id !== job.id) {
         duplicateFlags[job.id] = { appliedAt: hit.updatedAt, existingId: hit.id }
       }

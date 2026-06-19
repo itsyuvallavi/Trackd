@@ -62,6 +62,69 @@ export function companyTitleKey(job: { company: string; title: string }): string
   return `${job.company.toLowerCase().trim()}::${job.title.toLowerCase().trim()}`
 }
 
+const GEO_COMPANY_SUFFIXES = new Set([
+  'benelux',
+  'europe',
+  'eu',
+  'france',
+  'germany',
+  'ireland',
+  'lisbon',
+  'lisboa',
+  'netherlands',
+  'portugal',
+  'spain',
+  'uk',
+  'united kingdom',
+])
+
+function normalizeDuplicateText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\bfull[\s-]*stack\b/g, 'fullstack')
+    .replace(/[’']/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function normalizeCompanyForDuplicate(company: string): string {
+  const normalizedDashes = company.replace(/[–—]/g, '-')
+  const separatorMatch = normalizedDashes.match(/^(.+?)\s*(?:[-|/,])\s*([^-/|,]+)$/)
+  if (!separatorMatch) return normalizeDuplicateText(company)
+
+  const base = separatorMatch[1]
+  const suffix = normalizeDuplicateText(separatorMatch[2])
+  if (!GEO_COMPANY_SUFFIXES.has(suffix)) return normalizeDuplicateText(company)
+
+  return normalizeDuplicateText(base)
+}
+
+export function companyTitleDedupKeys(job: { company: string; title: string }): string[] {
+  const keys = new Set<string>()
+  const exact = companyTitleKey(job)
+  keys.add(exact)
+
+  const company = normalizeCompanyForDuplicate(job.company)
+  const title = normalizeDuplicateText(job.title)
+  if (company && title) keys.add(`${company}::${title}`)
+
+  return Array.from(keys)
+}
+
+export function companyDedupCandidates(company: string): string[] {
+  const candidates = new Set<string>()
+  const trimmed = company.trim()
+  if (trimmed) candidates.add(trimmed)
+
+  const normalized = normalizeCompanyForDuplicate(company)
+  if (normalized && normalized !== normalizeDuplicateText(company)) {
+    candidates.add(normalized)
+  }
+
+  return Array.from(candidates)
+}
+
 export async function insertBotRunListings(rows: Prisma.BotRunListingCreateManyInput[]): Promise<void> {
   if (rows.length === 0) return
   const chunk = 150
